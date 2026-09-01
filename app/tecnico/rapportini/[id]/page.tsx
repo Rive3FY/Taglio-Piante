@@ -41,7 +41,7 @@ export default function TecnicoRapportinoPage({
     <>
       {item.stato === "in_attesa" ? (
         <>
-          <RapportinoForm existing={item} mode="compile" />
+          <RapportinoForm existing={item} />
           <div className="danger-actions">
             <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void archivia()}>
               {busy ? "Archiviazione…" : "Archivia"}

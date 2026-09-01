@@ -10,8 +10,11 @@ export default function OperatoreHome() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
 
-  const daPrendere = rapportini.filter((r) => r.stato === "da_prendere");
-  const bozze = rapportini.filter((r) => r.stato === "bozza" && (!r.presoDa || r.presoDa === session?.nome));
+  const bozze = rapportini.filter(
+    (r) =>
+      (r.stato === "bozza" || r.stato === "da_prendere") &&
+      (!r.presoDa || r.presoDa === session?.nome),
+  );
   const inviati = rapportini.filter((r) => r.stato === "in_attesa" && r.presoDa === session?.nome);
   const archiviati = rapportini.filter((r) => r.stato === "archiviato" && r.presoDa === session?.nome);
 
@@ -25,11 +28,6 @@ export default function OperatoreHome() {
           <h2>Compila rapportino</h2>
           <p className="muted">Lavoro libero, salvataggio locale e firma S Pen.</p>
         </a>
-        <div className="home-card">
-          <div className="kicker">Coda</div>
-          <h2>Da prendere</h2>
-          <span className="count">{daPrendere.length}</span>
-        </div>
         <div className="home-card">
           <div className="kicker">Locale</div>
           <h2>Bozze</h2>
@@ -46,22 +44,6 @@ export default function OperatoreHome() {
           <span className="count">{archiviati.length}</span>
         </div>
       </div>
-
-      <section className="panel">
-        <h2>Da prendere</h2>
-        {daPrendere.length === 0 ? (
-          <p className="muted">Nessun rapportino in coda.</p>
-        ) : (
-          daPrendere.map((item) => (
-            <RapportinoCard
-              key={item.id}
-              item={item}
-              linea={linea(item.lineaId)}
-              href={`/operatore/${item.id}`}
-            />
-          ))
-        )}
-      </section>
 
       <section className="panel">
         <h2>Bozze sul dispositivo</h2>

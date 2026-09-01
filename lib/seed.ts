@@ -2,6 +2,7 @@ import type {
   Campata,
   Ditta,
   Linea,
+  Operatore,
   OperatoreTerna,
   Prestazione,
   Rapportino,
@@ -114,6 +115,11 @@ export const SEED_LINEE: Linea[] = [
 export const SEED_CAMPATE: Campata[] = [];
 
 export const SEED_OPERATORI: OperatoreTerna[] = [];
+
+export const SEED_APP_OPERATORI: Operatore[] = [
+  { id: "op_gianluca_rivetti", nome: "Gianluca Rivetti", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "op_giglio_pasquale_daniele", nome: "Giglio Pasquale Daniele", updatedAt: "2026-01-01T00:00:00.000Z" },
+];
 
 export const SEED_DITTE: Ditta[] = [
   { id: "dit_bonifico", ragioneSociale: "Bonifico" },

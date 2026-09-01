@@ -25,7 +25,7 @@ export default function TecnicoLineePage() {
   return (
     <>
       <h2>Elenco linee</h2>
-      <p className="muted">Apri una linea per vedere le cartelle Da prendere, In attesa e Archiviati.</p>
+      <p className="muted">Apri una linea per vedere i rapportini In attesa e Archiviati.</p>
       <label>
         Cerca linea
         <input
@@ -42,7 +42,6 @@ export default function TecnicoLineePage() {
               <div className="kicker">{lineaKicker(linea)}</div>
               <h2>{lineaDescrizione(linea)}</h2>
               <div className="rap-card-meta">
-                <span>Da prendere {ofLine.filter((r) => r.stato === "da_prendere").length}</span>
                 <span>In attesa {ofLine.filter((r) => r.stato === "in_attesa").length}</span>
                 <span>Archiviati {ofLine.filter((r) => r.stato === "archiviato").length}</span>
               </div>

@@ -5,9 +5,8 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/tecnico", label: "Linee" },
-  { href: "/tecnico/da-prendere", label: "Da prendere" },
   { href: "/tecnico/in-attesa", label: "In attesa" },
-  { href: "/tecnico/nuovo", label: "Nuovo da prendere" },
+  { href: "/tecnico/operatori", label: "Operatori" },
   { href: "/tecnico/anagrafiche", label: "Database" },
 ];
 

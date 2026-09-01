@@ -3,12 +3,14 @@ import type {
   Campata,
   Ditta,
   Linea,
+  Operatore,
   OperatoreTerna,
   Prestazione,
   Rapportino,
   SyncQueueItem,
 } from "./types";
 import {
+  SEED_APP_OPERATORI,
   SEED_CAMPATE,
   SEED_DITTE,
   SEED_LINEE,
@@ -23,6 +25,7 @@ class RapportiniDB extends Dexie {
   linee!: EntityTable<Linea, "id">;
   campate!: EntityTable<Campata, "id">;
   operatoriTerna!: EntityTable<OperatoreTerna, "id">;
+  operatori!: EntityTable<Operatore, "id">;
   ditte!: EntityTable<Ditta, "id">;
   prestazioni!: EntityTable<Prestazione, "id">;
   rapportini!: EntityTable<Rapportino, "id">;
@@ -104,6 +107,18 @@ class RapportiniDB extends Dexie {
       await tx.table("linee").clear();
       await tx.table("linee").bulkAdd(SEED_LINEE);
     });
+    this.version(7).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      syncQueue: "id, rapportinoId, createdAt",
+    }).upgrade(async (tx) => {
+      await tx.table("operatori").bulkPut(SEED_APP_OPERATORI);
+    });
   }
 }
 
@@ -140,6 +155,10 @@ export function ensureSeeded() {
       for (const ditta of SEED_DITTE) {
         const exists = await db.ditte.get(ditta.id);
         if (!exists) await db.ditte.add(ditta);
+      }
+
+      if ((await db.operatori.count()) === 0) {
+        await db.operatori.bulkPut(SEED_APP_OPERATORI);
       }
 
       if (supabaseReady()) {

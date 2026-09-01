@@ -1,4 +1,5 @@
 import type { Session } from "./types";
+import { TECNICO_NOME } from "./auth";
 
 const KEY = "rt.session";
 
@@ -11,6 +12,8 @@ export function readSession(): Session | null {
     if (!parsed?.nome || (parsed.ruolo !== "operatore" && parsed.ruolo !== "tecnico")) {
       return null;
     }
+    // Sessioni tecnico create prima della password vanno rifatte con il login.
+    if (parsed.ruolo === "tecnico" && parsed.nome !== TECNICO_NOME) return null;
     return parsed;
   } catch {
     return null;

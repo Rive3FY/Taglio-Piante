@@ -1,13 +1,5 @@
-"use client";
-
-import { RapportinoList } from "@/components/RapportinoList";
+import { redirect } from "next/navigation";
 
 export default function DaPrenderePage() {
-  return (
-    <RapportinoList
-      stato="da_prendere"
-      title="Rapportini da prendere"
-      empty="Nessun rapportino in coda da prendere."
-    />
-  );
+  redirect("/tecnico/in-attesa");
 }

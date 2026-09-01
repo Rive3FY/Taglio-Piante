@@ -2,6 +2,8 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
 
+const QTY_X = 562;
+
 const QTY_Y: Record<string, number> = {
   "1.1": 543.9,
   "1.2": 526.4,
@@ -80,15 +82,16 @@ export async function fillOfficialScheda(opts: {
   write(item.dipendenteTerna, 252, 747.2, 9);
   write(item.rappresentanteDitta, 58, 717.2, 9);
   write(item.ditta, 298, 717.2, 9);
-  write(formatDate(item.dataLavoro), 32, 89, 9);
-  if (item.nOperatori > 0) write(String(item.nOperatori), 370, 89, 9);
+
+  write(formatDate(item.dataLavoro), 48, 91, 10);
+  if (item.nOperatori > 0) write(String(item.nOperatori), 518, 91, 10);
 
   const qtyById = new Map(item.righe.map((r) => [r.prestazioneId, r.quantita]));
   for (const p of prestazioni) {
     const q = qtyById.get(p.id);
     const y = QTY_Y[p.codice];
     if (!y || !q || q <= 0) continue;
-    write(String(q), 548, y, 9);
+    write(String(q), QTY_X, y, 9);
   }
 
   async function stamp(dataUrl: string | undefined, x: number, y: number, w: number, h: number) {
@@ -107,10 +110,8 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  await stamp(item.firmaTerna, 40, 638, 200, 42);
-  await stamp(item.firmaOperatore, 320, 638, 200, 42);
-  await stamp(item.firmaTerna, 40, 32, 200, 42);
-  await stamp(item.firmaOperatore, 340, 32, 200, 42);
+  await stamp(item.firmaTerna, 42, 34, 200, 38);
+  await stamp(item.firmaOperatore, 342, 34, 200, 38);
 
   const bytes = await pdf.save();
   return bytes;

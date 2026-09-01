@@ -1,18 +1,20 @@
 import { db } from "@/lib/db";
-import type { Rapportino } from "@/lib/types";
+import type { Operatore, Rapportino } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
   dittaToRow,
   lineaToRow,
+  operatoreToRow,
   prestazioneToRow,
   rapportinoToRow,
   rowToDitta,
   rowToLinea,
+  rowToOperatore,
   rowToPrestazione,
   rowToRapportino,
   type RapportinoRow,
 } from "./mappers";
-import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
+import { SEED_APP_OPERATORI, SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 
 const LAST_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
@@ -161,34 +163,65 @@ export async function pullDeletedRapportini() {
   return removed;
 }
 
+let lastReferencePullAt = 0;
+
 export async function pullReferenceData() {
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const [lineeRes, ditteRes, prestRes] = await Promise.all([
+  const now = Date.now();
+  if (now - lastReferencePullAt < 5 * 60 * 1000) return;
+  lastReferencePullAt = now;
+
+  const [lineeRes, ditteRes, prestRes, operatoriRes] = await Promise.all([
     supabase.from("linee").select("*"),
     supabase.from("ditte").select("*"),
     supabase.from("prestazioni").select("*"),
+    supabase.from("operatori").select("*"),
   ]);
 
   if (lineeRes.error) throw new Error(lineeRes.error.message);
   if (ditteRes.error) throw new Error(ditteRes.error.message);
   if (prestRes.error) throw new Error(prestRes.error.message);
+  if (operatoriRes.error) throw new Error(operatoriRes.error.message);
 
   if ((lineeRes.data ?? []).length > 0) {
-    await db.linee.clear();
     await db.linee.bulkPut((lineeRes.data ?? []).map(rowToLinea));
   }
 
   if ((ditteRes.data ?? []).length > 0) {
-    await db.ditte.clear();
     await db.ditte.bulkPut((ditteRes.data ?? []).map(rowToDitta));
   }
 
   if ((prestRes.data ?? []).length > 0) {
-    await db.prestazioni.clear();
     await db.prestazioni.bulkPut((prestRes.data ?? []).map(rowToPrestazione));
   }
+
+  const operatori = (operatoriRes.data ?? []).map(rowToOperatore);
+  const locali = await db.operatori.toArray();
+  if (operatori.length > 0) {
+    const remoteIds = new Set(operatori.map((o) => o.id));
+    const rimossi = locali.filter((o) => !remoteIds.has(o.id)).map((o) => o.id);
+    if (rimossi.length > 0) await db.operatori.bulkDelete(rimossi);
+    await db.operatori.bulkPut(operatori);
+  } else if (locali.length > 0) {
+    const { error } = await supabase.from("operatori").upsert(locali.map(operatoreToRow));
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function pushOperatore(operatore: Operatore) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { error } = await supabase.from("operatori").upsert(operatoreToRow(operatore));
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRemoteOperatore(id: string) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { error } = await supabase.from("operatori").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 export async function seedRemoteReferenceData() {
@@ -208,6 +241,11 @@ export async function seedRemoteReferenceData() {
     .from("prestazioni")
     .upsert(SEED_PRESTAZIONI.map(prestazioneToRow));
   if (prestError) throw new Error(prestError.message);
+
+  const { error: operatoriError } = await supabase
+    .from("operatori")
+    .upsert(SEED_APP_OPERATORI.map(operatoreToRow));
+  if (operatoriError) throw new Error(operatoriError.message);
 
   return true;
 }

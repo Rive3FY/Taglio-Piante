@@ -6,7 +6,7 @@ export default function NuovoRapportinoPage() {
   return (
     <>
       <h2>Nuovo rapportino</h2>
-      <RapportinoForm mode="compile" />
+      <RapportinoForm />
     </>
   );
 }

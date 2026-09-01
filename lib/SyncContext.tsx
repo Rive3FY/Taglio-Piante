@@ -42,12 +42,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (navigator.onLine) void syncNow();
     };
     const unsub = subscribeOnline(refresh);
-    void syncNow();
+    const bootTimer = window.setTimeout(() => {
+      if (navigator.onLine) void syncNow();
+    }, 2000);
     const timer = window.setInterval(() => {
       if (navigator.onLine) void syncNow();
-    }, 12000);
+    }, 45000);
     return () => {
       unsub();
+      window.clearTimeout(bootTimer);
       window.clearInterval(timer);
     };
   }, [syncNow]);

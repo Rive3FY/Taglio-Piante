@@ -1,28 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, enqueueSync, nextNumero, deleteRapportino } from "@/lib/db";
 import { formatDate, lineaDescrizione, todayIso, uid } from "@/lib/format";
 import { officialSchedaObjectUrl } from "@/lib/fillScheda";
-import { matchOperatore, OPERATORI } from "@/lib/operatori";
+import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
-import type { Ditta, Linea, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
+import type { Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { SignaturePad } from "./SignaturePad";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
 const EMPTY_PREST: Prestazione[] = [];
+const EMPTY_OPERATORI: Operatore[] = [];
 const DEFAULT_RAPPRESENTANTE = "Sali Kali";
 
 type Props = {
   existing?: Rapportino;
-  mode: "compile" | "assign";
 };
 
-export function RapportinoForm({ existing, mode }: Props) {
+export function RapportinoForm({ existing }: Props) {
   const router = useRouter();
   const { session } = useSession();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
@@ -32,6 +32,8 @@ export function RapportinoForm({ existing, mode }: Props) {
     () => [...prestazioniRaw].sort((a, b) => a.codice.localeCompare(b.codice, "it")),
     [prestazioniRaw],
   );
+  const operatoriRecord = useLiveQuery(() => db.operatori.orderBy("nome").toArray(), []) ?? EMPTY_OPERATORI;
+  const operatori = useMemo(() => operatoriRecord.map((o) => o.nome), [operatoriRecord]);
 
   const [lineaId, setLineaId] = useState(existing?.lineaId ?? "");
   const [campata, setCampata] = useState(existing?.campata ?? "");
@@ -40,10 +42,11 @@ export function RapportinoForm({ existing, mode }: Props) {
   const [rappresentanteDitta, setRappresentanteDitta] = useState(
     existing?.rappresentanteDitta || DEFAULT_RAPPRESENTANTE,
   );
-  const [dipendenteTerna, setDipendenteTerna] = useState(
-    matchOperatore(existing?.dipendenteTerna || session?.nome),
+  const [dipendenteTerna, setDipendenteTerna] = useState(existing?.dipendenteTerna ?? "");
+  const [nOperatoriText, setNOperatoriText] = useState(
+    existing?.nOperatori && existing.nOperatori > 0 ? String(existing.nOperatori) : "",
   );
-  const [nOperatori, setNOperatori] = useState(existing?.nOperatori ?? 0);
+  const nOperatori = nOperatoriText === "" ? 0 : Number(nOperatoriText) || 0;
   const [qty, setQty] = useState<Record<string, number>>(() => {
     const m: Record<string, number> = {};
     for (const r of existing?.righe ?? []) m[r.prestazioneId] = r.quantita;
@@ -55,13 +58,25 @@ export function RapportinoForm({ existing, mode }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (existing?.dipendenteTerna) return;
-    const matched = matchOperatore(session?.nome);
+    if (operatori.length === 0) return;
+    const matched = matchOperatore(existing?.dipendenteTerna || session?.nome, operatori);
     if (!matched) return;
     setDipendenteTerna((current) => current || matched);
-  }, [existing?.dipendenteTerna, session?.nome]);
+  }, [existing?.dipendenteTerna, operatori, session?.nome]);
+
+  useEffect(() => {
+    if (!previewUrl || !previewRef.current) return;
+    previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const effectiveLineaId = lineaId;
   const effectiveDitta = ditta || ditte[0]?.ragioneSociale || "";
@@ -123,18 +138,19 @@ export function RapportinoForm({ existing, mode }: Props) {
   }
 
   async function saveDraft() {
-    const saved = await persist(existing?.stato === "da_prendere" ? "bozza" : existing?.stato ?? "bozza");
+    const stato =
+      existing?.stato === "da_prendere" || existing?.stato === "in_attesa"
+        ? existing.stato === "in_attesa"
+          ? "in_attesa"
+          : "bozza"
+        : (existing?.stato ?? "bozza");
+    const saved = await persist(stato);
     if (!saved) return;
-    if (mode === "assign") {
-      router.push("/tecnico/da-prendere");
-      return;
+    if (!existing) {
+      router.replace(
+        session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`,
+      );
     }
-    router.push(session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`);
-  }
-
-  async function assign() {
-    const saved = await persist("da_prendere");
-    if (saved) router.push("/tecnico/linee/" + saved.lineaId);
   }
 
   async function previewSheet() {
@@ -173,6 +189,10 @@ export function RapportinoForm({ existing, mode }: Props) {
       const url = await officialSchedaObjectUrl({ item: draft, linea, prestazioni });
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(url);
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossibile preparare il foglio.");
     } finally {
@@ -213,7 +233,7 @@ export function RapportinoForm({ existing, mode }: Props) {
     setSaving(true);
     try {
       await deleteRapportino(existing.id);
-      router.push(mode === "assign" ? "/tecnico" : "/operatore");
+      router.push(session?.ruolo === "tecnico" ? "/tecnico/in-attesa" : "/operatore");
     } finally {
       setSaving(false);
     }
@@ -224,14 +244,14 @@ export function RapportinoForm({ existing, mode }: Props) {
       className="form-stack"
       onSubmit={(e) => {
         e.preventDefault();
-        if (mode === "assign") void assign();
-        else void saveDraft();
+        void saveDraft();
       }}
     >
       <section className="panel scheda-panel">
         {existing?.stato === "in_attesa" ? (
           <p className="muted">
-            Questo rapportino è in attesa. Completalo e, con la firma della ditta, va in archivio.
+            Questo rapportino è in attesa. Puoi aggiungere la firma della ditta per archiviarlo, oppure
+            inviarlo così com’è.
           </p>
         ) : null}
         <div className="scheda-head">
@@ -250,12 +270,6 @@ export function RapportinoForm({ existing, mode }: Props) {
               onChange={(e) => setCampata(e.target.value)}
             />
           </label>
-          {mode === "assign" ? (
-            <label>
-              Data
-              <input type="date" value={dataLavoro} onChange={(e) => setDataLavoro(e.target.value)} />
-            </label>
-          ) : null}
         </div>
 
         <div className="consegna-kicker">Consegna</div>
@@ -268,7 +282,10 @@ export function RapportinoForm({ existing, mode }: Props) {
             aria-label="Dipendente TERNA"
           >
             <option value="">Seleziona…</option>
-            {OPERATORI.map((op) => (
+            {dipendenteTerna && !operatori.includes(dipendenteTerna) ? (
+              <option value={dipendenteTerna}>{dipendenteTerna}</option>
+            ) : null}
+            {operatori.map((op) => (
               <option key={op} value={op}>
                 {op}
               </option>
@@ -307,10 +324,8 @@ export function RapportinoForm({ existing, mode }: Props) {
         </p>
       </section>
 
-      {mode === "compile" ? (
-        <>
-          <section className="panel">
-            <h2>Descrizione prestazioni e quantità</h2>
+      <section className="panel">
+        <h2>Descrizione prestazioni e quantità</h2>
             <table className="prest-table">
               <thead>
                 <tr>
@@ -355,10 +370,15 @@ export function RapportinoForm({ existing, mode }: Props) {
               <label>
                 Personale della ditta — N° operatori
                 <input
-                  type="number"
-                  min={0}
-                  value={nOperatori}
-                  onChange={(e) => setNOperatori(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="0"
+                  value={nOperatoriText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || /^\d+$/.test(v)) setNOperatoriText(v);
+                  }}
                 />
               </label>
             </div>
@@ -371,49 +391,48 @@ export function RapportinoForm({ existing, mode }: Props) {
               />
               <SignaturePad
                 label="Il Designato Ditta"
-                hint="Firma del rappresentante della ditta."
+                hint="Opzionale: puoi inviare in attesa anche senza questa firma."
                 value={firmaOperatore}
                 onChange={setFirmaOperatore}
               />
             </div>
           </section>
-        </>
-      ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <div className="form-actions">
-        {mode === "assign" ? (
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? "Salvataggio…" : "Crea in Da prendere"}
-          </button>
-        ) : (
-          <>
-            <button type="submit" className="btn btn-secondary" disabled={saving}>
-              {saving ? "Salvataggio…" : "Salva in locale"}
-            </button>
-            <button type="button" className="btn btn-ghost" disabled={previewBusy} onClick={() => void previewSheet()}>
-              {previewBusy ? "Preparazione foglio…" : "Vedi foglio ufficiale"}
-            </button>
-            <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
-              {firmaOperatore ? "Invia in archivio" : "Invia in attesa"}
-            </button>
-            {existing ? (
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={saving}
-                onClick={() => void removeExisting()}
-              >
-                Cancella rapportino
-              </button>
-            ) : null}
-          </>
-        )}
-      </div>
       {previewUrl ? (
-        <iframe title="Foglio ufficiale scheda taglio piante" className="scheda-frame" src={previewUrl} />
+        <section ref={previewRef} className="panel form-preview-panel">
+          <div className="preview-head">
+            <h2>Foglio ufficiale</h2>
+            <a className="btn btn-ghost btn-sm" href={previewUrl} target="_blank" rel="noopener noreferrer">
+              Apri in nuova scheda
+            </a>
+          </div>
+          <iframe title="Foglio ufficiale scheda taglio piante" className="scheda-frame" src={previewUrl} />
+        </section>
       ) : null}
+
+      <div className="form-actions-dock">
+        <button type="submit" className="btn btn-secondary" disabled={saving}>
+          {saving ? "Salvataggio…" : "Salva in locale"}
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={previewBusy} onClick={() => void previewSheet()}>
+          {previewBusy ? "Preparazione foglio…" : "Vedi foglio ufficiale"}
+        </button>
+        <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
+          {firmaOperatore ? "Invia in archivio" : "Invia in attesa"}
+        </button>
+        {existing ? (
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={saving}
+            onClick={() => void removeExisting()}
+          >
+            Cancella rapportino
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

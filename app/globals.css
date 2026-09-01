@@ -56,7 +56,18 @@ button, input, select, textarea { font: inherit; }
 .app-header-left { display: flex; flex-direction: column; gap: 2px; }
 .app-header-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .brand { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
-.back-link { font-size: 13px; opacity: 0.8; }
+.back-link {
+  font-size: 13px;
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+.back-link:hover { opacity: 1; }
 
 .sync-pill {
   border: 0;
@@ -202,7 +213,33 @@ textarea { resize: vertical; }
 }
 select.inline-field { width: auto; min-width: 160px; }
 .form-stack { display: grid; gap: 16px; }
-.form-actions { display: flex; gap: 10px; flex-wrap: wrap; position: sticky; bottom: 12px; }
+.page-with-dock { padding-bottom: 96px; }
+.form-actions-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(232, 238, 234, 0.96);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+.form-actions-dock .btn { flex: 1 1 auto; min-width: 140px; }
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.form-preview-panel {
+  scroll-margin-top: 80px;
+  scroll-margin-bottom: 120px;
+}
 .form-error { color: var(--danger); font-weight: 650; }
 
 .btn {
@@ -317,6 +354,29 @@ select.inline-field { width: auto; min-width: 160px; }
 .prest-table .qty input { padding: 8px; }
 
 .danger-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.inline-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.inline-form label { flex: 1 1 220px; }
+
+.operatori-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.operatori-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f7faf8;
+}
+.operatori-list li input { flex: 1 1 200px; }
+.operatori-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .linea-picker { position: relative; }
 .linea-suggest {

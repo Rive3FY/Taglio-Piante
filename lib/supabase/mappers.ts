@@ -1,4 +1,4 @@
-import type { Ditta, Linea, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
+import type { Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
 
 type RapportinoRow = {
   id: string;
@@ -35,6 +35,12 @@ type DittaRow = {
   id: string;
   ragione_sociale: string;
   partita_iva: string | null;
+};
+
+type OperatoreRow = {
+  id: string;
+  nome: string;
+  updated_at: string;
 };
 
 type PrestazioneRow = {
@@ -134,6 +140,22 @@ export function dittaToRow(ditta: Ditta) {
     ragione_sociale: ditta.ragioneSociale,
     partita_iva: ditta.partitaIva ?? null,
     updated_at: new Date().toISOString(),
+  };
+}
+
+export function rowToOperatore(row: OperatoreRow): Operatore {
+  return {
+    id: row.id,
+    nome: row.nome,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function operatoreToRow(operatore: Operatore) {
+  return {
+    id: operatore.id,
+    nome: operatore.nome,
+    updated_at: operatore.updatedAt,
   };
 }
 

@@ -9,7 +9,7 @@ export default function OperatoreLayout({ children }: { children: React.ReactNod
   return (
     <RoleGuard ruolo="operatore">
       <AppHeader title="Operatore sul campo" backHref={pathname === "/operatore" ? undefined : "/operatore"} />
-      <div className="page">{children}</div>
+      <div className="page page-with-dock">{children}</div>
     </RoleGuard>
   );
 }

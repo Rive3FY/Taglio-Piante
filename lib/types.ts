@@ -37,6 +37,12 @@ export type OperatoreTerna = {
   ruolo: string;
 };
 
+export type Operatore = {
+  id: string;
+  nome: string;
+  updatedAt: string;
+};
+
 export type Ditta = {
   id: string;
   ragioneSociale: string;

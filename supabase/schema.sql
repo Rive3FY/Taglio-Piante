@@ -17,6 +17,12 @@ create table if not exists ditte (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists operatori (
+  id text primary key,
+  nome text not null,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists prestazioni (
   id text primary key,
   codice text not null unique,
@@ -58,6 +64,7 @@ on conflict (id) do nothing;
 
 alter table linee enable row level security;
 alter table ditte enable row level security;
+alter table operatori enable row level security;
 alter table prestazioni enable row level security;
 alter table rapportini enable row level security;
 
@@ -66,6 +73,9 @@ create policy "linee_all" on linee for all using (true) with check (true);
 
 drop policy if exists "ditte_all" on ditte;
 create policy "ditte_all" on ditte for all using (true) with check (true);
+
+drop policy if exists "operatori_all" on operatori;
+create policy "operatori_all" on operatori for all using (true) with check (true);
 
 drop policy if exists "prestazioni_all" on prestazioni;
 create policy "prestazioni_all" on prestazioni for all using (true) with check (true);

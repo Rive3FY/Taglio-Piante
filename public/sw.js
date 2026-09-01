@@ -1,4 +1,4 @@
-const CACHE = "rapportini-taglio-v7";
+const CACHE = "rapportini-taglio-v10";
 const PRECACHE = ["/", "/manifest.json", "/icon.svg", "/scheda-taglio.pdf"];
 
 self.addEventListener("install", (event) => {

@@ -7,11 +7,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { RapportinoCard } from "@/components/RapportinoCard";
 import { lineaDescrizione, lineaKicker } from "@/lib/format";
-type CartellaKey = "da_prendere" | "in_attesa" | "archiviato";
+type CartellaKey = "in_attesa" | "archiviato";
 
 const CARTELLE: { key: CartellaKey; label: string; desc: string }[] = [
-  { key: "da_prendere", label: "Da prendere", desc: "Assegnati, in attesa di un operatore sul campo." },
-  { key: "in_attesa", label: "In attesa", desc: "Compilati e firmati, da verificare." },
+  { key: "in_attesa", label: "In attesa", desc: "Compilati dall’operatore, da verificare o completare con firma ditta." },
   { key: "archiviato", label: "Archiviati", desc: "Chiusi e conservati sulla linea." },
 ];
 
@@ -44,7 +43,6 @@ function LineaArchivio({
   const grouped = useMemo(() => {
     const list = items ?? [];
     return {
-      da_prendere: list.filter((r) => r.stato === "da_prendere"),
       in_attesa: list.filter((r) => r.stato === "in_attesa"),
       archiviato: list.filter((r) => r.stato === "archiviato"),
     };
