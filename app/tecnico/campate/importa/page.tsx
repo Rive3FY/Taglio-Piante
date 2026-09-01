@@ -62,12 +62,6 @@ export default function ImportaCampatePage() {
   return (
     <>
       <h2>Carica file campate</h2>
-      <p className="muted">
-        Accetta il formato del fac-simile LIDAR (PDF o CSV): colonne Campata, Priorità, Linea, Nome
-        linea. Il file non diventa il database: serve solo a creare o aggiornare l’elenco. La stessa
-        campata urgente e differibile resta due volte in elenco. Duplicato è solo la riga ripetuta
-        con la stessa priorità. Le campate già tagliate o tralasciate non vengono azzerate.
-      </p>
 
       <section className="panel">
         <label className="file-btn btn btn-primary">

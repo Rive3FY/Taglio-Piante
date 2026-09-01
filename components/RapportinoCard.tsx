@@ -8,11 +8,15 @@ export function RapportinoCard({
   linea,
   href,
   onDelete,
+  onDownload,
+  downloadBusy,
 }: {
   item: Rapportino;
   linea?: Linea;
   href: string;
   onDelete?: (item: Rapportino) => void;
+  onDownload?: (item: Rapportino) => void;
+  downloadBusy?: boolean;
 }) {
   const inner = (
     <>
@@ -36,7 +40,7 @@ export function RapportinoCard({
     </>
   );
 
-  if (!onDelete) {
+  if (!onDelete && !onDownload) {
     return (
       <Link href={href} className="rap-card">
         {inner}
@@ -49,13 +53,23 @@ export function RapportinoCard({
       <Link href={href} className="rap-card-link">
         {inner}
       </Link>
-      <button
-        type="button"
-        className="btn btn-danger btn-sm"
-        onClick={() => onDelete(item)}
-      >
-        Elimina
-      </button>
+      <div className="rap-card-azioni">
+        {onDownload ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={downloadBusy}
+            onClick={() => onDownload(item)}
+          >
+            {downloadBusy ? "PDF…" : "Scarica PDF"}
+          </button>
+        ) : null}
+        {onDelete ? (
+          <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(item)}>
+            Elimina
+          </button>
+        ) : null}
+      </div>
     </article>
   );
 }

@@ -9,9 +9,9 @@ import { RapportiniElenco } from "@/components/RapportiniElenco";
 import { lineaDescrizione, lineaKicker } from "@/lib/format";
 type CartellaKey = "in_attesa" | "archiviato";
 
-const CARTELLE: { key: CartellaKey; label: string; desc: string }[] = [
-  { key: "in_attesa", label: "In attesa", desc: "Compilati dall’operatore, da verificare o completare con firma ditta." },
-  { key: "archiviato", label: "Archiviati", desc: "Chiusi e conservati sulla linea." },
+const CARTELLE: { key: CartellaKey; label: string }[] = [
+  { key: "in_attesa", label: "In attesa" },
+  { key: "archiviato", label: "Archiviati" },
 ];
 
 export default function LineaArchivioPage({
@@ -68,7 +68,6 @@ function LineaArchivio({
           >
             <div className="kicker">Archivio linea</div>
             <h2>{c.label}</h2>
-            <p className="muted">{c.desc}</p>
             <span className="count">{grouped[c.key].length}</span>
           </Link>
         ))}

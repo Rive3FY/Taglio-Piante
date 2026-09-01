@@ -7,7 +7,9 @@ const LINKS = [
   { href: "/tecnico", label: "Linee" },
   { href: "/tecnico/campate", label: "Campate" },
   { href: "/tecnico/contabilita", label: "Contabilità" },
+  { href: "/tecnico/bozze", label: "Bozze" },
   { href: "/tecnico/in-attesa", label: "In attesa" },
+  { href: "/tecnico/archiviati", label: "Archiviati" },
   { href: "/tecnico/operatori", label: "Operatori" },
   { href: "/tecnico/anagrafiche", label: "Database" },
 ];

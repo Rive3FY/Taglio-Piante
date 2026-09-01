@@ -16,13 +16,7 @@ import {
 import { etichettaUnita } from "@/lib/contabilita/listino";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
-
-const WEEKDAYS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-
-function lunediOffset(iso: string) {
-  const d = new Date(`${iso}T00:00:00`);
-  return (d.getDay() + 6) % 7;
-}
+import { CalendarioMese } from "@/components/CalendarioMese";
 
 function TabellaVoci({
   voci,
@@ -89,7 +83,7 @@ export default function ContabilitaPage() {
   const oggi = todayIso();
   const mesi = useMemo(() => mesiDisponibili(rapportini), [rapportini]);
   const [mese, setMese] = useState(() => mesi[0] ?? oggi.slice(0, 7));
-  const [giorno, setGiorno] = useState<string | null>(null);
+  const [giorno, setGiorno] = useState<string | null>(oggi);
   const [lineaAperta, setLineaAperta] = useState<string | null>(null);
 
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
@@ -100,7 +94,11 @@ export default function ContabilitaPage() {
   const restano = giorniAllaChiusura(meseEffettivo, oggi);
   const urgente = useMemo(() => avanzamentoPriorita(campate, "urgente"), [campate]);
   const differibile = useMemo(() => avanzamentoPriorita(campate, "differibile"), [campate]);
-  const offset = aggregato.perGiorno[0] ? lunediOffset(aggregato.perGiorno[0].data) : 0;
+  const conteggiGiorno = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of aggregato.perGiorno) m.set(g.data, g.rapportini);
+    return m;
+  }, [aggregato.perGiorno]);
   const giornoVoci = aggregato.perGiorno.find((g) => g.data === giorno);
 
   return (
@@ -108,10 +106,6 @@ export default function ContabilitaPage() {
       <div className="elenco-head">
         <div>
           <h2>Contabilità</h2>
-          <p className="muted">
-            Quantità dai rapportini in attesa e archiviati. CAD del listino = n. sul foglio. 1.1,
-            1.2 e 1.3: prezzo ogni 100 mq. 6.1 e 6.2: prezzo al m³. G = giorni, kg = chili.
-          </p>
         </div>
       </div>
 
@@ -133,7 +127,7 @@ export default function ContabilitaPage() {
             className={`chip ${meseEffettivo === m ? "on" : ""}`}
             onClick={() => {
               setMese(m);
-              setGiorno(null);
+              setGiorno(m === oggi.slice(0, 7) ? oggi : null);
               setLineaAperta(null);
             }}
           >
@@ -157,34 +151,27 @@ export default function ContabilitaPage() {
         </div>
       </div>
 
+      <h2>Avanzamento campate</h2>
+      <div className="contab-torte">
+        <TortaAvanzamento
+          key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
+          dati={urgente}
+        />
+        <TortaAvanzamento
+          key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.tralasciate}`}
+          dati={differibile}
+        />
+      </div>
+
       <section className="panel">
         <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>
-        <p className="muted">Tocca un giorno per vedere le chiamate segnate in quella data.</p>
-        <div className="contab-cal">
-          {WEEKDAYS.map((d) => (
-            <span key={d} className="contab-cal-wd">
-              {d}
-            </span>
-          ))}
-          {Array.from({ length: offset }, (_, i) => (
-            <span key={`pad-${i}`} />
-          ))}
-          {aggregato.perGiorno.map((g) => {
-            const isOggi = g.data === oggi;
-            const sel = g.data === giorno;
-            return (
-              <button
-                key={g.data}
-                type="button"
-                className={`contab-cal-g${g.rapportini ? " has" : ""}${isOggi ? " oggi" : ""}${sel ? " on" : ""}`}
-                onClick={() => setGiorno(sel ? null : g.data)}
-              >
-                <span>{Number(g.data.slice(-2))}</span>
-                {g.rapportini > 0 ? <small>{g.rapportini}</small> : null}
-              </button>
-            );
-          })}
-        </div>
+        <CalendarioMese
+          mese={meseEffettivo}
+          oggi={oggi}
+          selezionato={giorno}
+          conteggi={conteggiGiorno}
+          onSelect={(data) => setGiorno(data || null)}
+        />
         {giornoVoci ? (
           <div className="contab-giorno">
             <h3>{formatDate(giornoVoci.data)}</h3>
@@ -202,7 +189,6 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <h2>Chiamate del mese</h2>
-        <p className="muted">Somma di tutte le linee. Esempio: quanti 2.1 (n.) sono stati segnati.</p>
         <TabellaVoci voci={aggregato.voci} vuoto="Nessuna quantità in questo mese." totaleLabel="Totale mese" />
       </section>
 
@@ -234,7 +220,25 @@ export default function ContabilitaPage() {
                     </span>
                   </button>
                   {aperta ? (
-                    <TabellaVoci voci={l.voci} vuoto="Nessuna quantità su questa linea." />
+                    <>
+                      <div className="contab-torte">
+                        <TortaAvanzamento
+                          key={`${l.lineaId}-u`}
+                          dati={avanzamentoPriorita(
+                            campate.filter((c) => c.lineaId === l.lineaId),
+                            "urgente",
+                          )}
+                        />
+                        <TortaAvanzamento
+                          key={`${l.lineaId}-d`}
+                          dati={avanzamentoPriorita(
+                            campate.filter((c) => c.lineaId === l.lineaId),
+                            "differibile",
+                          )}
+                        />
+                      </div>
+                      <TabellaVoci voci={l.voci} vuoto="Nessuna quantità su questa linea." />
+                    </>
                   ) : null}
                 </div>
               );
@@ -242,15 +246,6 @@ export default function ContabilitaPage() {
           </div>
         )}
       </section>
-
-      <div className="contab-torte">
-        <TortaAvanzamento dati={urgente} />
-        <TortaAvanzamento dati={differibile} />
-      </div>
-      <p className="muted">
-        I grafici a torta usano l’elenco campate attuale: totale, tagliate, da tagliare e
-        tralasciate.
-      </p>
     </>
   );
 }

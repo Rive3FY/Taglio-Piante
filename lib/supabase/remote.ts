@@ -263,14 +263,39 @@ export async function pullDeletedRapportini() {
 }
 
 let lastReferencePullAt = 0;
+const PULL_PAGE = 1000;
+
+/** PostgREST restituisce al massimo ~1000 righe a chiamata: senza pagine si perdono campate. */
+async function fetchAllRows(tabella: string) {
+  const supabase = getSupabase();
+  if (!supabase) return { data: [] as Record<string, unknown>[], error: null as { message: string } | null };
+  const all: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PULL_PAGE) {
+    const { data, error } = await supabase
+      .from(tabella)
+      .select("*")
+      .order("id")
+      .range(from, from + PULL_PAGE - 1);
+    if (error) return { data: null, error };
+    const rows = (data ?? []) as Record<string, unknown>[];
+    all.push(...rows);
+    if (rows.length < PULL_PAGE) break;
+  }
+  return { data: all, error: null };
+}
 
 export async function pullReferenceData() {
   const supabase = getSupabase();
   if (!supabase) return;
 
   const now = Date.now();
-  if (now - lastReferencePullAt < 5 * 60 * 1000) return;
-  lastReferencePullAt = now;
+  const skipAnagrafiche = now - lastReferencePullAt < 5 * 60 * 1000;
+  if (!skipAnagrafiche) lastReferencePullAt = now;
+
+  if (skipAnagrafiche) {
+    await pullCampateLavoro();
+    return;
+  }
 
   const [lineeRes, ditteRes, prestRes, profiliRes] = await Promise.all([
     supabase.from("linee").select("*"),
@@ -321,9 +346,9 @@ export async function pullCampateLavoro() {
   if (!supabase) return;
 
   const [campRes, stoRes, impRes] = await Promise.all([
-    supabase.from("campate_lavoro").select("*"),
-    supabase.from("campate_storico").select("*"),
-    supabase.from("import_campate").select("*"),
+    fetchAllRows("campate_lavoro"),
+    fetchAllRows("campate_storico"),
+    fetchAllRows("import_campate"),
   ]);
 
   if (campRes.error || stoRes.error || impRes.error) {
@@ -333,7 +358,9 @@ export async function pullCampateLavoro() {
   }
 
   const tombstones = new Set((await db.campateDeleteQueue.toArray()).map((t) => t.id));
-  const remote = (campRes.data ?? []).map(rowToCampataLavoro);
+  const remote = (campRes.data ?? []).map((row) =>
+    rowToCampataLavoro(row as Parameters<typeof rowToCampataLavoro>[0]),
+  );
   if (remote.length > 0) {
     const idsRemoti = new Set(remote.map((c) => c.id));
     const locali = await db.campateLavoro.toArray();
@@ -342,19 +369,22 @@ export async function pullCampateLavoro() {
       .map((c) => c.id);
     if (daRimuovere.length > 0) await db.campateLavoro.bulkDelete(daRimuovere);
 
-    for (const c of remote) {
-      if (tombstones.has(c.id)) continue;
-      const local = await db.campateLavoro.get(c.id);
-      if (local?.syncStatus === "pending") continue;
-      await db.campateLavoro.put(c);
-    }
+    const pendingIds = new Set(
+      locali.filter((c) => c.syncStatus === "pending" || c.syncStatus === "error").map((c) => c.id),
+    );
+    const daScrivere = remote.filter((c) => !tombstones.has(c.id) && !pendingIds.has(c.id));
+    if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
   }
 
   if ((stoRes.data ?? []).length > 0) {
-    await db.campateStorico.bulkPut((stoRes.data ?? []).map(rowToCampataStorico));
+    await db.campateStorico.bulkPut(
+      (stoRes.data ?? []).map((row) => rowToCampataStorico(row as Parameters<typeof rowToCampataStorico>[0])),
+    );
   }
   if ((impRes.data ?? []).length > 0) {
-    await db.importCampate.bulkPut((impRes.data ?? []).map(rowToImportCampate));
+    await db.importCampate.bulkPut(
+      (impRes.data ?? []).map((row) => rowToImportCampate(row as Parameters<typeof rowToImportCampate>[0])),
+    );
   }
 }
 

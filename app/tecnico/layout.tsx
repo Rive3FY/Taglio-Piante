@@ -7,8 +7,9 @@ import { TecnicoNav } from "@/components/TecnicoNav";
 
 function tecnicoBackHref(pathname: string) {
   if (pathname === "/tecnico") return undefined;
-  if (pathname.startsWith("/tecnico/rapportini/")) return "/tecnico/in-attesa";
+  if (pathname.startsWith("/tecnico/rapportini/")) return "/tecnico/archiviati";
   if (pathname === "/tecnico/campate/importa") return "/tecnico/campate";
+  if (pathname === "/tecnico/nuovo") return "/tecnico/campate";
   return "/tecnico";
 }
 

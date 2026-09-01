@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
+import { scaricaBlob } from "./download";
 
 const QTY_X = 562;
 
@@ -120,8 +121,8 @@ export async function fillOfficialScheda(opts: {
       const width = img.width * scale;
       const height = img.height * scale;
       page.drawImage(img, {
-        x: box.x,
-        y: box.y,
+        x: box.x + (box.w - width) / 2,
+        y: box.y + Math.max(0, (box.h - height) / 2),
         width,
         height,
       });
@@ -130,12 +131,13 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  // Giallo: Il Rappresentante TERNA / Il Designato TERNA (sinistra).
-  // Fucsia: Il Rappresentante della Ditta / Il Designato Ditta (destra).
-  await stamp(item.firmaTerna, { x: 32, y: 598, w: 250, h: 22 });
-  await stamp(item.firmaOperatore, { x: 318, y: 598, w: 250, h: 22 });
-  await stamp(item.firmaTerna, { x: 80, y: 52, w: 170, h: 20 });
-  await stamp(item.firmaOperatore, { x: 420, y: 52, w: 150, h: 20 });
+  // Firme centrate sulle scritte del modulo (coordinate dal PDF ufficiale).
+  // Sopra: «Il Rappresentante TERNA» / «Il Rappresentante della Ditta».
+  await stamp(item.firmaTerna, { x: 18, y: 638, w: 110, h: 30 });
+  await stamp(item.firmaOperatore, { x: 305, y: 638, w: 135, h: 30 });
+  // In basso: «Il Designato TERNA» / «Il Designato Ditta» (sotto le scritte).
+  await stamp(item.firmaTerna, { x: 70, y: 40, w: 130, h: 32 });
+  await stamp(item.firmaOperatore, { x: 455, y: 40, w: 150, h: 34 });
 
   const bytes = await pdf.save();
   return bytes;
@@ -147,13 +149,42 @@ export async function downloadOfficialScheda(opts: {
   prestazioni: Prestazione[];
 }) {
   const bytes = await fillOfficialScheda(opts);
-  const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Scheda_taglio_${opts.item.numero}_${opts.linea?.codice ?? "linea"}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  scaricaBlob(
+    bytes,
+    `Scheda_taglio_${opts.item.numero}_${opts.linea?.codice ?? "linea"}.pdf`,
+    "application/pdf",
+  );
+}
+
+export async function downloadOfficialSchede(
+  fogli: { item: Rapportino; linea?: Linea }[],
+  prestazioni: Prestazione[],
+  filename: string,
+) {
+  if (fogli.length === 0) return;
+  if (fogli.length === 1) {
+    await downloadOfficialScheda({ ...fogli[0], prestazioni });
+    return;
+  }
+  const merged = await PDFDocument.create();
+  let ok = 0;
+  let ultimoErrore = "";
+  for (const foglio of fogli) {
+    try {
+      const bytes = await fillOfficialScheda({ ...foglio, prestazioni });
+      const src = await PDFDocument.load(bytes);
+      const pagine = await merged.copyPages(src, src.getPageIndices());
+      for (const pagina of pagine) merged.addPage(pagina);
+      ok += 1;
+    } catch (e) {
+      ultimoErrore = e instanceof Error ? e.message : "foglio non generato";
+    }
+  }
+  if (ok === 0) {
+    throw new Error(ultimoErrore || "Nessun foglio da scaricare.");
+  }
+  const bytes = await merged.save();
+  scaricaBlob(bytes, filename, "application/pdf");
 }
 
 export async function officialSchedaObjectUrl(opts: {

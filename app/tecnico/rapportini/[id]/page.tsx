@@ -39,16 +39,7 @@ export default function TecnicoRapportinoPage({
 
   return (
     <>
-      {item.stato === "in_attesa" ? (
-        <>
-          <RapportinoForm existing={item} />
-          <div className="danger-actions">
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void archivia()}>
-              {busy ? "Archiviazione…" : "Archivia"}
-            </button>
-          </div>
-        </>
-      ) : (
+      {item.stato === "archiviato" ? (
         <>
           <RapportinoSheet
             item={item}
@@ -59,9 +50,20 @@ export default function TecnicoRapportinoPage({
             <DeleteRapportinoButton
               id={item.id}
               numero={item.numero}
-              href={item.lineaId ? `/tecnico/linee/${item.lineaId}` : "/tecnico"}
+              href="/tecnico/archiviati"
             />
           </div>
+        </>
+      ) : (
+        <>
+          <RapportinoForm existing={item} />
+          {item.stato === "in_attesa" ? (
+            <div className="danger-actions">
+              <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void archivia()}>
+                {busy ? "Archiviazione…" : "Archivia"}
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </>

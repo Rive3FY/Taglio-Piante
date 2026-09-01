@@ -44,11 +44,6 @@ export default function OperatoriPage() {
   return (
     <>
       <h2>Operatori</h2>
-      <p className="muted">
-        Ogni operatore ha un account con email e password. Senza account non si entra nell’app e non
-        si vedono i rapportini. La firma caricata qui viene messa in automatico come firma TERNA sui
-        rapportini di quella persona.
-      </p>
 
       <section className="panel">
         <h2>Nuovo operatore</h2>
@@ -75,9 +70,6 @@ export default function OperatoriPage() {
             placeholder="Almeno 8 caratteri"
           />
         </label>
-        <p className="muted">
-          Comunica la password all’operatore: potrai reimpostarla in qualsiasi momento da questa pagina.
-        </p>
         <button
           type="button"
           className="btn btn-primary"

@@ -70,9 +70,6 @@ export default function TecnicoLineePage() {
   return (
     <>
       <h2>Elenco linee</h2>
-      <p className="muted">
-        Le linee sono raggruppate per tensione, che si legge dalle prime due cifre del codice.
-      </p>
 
       <label>
         Cerca linea

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { RapportiniPerTensione } from "@/components/RapportiniPerTensione";
+import { RapportiniCalendario } from "@/components/RapportiniCalendario";
 import { confermaECancellaRapportino } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
 import { rapportiniDellaSezione, sezioneDa } from "@/lib/sezioni";
@@ -33,13 +34,23 @@ export default function ElencoSezionePage({
         <p className="muted">{config.descrizione}</p>
       </div>
 
-      <RapportiniPerTensione
-        items={items}
-        linee={linee}
-        hrefFor={(item) => `/operatore/${item.id}`}
-        vuoto={config.vuoto}
-        onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
-      />
+      {config.key === "bozze" || config.key === "archiviati" ? (
+        <RapportiniCalendario
+          items={items}
+          linee={linee}
+          hrefFor={(item) => `/operatore/${item.id}`}
+          vuoto={config.vuoto}
+          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
+        />
+      ) : (
+        <RapportiniPerTensione
+          items={items}
+          linee={linee}
+          hrefFor={(item) => `/operatore/${item.id}`}
+          vuoto={config.vuoto}
+          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
+        />
+      )}
     </>
   );
 }

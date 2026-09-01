@@ -166,6 +166,25 @@ function esitiDaRapportino(item: Rapportino): RapportinoCampata[] {
   }));
 }
 
+function bersagliPerEsito(
+  tutte: CampataLavoro[],
+  esito: RapportinoCampata,
+  codiceLinea: string,
+): CampataLavoro[] {
+  if (esito.campataId) {
+    const byId = tutte.filter((c) => c.id === esito.campataId);
+    if (byId.length > 0) return byId;
+  }
+  const idDeterministico = idCampataLavoro(codiceLinea, esito.normalizzata, esito.priorita);
+  const byDet = tutte.filter((c) => c.id === idDeterministico);
+  if (byDet.length > 0) return byDet;
+  return tutte.filter((c) => {
+    if (c.normalizzata !== esito.normalizzata) return false;
+    if (esito.priorita) return c.priorita === esito.priorita;
+    return true;
+  });
+}
+
 /**
  * Aggiorna il database operativo a partire da un rapportino inviato o archiviato.
  * Le bozze non toccano le campate.
@@ -177,6 +196,11 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
   const linea = await db.linee.get(item.lineaId);
   const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
+  for (const esito of esiti) {
+    if (!esito.campataId || tutte.some((c) => c.id === esito.campataId)) continue;
+    const extra = await db.campateLavoro.get(esito.campataId);
+    if (extra) tutte.push(extra);
+  }
   const now = new Date().toISOString();
   const operatore = session?.nome || item.dipendenteTerna || item.presoDa || "Operatore";
   const data = item.dataLavoro || todayIso();
@@ -186,17 +210,14 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
   for (const esito of esiti) {
     const stato = esito.esito === "tagliata" ? "tagliata" : "tralasciata";
-    const bersagli = tutte.filter((c) => {
-      if (esito.campataId) return c.id === esito.campataId;
-      if (c.normalizzata !== esito.normalizzata) return false;
-      if (esito.priorita) return c.priorita === esito.priorita;
-      return true;
-    });
+    const bersagli = bersagliPerEsito(tutte, esito, linea?.codice ?? "");
 
     if (bersagli.length === 0) {
       if (!linea) continue;
+      const id = idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita);
+      if (tutte.some((c) => c.id === id) || daScrivere.some((c) => c.id === id)) continue;
       const nuova: CampataLavoro = {
-        id: idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita),
+        id,
         lineaId: linea.id,
         codiceLinea: linea.codice,
         nomeLinea: linea.nome,
@@ -233,6 +254,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
       const aggiornata: CampataLavoro = {
         ...presente,
         stato,
+        origine: presente.origine === "prevista" ? "prevista" : presente.origine,
         dataTaglio: data,
         operatore,
         rapportinoId: item.id,
@@ -240,6 +262,8 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
         updatedAt: now,
       };
       daScrivere.push(aggiornata);
+      const idx = tutte.findIndex((c) => c.id === presente.id);
+      if (idx >= 0) tutte[idx] = aggiornata;
       storico.push({
         id: uid("sto"),
         campataId: presente.id,
@@ -260,7 +284,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
 /**
  * Quando si cancella un rapportino, le campate che aveva chiuso tornano da tagliare.
- * Quelle nate solo da quel foglio (aggiuntive) si tolgono dalla tabella.
+ * Si cancellano solo quelle nate da quel foglio, mai una campata importata dal file.
  */
 export async function annullaEsitiDaRapportino(rapportinoId: string) {
   const legate = await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray();
@@ -272,13 +296,21 @@ export async function annullaEsitiDaRapportino(rapportinoId: string) {
   const storico: CampataStorico[] = [];
 
   for (const presente of legate) {
-    if (presente.origine === "aggiuntiva") {
+    const log = await db.campateStorico.where("campataId").equals(presente.id).toArray();
+    const dalFile =
+      presente.origine === "prevista" ||
+      Boolean(presente.importId) ||
+      log.some((s) => s.evento === "importata" || s.evento === "reimportata");
+    const nataDalFoglio = presente.origine === "aggiuntiva" && !dalFile;
+
+    if (nataDalFoglio) {
       daEliminare.push(presente.id);
       continue;
     }
 
     const ripristinata: CampataLavoro = {
       ...presente,
+      origine: dalFile ? "prevista" : presente.origine,
       stato: "da_tagliare",
       syncStatus: "pending",
       updatedAt: now,
@@ -329,23 +361,18 @@ export async function aggiornaDettagliCampata(
     else delete aggiornata.note;
   }
 
-  const evento =
-    patch.attenzionare === undefined
-      ? "nota"
-      : patch.attenzionare
-        ? "attenzionata"
-        : "attenzione_rimossa";
-
   await db.campateLavoro.put(aggiornata);
-  await db.campateStorico.put({
-    id: uid("sto"),
-    campataId: id,
-    evento,
-    stato: presente.stato,
-    priorita: presente.priorita,
-    operatore,
-    note: aggiornata.note,
-    createdAt: now,
-  });
+  if (patch.note !== undefined) {
+    await db.campateStorico.put({
+      id: uid("sto"),
+      campataId: id,
+      evento: "nota",
+      stato: presente.stato,
+      priorita: presente.priorita,
+      operatore,
+      note: aggiornata.note,
+      createdAt: now,
+    });
+  }
   await enqueueSync(presente.rapportinoId || presente.id, "campate");
 }

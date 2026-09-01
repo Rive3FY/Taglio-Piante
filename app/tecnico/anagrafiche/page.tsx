@@ -57,9 +57,6 @@ export default function AnagrafichePage() {
   return (
     <>
       <h2>Database</h2>
-      <p className="muted">
-        Anagrafiche condivise tra i dispositivi. Restano disponibili anche offline.
-      </p>
 
       <section className="panel">
         <h2>Nuova linea</h2>

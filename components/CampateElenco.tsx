@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, TENSIONI, tensioneLabel } from "@/lib/format";
 import { aggiornaDettagliCampata } from "@/lib/campate/apply";
+import { scaricaVistaCampate } from "@/lib/campate/export";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
@@ -247,6 +248,29 @@ export function CampateElenco({
 
       <FiltroPeriodo periodo={periodo} onChange={setPeriodo} />
 
+      <div className="elenco-head">
+        <span className="muted">
+          {filtrate.length === campate.length
+            ? `${filtrate.length} in tabella`
+            : `${filtrate.length} di ${campate.length} visibili con i filtri`}
+        </span>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={filtrate.length === 0}
+          onClick={() =>
+            scaricaVistaCampate(filtrate, {
+              linea: linea || undefined,
+              stato,
+              priorita,
+              origine,
+            })
+          }
+        >
+          Scarica vista
+        </button>
+      </div>
+
       {ruolo === "operatore" && linea ? (
         <Link
           href={`/operatore/nuovo?linea=${encodeURIComponent(campate.find((c) => c.codiceLinea === linea)?.lineaId ?? "")}`}
@@ -269,10 +293,10 @@ export function CampateElenco({
                 <th>Campata</th>
                 <th>Priorità</th>
                 <th>Stato</th>
-                <th>Att.</th>
                 <th>Data</th>
                 <th>Operatore</th>
                 <th>Note</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -280,6 +304,7 @@ export function CampateElenco({
                 <CampataRiga
                   key={c.id}
                   c={c}
+                  ruolo={ruolo}
                   storico={storicoPer.get(c.id) ?? []}
                   aperta={aperta === c.id}
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
@@ -300,14 +325,24 @@ export function CampateElenco({
   );
 }
 
+function hrefRapportino(ruolo: "tecnico" | "operatore", c: CampataLavoro) {
+  if (c.rapportinoId) {
+    return ruolo === "tecnico" ? `/tecnico/rapportini/${c.rapportinoId}` : `/operatore/${c.rapportinoId}`;
+  }
+  const q = `linea=${encodeURIComponent(c.lineaId)}&campata=${encodeURIComponent(c.id)}`;
+  return ruolo === "tecnico" ? `/tecnico/nuovo?${q}` : `/operatore/nuovo?${q}`;
+}
+
 function CampataRiga({
   c,
+  ruolo,
   storico,
   aperta,
   onToggle,
   onPatch,
 }: {
   c: CampataLavoro;
+  ruolo: "tecnico" | "operatore";
   storico: CampataStorico[];
   aperta: boolean;
   onToggle: () => void;
@@ -323,6 +358,14 @@ function CampataRiga({
     if (nota.trim() === (c.note ?? "").trim()) return;
     onPatch({ note: nota });
   }
+
+  const logUtile = storico.filter(
+    (s) =>
+      s.evento === "nota" ||
+      s.evento === "tagliata" ||
+      s.evento.startsWith("tagliata") ||
+      (s.evento === "aggiuntiva_da_rapportino" && s.stato === "tagliata"),
+  );
 
   return (
     <>
@@ -347,21 +390,19 @@ function CampataRiga({
         <td>
           <span className={`badge badge-${c.stato}`}>{CAMPATA_STATO_LABEL[c.stato]}</span>
         </td>
-        <td
-          className="campata-att"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={Boolean(c.attenzionare)}
-            onChange={(e) => onPatch({ attenzionare: e.target.checked })}
-            aria-label={`Da attenzionare ${c.normalizzata}`}
-          />
-        </td>
         <td>{c.dataTaglio ? formatDate(c.dataTaglio) : "—"}</td>
         <td>{c.operatore ?? "—"}</td>
         <td>
           {c.note?.trim() ? <span className="campata-note-preview">{c.note.trim()}</span> : "—"}
+        </td>
+        <td className="campata-rap-cell">
+          <Link
+            href={hrefRapportino(ruolo, c)}
+            className="btn btn-sm btn-secondary"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {c.rapportinoId ? "Apri" : "Rapportino"}
+          </Link>
         </td>
       </tr>
       {aperta ? (
@@ -386,14 +427,22 @@ function CampataRiga({
                   placeholder="Scrivi qui la nota della campata"
                 />
               </label>
-              {storico.length > 0 ? (
+              {logUtile.length > 0 ? (
                 <ul className="storico-list">
-                  {storico.map((s) => (
+                  {logUtile.map((s) => (
                     <li key={s.id}>
-                      <strong>{s.evento.replaceAll("_", " ")}</strong>
-                      {s.stato ? ` · ${CAMPATA_STATO_LABEL[s.stato]}` : ""}
-                      {s.operatore ? ` · ${s.operatore}` : ""}
-                      {s.note ? ` · ${s.note}` : ""}
+                      {s.evento === "nota" ? (
+                        <>
+                          <strong>Nota</strong>
+                          {s.note ? ` · ${s.note}` : ""}
+                        </>
+                      ) : (
+                        <>
+                          <strong>Tagliata</strong>
+                          {s.operatore ? ` · ${s.operatore}` : ""}
+                          {s.note ? ` · ${s.note}` : ""}
+                        </>
+                      )}
                       <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
                     </li>
                   ))}

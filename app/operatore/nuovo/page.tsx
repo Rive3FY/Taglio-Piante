@@ -15,15 +15,12 @@ export default function NuovoRapportinoPage() {
 function NuovoRapportino() {
   const search = useSearchParams();
   const linea = search.get("linea") ?? undefined;
+  const campata = search.get("campata") ?? undefined;
+  const daElenco = Boolean(linea || campata);
   return (
     <>
-      <h2>{linea ? "Rapportino da elenco campate" : "Nuovo rapportino"}</h2>
-      {linea ? (
-        <p className="muted">Precompilato con le campate ancora da tagliare su questa linea.</p>
-      ) : (
-        <p className="muted">Rapportino in bianco: puoi indicare campate anche non previste nel file.</p>
-      )}
-      <RapportinoForm precompilatoLineaId={linea} />
+      <h2>{daElenco ? "Rapportino da elenco campate" : "Nuovo rapportino"}</h2>
+      <RapportinoForm precompilatoLineaId={linea} precompilatoCampataId={campata} />
     </>
   );
 }

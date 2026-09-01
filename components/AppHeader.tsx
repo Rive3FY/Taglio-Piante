@@ -76,6 +76,15 @@ export function AppHeader({
                 {offline ? " · accesso offline" : ""}
               </small>
             </span>
+            {session.ruolo === "operatore" ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => window.dispatchEvent(new Event("apri-squadra"))}
+              >
+                Squadra
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn-ghost btn-sm"

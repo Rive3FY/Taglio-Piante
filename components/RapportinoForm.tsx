@@ -16,23 +16,35 @@ import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
+import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
 const EMPTY_PREST: Prestazione[] = [];
 const EMPTY_OPERATORI: Operatore[] = [];
-const DEFAULT_RAPPRESENTANTE = "Sali Kali";
 
 type Props = {
   existing?: Rapportino;
   /** Se valorizzato, il rapportino parte dalle campate pianificate di quella linea. */
   precompilatoLineaId?: string;
+  /** Una sola campata dall’elenco: apre il foglio già impostato su quella. */
+  precompilatoCampataId?: string;
 };
 
-export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
+export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCampataId }: Props) {
   const router = useRouter();
   const { session } = useSession();
   const { online, syncNow } = useSync();
+  const [squadraTick, setSquadraTick] = useState(0);
+  const [squadra, setSquadra] = useState<PrefsSquadra | null>(null);
+  useEffect(() => {
+    const on = () => setSquadraTick((n) => n + 1);
+    window.addEventListener("squadra-aggiornata", on);
+    return () => window.removeEventListener("squadra-aggiornata", on);
+  }, []);
+  useEffect(() => {
+    setSquadra(session ? readSquadra(session.userId) : null);
+  }, [session, squadraTick]);
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
   const ditte = useLiveQuery(() => db.ditte.toArray(), []) ?? EMPTY_DITTE;
   const prestazioniRaw = useLiveQuery(() => db.prestazioni.toArray(), []) ?? EMPTY_PREST;
@@ -49,16 +61,24 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
       () => (lineaId ? db.campateLavoro.where("lineaId").equals(lineaId).toArray() : Promise.resolve([] as CampataLavoro[])),
       [lineaId],
     ) ?? [];
+  const campataScelta = useLiveQuery(
+    () => (precompilatoCampataId ? db.campateLavoro.get(precompilatoCampataId) : undefined),
+    [precompilatoCampataId],
+  );
   const [campata, setCampata] = useState(existing?.campata ?? "");
   const [esiti, setEsiti] = useState<RapportinoCampata[]>(existing?.esitiCampate ?? []);
   const [dataLavoro, setDataLavoro] = useState(existing?.dataLavoro ?? todayIso());
   const [ditta, setDitta] = useState(existing?.ditta ?? "");
   const [rappresentanteDitta, setRappresentanteDitta] = useState(
-    existing?.rappresentanteDitta || DEFAULT_RAPPRESENTANTE,
+    existing?.rappresentanteDitta || squadra?.rappresentanteDitta || "",
   );
   const [dipendenteTerna, setDipendenteTerna] = useState(existing?.dipendenteTerna ?? "");
   const [nOperatoriText, setNOperatoriText] = useState(
-    existing?.nOperatori && existing.nOperatori > 0 ? String(existing.nOperatori) : "",
+    existing?.nOperatori && existing.nOperatori > 0
+      ? String(existing.nOperatori)
+      : squadra?.nOperatori
+        ? String(squadra.nOperatori)
+        : "",
   );
   const nOperatori = nOperatoriText === "" ? 0 : Number(nOperatoriText) || 0;
   const [qty, setQty] = useState<Record<string, number>>(() => {
@@ -124,12 +144,50 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     [campateLinea],
   );
 
-  const modoPrecompilato = Boolean(precompilatoLineaId || (existing?.esitiCampate?.length ?? 0) > 0);
+  useEffect(() => {
+    if (campataScelta?.lineaId) setLineaId((cur) => cur || campataScelta.lineaId);
+  }, [campataScelta]);
 
   useEffect(() => {
-    if (!modoPrecompilato) return;
+    if (existing) return;
+    const s = session ? readSquadra(session.userId) : null;
+    if (!s) return;
+    setRappresentanteDitta(s.rappresentanteDitta);
+    setNOperatoriText(String(s.nOperatori));
+  }, [session, existing, squadraTick]);
+
+  useEffect(() => {
+    if (!existing) return;
+    if (existing.rappresentanteDitta) setRappresentanteDitta(existing.rappresentanteDitta);
+    if (existing.nOperatori > 0) setNOperatoriText(String(existing.nOperatori));
+  }, [existing?.id, existing?.rappresentanteDitta, existing?.nOperatori, existing?.updatedAt]);
+
+  const modoPrecompilato = Boolean(
+    precompilatoLineaId || precompilatoCampataId || (existing?.esitiCampate?.length ?? 0) > 0,
+  );
+
+  useEffect(() => {
     if (existing?.esitiCampate?.length) return;
     if (esiti.length > 0) return;
+
+    if (precompilatoCampataId) {
+      const scelta = campataScelta ?? campateLinea.find((c) => c.id === precompilatoCampataId);
+      if (!scelta) return;
+      setLineaId(scelta.lineaId);
+      setEsiti([
+        {
+          id: uid("es"),
+          campataId: scelta.id,
+          originale: scelta.originale,
+          normalizzata: scelta.normalizzata,
+          priorita: scelta.priorita,
+          esito: scelta.stato === "tralasciata" ? "tralasciata" : "tagliata",
+        },
+      ]);
+      return;
+    }
+
+    if (!modoPrecompilato) return;
     if (pianificate.length === 0) return;
     setEsiti(
       pianificate.map((c) => ({
@@ -138,10 +196,18 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
         originale: c.originale,
         normalizzata: c.normalizzata,
         priorita: c.priorita,
-        esito: "tagliata",
+        esito: "tagliata" as const,
       })),
     );
-  }, [modoPrecompilato, existing?.esitiCampate, pianificate, esiti.length]);
+  }, [
+    modoPrecompilato,
+    existing?.esitiCampate,
+    pianificate,
+    esiti.length,
+    precompilatoCampataId,
+    campateLinea,
+    campataScelta,
+  ]);
 
   async function persist(stato: Rapportino["stato"], extra: Partial<Rapportino> = {}) {
     if (!effectiveLineaId) {
@@ -166,6 +232,8 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
           quantita: qty[p.id],
         }));
       const campataTesto = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+      const sigDitta = (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim();
+      const nSquadra = nOperatori || squadra?.nOperatori || 0;
       const record: Rapportino = {
         id,
         numero,
@@ -173,9 +241,9 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
         campata: campataTesto,
         dataLavoro,
         ditta: effectiveDitta.trim(),
-        rappresentanteDitta,
+        rappresentanteDitta: sigDitta,
         dipendenteTerna: dipendenteTerna.trim(),
-        nOperatori,
+        nOperatori: nSquadra,
         stato,
         syncStatus: "pending",
         righe,
@@ -275,9 +343,9 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
       campata: esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim(),
       dataLavoro,
       ditta: effectiveDitta.trim(),
-      rappresentanteDitta,
+      rappresentanteDitta: (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim(),
       dipendenteTerna: dipendenteTerna.trim(),
-      nOperatori,
+      nOperatori: nOperatori || squadra?.nOperatori || 0,
       stato: existing?.stato ?? "bozza",
       syncStatus: "local",
       righe: prestazioni
@@ -285,6 +353,7 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
         .map((p) => ({ id: uid("riga"), prestazioneId: p.id, quantita: qty[p.id] })),
       firmaOperatore,
       firmaTerna,
+      esitiCampate: esiti.length > 0 ? esiti : undefined,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -363,12 +432,16 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
           Dipendente TERNA
           <br />
           Al Sig.{" "}
-          <input
-            className="inline-field"
-            value={rappresentanteDitta}
-            onChange={(e) => setRappresentanteDitta(e.target.value)}
-            aria-label="Rappresentante della ditta"
-          />{" "}
+          {squadra ? (
+            <strong>{rappresentanteDitta || squadra.rappresentanteDitta}</strong>
+          ) : (
+            <input
+              className="inline-field"
+              value={rappresentanteDitta}
+              onChange={(e) => setRappresentanteDitta(e.target.value)}
+              aria-label="Rappresentante della ditta"
+            />
+          )}{" "}
           in qualità di rappresentante della Ditta{" "}
           <select
             className="inline-field"
@@ -440,20 +513,27 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
                 Data
                 <input type="date" value={dataLavoro} onChange={(e) => setDataLavoro(e.target.value)} />
               </label>
-              <label>
-                Personale della ditta — N° operatori
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="0"
-                  value={nOperatoriText}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "" || /^\d+$/.test(v)) setNOperatoriText(v);
-                  }}
-                />
-              </label>
+              {squadra ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Personale della ditta — N° operatori:{" "}
+                  <strong>{nOperatori || squadra.nOperatori}</strong>
+                </p>
+              ) : (
+                <label>
+                  Personale della ditta — N° operatori
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    value={nOperatoriText}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "" || /^\d+$/.test(v)) setNOperatoriText(v);
+                    }}
+                  />
+                </label>
+              )}
             </div>
             {dipendenteTerna && !firmaProfilo ? (
               <p className="muted">

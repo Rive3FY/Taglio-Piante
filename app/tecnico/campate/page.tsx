@@ -9,10 +9,6 @@ export default function TecnicoCampatePage() {
       <div className="elenco-head">
         <div>
           <h2>Campate</h2>
-          <p className="muted">
-            Elenco operativo: pianificato dal file e aggiornato dai rapportini. Spunta “da
-            attenzionare” in giallo, le tralasciate restano rosse; la nota si apre cliccando la riga.
-          </p>
         </div>
         <Link href="/tecnico/campate/importa" className="btn btn-primary">
           Carica file campate
