@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/tecnico", label: "Linee" },
   { href: "/tecnico/campate", label: "Campate" },
+  { href: "/tecnico/contabilita", label: "Contabilità" },
   { href: "/tecnico/in-attesa", label: "In attesa" },
   { href: "/tecnico/operatori", label: "Operatori" },
   { href: "/tecnico/anagrafiche", label: "Database" },

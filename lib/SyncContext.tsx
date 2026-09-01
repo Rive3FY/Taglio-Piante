@@ -9,6 +9,7 @@ import { useSession } from "@/lib/SessionContext";
 type SyncContextValue = {
   online: boolean;
   pending: number;
+  lastError: string | null;
   lastSyncAt: string | null;
   syncing: boolean;
   syncNow: () => Promise<void>;
@@ -22,7 +23,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   );
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const pending = useLiveQuery(() => db.syncQueue.count(), []) ?? 0;
+  const codaRaw = useLiveQuery(() => db.syncQueue.orderBy("createdAt").toArray(), []);
+  const coda = Array.isArray(codaRaw) ? codaRaw : [];
+  const pending = coda.length;
+  const lastError = coda.find((item) => item.lastError)?.lastError ?? null;
   const { session } = useSession();
   const userId = session?.userId;
 
@@ -68,8 +72,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [userId, session, syncNow]);
 
   const value = useMemo(
-    () => ({ online, pending, lastSyncAt, syncing, syncNow }),
-    [online, pending, lastSyncAt, syncing, syncNow],
+    () => ({ online, pending, lastError, lastSyncAt, syncing, syncNow }),
+    [online, pending, lastError, lastSyncAt, syncing, syncNow],
   );
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

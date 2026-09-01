@@ -11,8 +11,34 @@ export function AppHeader({
   title: string;
   backHref?: string;
 }) {
-  const { online, pending, syncing, syncNow } = useSync();
+  const { online, pending, lastError, syncing, syncNow } = useSync();
   const { session, offline, logout } = useSession();
+
+  const pillClass = [
+    "sync-pill",
+    online ? "is-online" : "is-offline",
+    lastError ? "is-error" : pending > 0 ? "is-pending" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const pillTitle = !online
+    ? "Nessuna rete: le modifiche restano sul telefono."
+    : lastError
+      ? `${pending} modifiche da mandare al server. Ultimo errore: ${lastError}. Tocca per riprovare.`
+      : pending > 0
+        ? `${pending} modifiche salvate sul telefono, ancora da mandare al server. Tocca per inviare.`
+        : "Tutto allineato con il server. Tocca per sincronizzare di nuovo.";
+
+  const pillLabel = !online
+    ? "Offline"
+    : syncing
+      ? "Invio…"
+      : lastError
+        ? "Invio non riuscito"
+        : pending > 0
+          ? `${pending} da inviare`
+          : "Sincronizzato";
 
   return (
     <header className="app-header">
@@ -31,18 +57,15 @@ export function AppHeader({
       <div className="app-header-right">
         <button
           type="button"
-          className={`sync-pill ${online ? "is-online" : "is-offline"}`}
+          className={pillClass}
           onClick={() => void syncNow()}
-          title="Sincronizza ora"
+          title={pillTitle}
         >
           <span className="dot" />
-          {!online
-            ? "Offline"
-            : syncing
-              ? "Sync…"
-              : pending > 0
-                ? `${pending} in coda`
-                : "Sincronizzato"}
+          <span className="sync-pill-text">
+            {pillLabel}
+            {online && lastError ? <small>{lastError}</small> : null}
+          </span>
         </button>
         {session ? (
           <div className="user-chip">

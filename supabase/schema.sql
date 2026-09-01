@@ -188,16 +188,21 @@ create table if not exists campate_lavoro (
   data_taglio date,
   operatore text,
   note text,
+  attenzionare boolean not null default false,
   rapportino_id text,
   import_id text,
   created_at timestamptz not null,
   updated_at timestamptz not null
 );
 
+-- Stessa campata fisica può essere sia urgente sia differibile: due interventi distinti.
+drop index if exists campate_lavoro_unica_idx;
 create unique index if not exists campate_lavoro_unica_idx
-  on campate_lavoro(codice_linea, normalizzata);
+  on campate_lavoro (codice_linea, normalizzata, (coalesce(priorita, '')));
 create index if not exists campate_lavoro_linea_idx on campate_lavoro(linea_id);
 create index if not exists campate_lavoro_stato_idx on campate_lavoro(stato);
+
+alter table campate_lavoro add column if not exists attenzionare boolean not null default false;
 
 create table if not exists campate_storico (
   id text primary key,
@@ -242,8 +247,9 @@ create policy "campate_storico_select" on campate_storico
   for select to authenticated using (true);
 
 drop policy if exists "campate_storico_insert" on campate_storico;
-create policy "campate_storico_insert" on campate_storico
-  for insert to authenticated with check (true);
+drop policy if exists "campate_storico_write" on campate_storico;
+create policy "campate_storico_write" on campate_storico
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "import_campate_select" on import_campate;
 create policy "import_campate_select" on import_campate

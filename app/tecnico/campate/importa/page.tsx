@@ -64,8 +64,9 @@ export default function ImportaCampatePage() {
       <h2>Carica file campate</h2>
       <p className="muted">
         Accetta il formato del fac-simile LIDAR (PDF o CSV): colonne Campata, Priorità, Linea, Nome
-        linea. Il file non diventa il database: serve solo a creare o aggiornare l’elenco. Le campate
-        già tagliate o tralasciate non vengono azzerate.
+        linea. Il file non diventa il database: serve solo a creare o aggiornare l’elenco. La stessa
+        campata urgente e differibile resta due volte in elenco. Duplicato è solo la riga ripetuta
+        con la stessa priorità. Le campate già tagliate o tralasciate non vengono azzerate.
       </p>
 
       <section className="panel">
@@ -86,11 +87,11 @@ export default function ImportaCampatePage() {
         <section className="panel">
           <h2>Anteprima</h2>
           <ul className="storico-list">
-            <li>{anteprima.voci.length} campate distinte dopo la normalizzazione</li>
-            <li>{anteprima.nuove} nuove</li>
+            <li>{anteprima.voci.length} interventi distinti (linea + campata + priorità)</li>
+            <li>{anteprima.nuove} nuovi</li>
             <li>{anteprima.esistenti} già presenti</li>
-            <li>{anteprima.duplicati} duplicati nel file (stessa linea e campata)</li>
-            <li>{anteprima.prioritaAggiornata} con priorità da aggiornare</li>
+            <li>{anteprima.doppiaPriorita} campate sia urgenti sia differibili: restano due voci</li>
+            <li>{anteprima.duplicati} duplicati nel file (stessa linea, campata e priorità)</li>
             <li>{anteprima.giaLavorate} già lavorate: lo storico resta</li>
             <li>{anteprima.scartate.length} righe non riconosciute</li>
             {anteprima.lineeNuove.length > 0 ? (

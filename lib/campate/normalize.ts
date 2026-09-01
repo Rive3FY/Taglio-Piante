@@ -19,12 +19,13 @@ export function normalizzaCampata(valore: string) {
   return extra.length > 0 ? `${base}/${extra.join("-")}` : base;
 }
 
-export function chiaveCampata(codiceLinea: string, normalizzata: string) {
-  return `${codiceLinea.trim().toUpperCase()}|${normalizzata}`;
+export function chiaveCampata(codiceLinea: string, normalizzata: string, priorita?: string | null) {
+  const prio = priorita?.trim() || "_";
+  return `${codiceLinea.trim().toUpperCase()}|${normalizzata}|${prio}`;
 }
 
-export function idCampataLavoro(codiceLinea: string, normalizzata: string) {
-  const slug = `${codiceLinea}_${normalizzata}`
+export function idCampataLavoro(codiceLinea: string, normalizzata: string, priorita?: string | null) {
+  const slug = `${codiceLinea}_${normalizzata}_${priorita || "x"}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");

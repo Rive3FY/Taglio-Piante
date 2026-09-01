@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
+import { FiltroGruppo } from "@/components/FiltroGruppo";
 import type { Linea } from "@/lib/types";
 
 type Filtro = number | "tutte";
@@ -78,28 +79,33 @@ export default function TecnicoLineePage() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Codice o nome" />
       </label>
 
-      <div className="chip-row">
-        <button
-          type="button"
-          className={`chip ${filtro === "tutte" ? "on" : ""}`}
-          onClick={() => setFiltro("tutte")}
+      <div className="filtri-gruppi">
+        <FiltroGruppo
+          titolo={filtro === "tutte" ? "Tutte le tensioni" : tensioneLabel(filtro)}
+          attivo={filtro !== "tutte"}
         >
-          Tutte <span className="chip-count">{cercate.length}</span>
-        </button>
-        {TENSIONI.map((kv) => {
-          const quante = (perTensione.get(kv) ?? []).length;
-          return (
-            <button
-              key={kv}
-              type="button"
-              className={`chip ${filtro === kv ? "on" : ""}`}
-              disabled={quante === 0}
-              onClick={() => setFiltro(filtro === kv ? "tutte" : kv)}
-            >
-              {tensioneLabel(kv)} <span className="chip-count">{quante}</span>
-            </button>
-          );
-        })}
+          <button
+            type="button"
+            className={`chip ${filtro === "tutte" ? "on" : ""}`}
+            onClick={() => setFiltro("tutte")}
+          >
+            Tutte <span className="chip-count">{cercate.length}</span>
+          </button>
+          {TENSIONI.map((kv) => {
+            const quante = (perTensione.get(kv) ?? []).length;
+            return (
+              <button
+                key={kv}
+                type="button"
+                className={`chip ${filtro === kv ? "on" : ""}`}
+                disabled={quante === 0}
+                onClick={() => setFiltro(filtro === kv ? "tutte" : kv)}
+              >
+                {tensioneLabel(kv)} <span className="chip-count">{quante}</span>
+              </button>
+            );
+          })}
+        </FiltroGruppo>
       </div>
 
       {totaleVisibile === 0 ? <p className="muted">Nessuna linea trovata.</p> : null}

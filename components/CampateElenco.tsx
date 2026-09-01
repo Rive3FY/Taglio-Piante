@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, TENSIONI, tensioneLabel } from "@/lib/format";
+import { aggiornaDettagliCampata } from "@/lib/campate/apply";
+import { useSession } from "@/lib/SessionContext";
+import { useSync } from "@/lib/SyncContext";
+import { FiltroGruppo } from "./FiltroGruppo";
 import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo } from "./FiltroPeriodo";
 import {
   CAMPATA_ORIGINE_LABEL,
@@ -26,12 +30,15 @@ export function CampateElenco({
 }: {
   ruolo: "tecnico" | "operatore";
 }) {
+  const { session } = useSession();
+  const { syncNow } = useSync();
   const campate = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
   const storico = useLiveQuery(() => db.campateStorico.toArray(), []) ?? [];
   const [q, setQ] = useState("");
   const [kv, setKv] = useState<number | "tutte">("tutte");
   const [priorita, setPriorita] = useState<PrioritaFiltro>("tutte");
   const [stato, setStato] = useState<StatoFiltro>("tutte");
+  const [soloAttenzione, setSoloAttenzione] = useState(false);
   const [origine, setOrigine] = useState<OrigineFiltro>("tutte");
   const [linea, setLinea] = useState("");
   const [operatore, setOperatore] = useState("");
@@ -67,23 +74,25 @@ export function CampateElenco({
       .sort(
         (a, b) =>
           a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
-          a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }),
+          a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+          (a.priorita ?? "").localeCompare(b.priorita ?? ""),
       )
       .filter((c) => {
         if (kv !== "tutte" && (c.tensioneKv ?? 0) !== kv) return false;
         if (priorita !== "tutte" && c.priorita !== priorita) return false;
         if (stato !== "tutte" && c.stato !== stato) return false;
+        if (soloAttenzione && !c.attenzionare) return false;
         if (origine !== "tutte" && c.origine !== origine) return false;
         if (linea && c.codiceLinea !== linea) return false;
         if (operatore && c.operatore !== operatore) return false;
         if (c.dataTaglio && !nelPeriodo(c.dataTaglio, periodo)) return false;
         if (periodo.da && !c.dataTaglio) return false;
         if (!term) return true;
-        return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore]
+        return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(term));
       });
-  }, [campate, q, kv, priorita, stato, origine, linea, operatore, periodo]);
+  }, [campate, q, kv, priorita, stato, origine, linea, operatore, periodo, soloAttenzione]);
 
   const mostrate = filtrate.slice(0, visibili);
   const restanti = filtrate.length - mostrate.length;
@@ -95,8 +104,14 @@ export function CampateElenco({
       tagliate: campate.filter((c) => c.stato === "tagliata").length,
       tralasciate: campate.filter((c) => c.stato === "tralasciata").length,
       aggiuntive: campate.filter((c) => c.origine === "aggiuntiva").length,
+      attenzione: campate.filter((c) => c.attenzionare).length,
     };
   }, [campate]);
+
+  async function patchCampata(id: string, patch: { attenzionare?: boolean; note?: string }) {
+    await aggiornaDettagliCampata(id, patch, session?.nome);
+    void syncNow();
+  }
 
   return (
     <>
@@ -106,6 +121,7 @@ export function CampateElenco({
         <span className="badge badge-tagliata">{conteggi.tagliate} tagliate</span>
         <span className="badge badge-tralasciata">{conteggi.tralasciate} tralasciate</span>
         <span className="badge badge-aggiuntiva">{conteggi.aggiuntive} aggiuntive</span>
+        <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
       </div>
 
       <label>
@@ -120,54 +136,88 @@ export function CampateElenco({
         />
       </label>
 
-      <div className="chip-row">
-        <button type="button" className={`chip ${kv === "tutte" ? "on" : ""}`} onClick={() => setKv("tutte")}>
-          Tutte le tensioni
-        </button>
-        {TENSIONI.map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={`chip ${kv === t ? "on" : ""}`}
-            onClick={() => setKv(kv === t ? "tutte" : t)}
-          >
-            {tensioneLabel(t)}
+      <div className="filtri-gruppi">
+        <FiltroGruppo
+          titolo={kv === "tutte" ? "Tutte le tensioni" : tensioneLabel(kv)}
+          attivo={kv !== "tutte"}
+        >
+          <button type="button" className={`chip ${kv === "tutte" ? "on" : ""}`} onClick={() => setKv("tutte")}>
+            Tutte
           </button>
-        ))}
-      </div>
+          {TENSIONI.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`chip ${kv === t ? "on" : ""}`}
+              onClick={() => setKv(kv === t ? "tutte" : t)}
+            >
+              {tensioneLabel(t)}
+            </button>
+          ))}
+        </FiltroGruppo>
 
-      <div className="chip-row">
-        {(["tutte", "urgente", "differibile"] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            className={`chip ${priorita === p ? "on" : ""}`}
-            onClick={() => setPriorita(p)}
-          >
-            {p === "tutte" ? "Tutte le priorità" : CAMPATA_PRIORITA_LABEL[p]}
-          </button>
-        ))}
-      </div>
+        <FiltroGruppo
+          titolo={priorita === "tutte" ? "Tutte le priorità" : CAMPATA_PRIORITA_LABEL[priorita]}
+          attivo={priorita !== "tutte"}
+        >
+          {(["tutte", "urgente", "differibile"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`chip ${priorita === p ? "on" : ""}`}
+              onClick={() => setPriorita(p)}
+            >
+              {p === "tutte" ? "Tutte" : CAMPATA_PRIORITA_LABEL[p]}
+            </button>
+          ))}
+        </FiltroGruppo>
 
-      <div className="chip-row">
-        {(["tutte", "da_tagliare", "tagliata", "tralasciata"] as const).map((s) => (
-          <button key={s} type="button" className={`chip ${stato === s ? "on" : ""}`} onClick={() => setStato(s)}>
-            {s === "tutte" ? "Tutti gli stati" : CAMPATA_STATO_LABEL[s]}
-          </button>
-        ))}
-      </div>
+        <FiltroGruppo
+          titolo={stato === "tutte" ? "Tutti gli stati" : CAMPATA_STATO_LABEL[stato]}
+          attivo={stato !== "tutte"}
+        >
+          {(["tutte", "da_tagliare", "tagliata", "tralasciata"] as const).map((s) => (
+            <button key={s} type="button" className={`chip ${stato === s ? "on" : ""}`} onClick={() => setStato(s)}>
+              {s === "tutte" ? "Tutti" : CAMPATA_STATO_LABEL[s]}
+            </button>
+          ))}
+        </FiltroGruppo>
 
-      <div className="chip-row">
-        {(["tutte", "prevista", "aggiuntiva"] as const).map((o) => (
+        <FiltroGruppo
+          titolo={soloAttenzione ? "Da attenzionare" : "Attenzione"}
+          attivo={soloAttenzione}
+        >
           <button
-            key={o}
             type="button"
-            className={`chip ${origine === o ? "on" : ""}`}
-            onClick={() => setOrigine(o)}
+            className={`chip ${!soloAttenzione ? "on" : ""}`}
+            onClick={() => setSoloAttenzione(false)}
           >
-            {o === "tutte" ? "Tutte" : CAMPATA_ORIGINE_LABEL[o]}
+            Tutte
           </button>
-        ))}
+          <button
+            type="button"
+            className={`chip ${soloAttenzione ? "on" : ""}`}
+            onClick={() => setSoloAttenzione(true)}
+          >
+            Da attenzionare
+          </button>
+        </FiltroGruppo>
+
+        <FiltroGruppo
+          titolo={origine === "tutte" ? "Tutte le origini" : CAMPATA_ORIGINE_LABEL[origine]}
+          attivo={origine !== "tutte"}
+        >
+          {(["tutte", "prevista", "aggiuntiva"] as const).map((o) => (
+            <button
+              key={o}
+              type="button"
+              className={`chip ${origine === o ? "on" : ""}`}
+              onClick={() => setOrigine(o)}
+            >
+              {o === "tutte" ? "Tutte" : CAMPATA_ORIGINE_LABEL[o]}
+            </button>
+          ))}
+        </FiltroGruppo>
       </div>
 
       <div className="grid-2">
@@ -219,6 +269,7 @@ export function CampateElenco({
                 <th>Campata</th>
                 <th>Priorità</th>
                 <th>Stato</th>
+                <th>Att.</th>
                 <th>Data</th>
                 <th>Operatore</th>
                 <th>Note</th>
@@ -232,7 +283,7 @@ export function CampateElenco({
                   storico={storicoPer.get(c.id) ?? []}
                   aperta={aperta === c.id}
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
-                  ruolo={ruolo}
+                  onPatch={(patch) => void patchCampata(c.id, patch)}
                 />
               ))}
             </tbody>
@@ -254,17 +305,31 @@ function CampataRiga({
   storico,
   aperta,
   onToggle,
-  ruolo,
+  onPatch,
 }: {
   c: CampataLavoro;
   storico: CampataStorico[];
   aperta: boolean;
   onToggle: () => void;
-  ruolo: "tecnico" | "operatore";
+  onPatch: (patch: { attenzionare?: boolean; note?: string }) => void;
 }) {
+  const [nota, setNota] = useState(c.note ?? "");
+
+  useEffect(() => {
+    setNota(c.note ?? "");
+  }, [c.id, c.note]);
+
+  function salvaNota() {
+    if (nota.trim() === (c.note ?? "").trim()) return;
+    onPatch({ note: nota });
+  }
+
   return (
     <>
-      <tr className={`campata-row campata-${c.stato}`} onClick={onToggle}>
+      <tr
+        className={`campata-row campata-${c.stato}${c.attenzionare ? " campata-attenzionare" : ""}`}
+        onClick={onToggle}
+      >
         <td className="linea-codice">{c.codiceLinea}</td>
         <td>{c.nomeLinea}</td>
         <td>{c.tensioneKv ?? "—"}</td>
@@ -282,40 +347,59 @@ function CampataRiga({
         <td>
           <span className={`badge badge-${c.stato}`}>{CAMPATA_STATO_LABEL[c.stato]}</span>
         </td>
+        <td
+          className="campata-att"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(c.attenzionare)}
+            onChange={(e) => onPatch({ attenzionare: e.target.checked })}
+            aria-label={`Da attenzionare ${c.normalizzata}`}
+          />
+        </td>
         <td>{c.dataTaglio ? formatDate(c.dataTaglio) : "—"}</td>
         <td>{c.operatore ?? "—"}</td>
-        <td>{c.note ?? "—"}</td>
+        <td>
+          {c.note?.trim() ? <span className="campata-note-preview">{c.note.trim()}</span> : "—"}
+        </td>
       </tr>
       {aperta ? (
         <tr className="campata-storico">
-          <td colSpan={9}>
-            {ruolo === "operatore" ? (
-              <Link
-                href={`/operatore/nuovo?linea=${encodeURIComponent(c.lineaId)}`}
-                className="btn btn-sm elenco-piu"
-              >
-                Rapportino su questa linea
-              </Link>
-            ) : null}
-            <p className="muted">
-              Originale {c.originale} · {CAMPATA_ORIGINE_LABEL[c.origine]}
-              {c.rapportinoId ? ` · rapportino ${c.rapportinoId}` : ""}
-            </p>
-            {storico.length === 0 ? (
-              <p className="muted">Nessuno storico ancora.</p>
-            ) : (
-              <ul className="storico-list">
-                {storico.map((s) => (
-                  <li key={s.id}>
-                    <strong>{s.evento.replaceAll("_", " ")}</strong>
-                    {s.stato ? ` · ${CAMPATA_STATO_LABEL[s.stato]}` : ""}
-                    {s.operatore ? ` · ${s.operatore}` : ""}
-                    {s.note ? ` · ${s.note}` : ""}
-                    <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <td colSpan={10}>
+            <div className="campata-esploso" onClick={(e) => e.stopPropagation()}>
+              <label className="check-line">
+                <input
+                  type="checkbox"
+                  checked={Boolean(c.attenzionare)}
+                  onChange={(e) => onPatch({ attenzionare: e.target.checked })}
+                />
+                Da attenzionare
+              </label>
+              <label>
+                Nota
+                <textarea
+                  rows={3}
+                  value={nota}
+                  onChange={(e) => setNota(e.target.value)}
+                  onBlur={salvaNota}
+                  placeholder="Scrivi qui la nota della campata"
+                />
+              </label>
+              {storico.length > 0 ? (
+                <ul className="storico-list">
+                  {storico.map((s) => (
+                    <li key={s.id}>
+                      <strong>{s.evento.replaceAll("_", " ")}</strong>
+                      {s.stato ? ` · ${CAMPATA_STATO_LABEL[s.stato]}` : ""}
+                      {s.operatore ? ` · ${s.operatore}` : ""}
+                      {s.note ? ` · ${s.note}` : ""}
+                      <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </td>
         </tr>
       ) : null}

@@ -14,7 +14,19 @@ import {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+type SyncResult = { processed: number; pending: number; pulled: number };
+
+let syncInCorso: Promise<SyncResult> | null = null;
+
 export async function processSyncQueue() {
+  if (syncInCorso) return syncInCorso;
+  syncInCorso = eseguiSyncQueue().finally(() => {
+    syncInCorso = null;
+  });
+  return syncInCorso;
+}
+
+async function eseguiSyncQueue(): Promise<SyncResult> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
   }
@@ -46,23 +58,32 @@ export async function processSyncQueue() {
         await delay(180);
       }
 
-      const now = new Date().toISOString();
-      if (item.action !== "delete" && item.action !== "campate") {
-        await db.rapportini.update(item.rapportinoId, {
-          syncStatus: "synced",
-          updatedAt: now,
-        });
-      }
       await db.syncQueue.delete(item.id);
       processed += 1;
+
+      if (item.action !== "delete") {
+        const restanti = await db.syncQueue.where("rapportinoId").equals(item.rapportinoId).toArray();
+        await db.rapportini.update(item.rapportinoId, {
+          syncStatus: restanti.length > 0 ? "pending" : "synced",
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       await db.syncQueue.update(item.id, {
         attempts: item.attempts + 1,
         lastError: error instanceof Error ? error.message : "Errore sconosciuto",
       });
-      if (item.action !== "delete" && item.action !== "campate") {
+      if (item.action !== "delete") {
         await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
       }
+    }
+  }
+
+  const ancoraInCoda = new Set((await db.syncQueue.toArray()).map((i) => i.rapportinoId));
+  const inErrore = await db.rapportini.filter((r) => r.syncStatus === "error").toArray();
+  for (const r of inErrore) {
+    if (!ancoraInCoda.has(r.id)) {
+      await db.rapportini.update(r.id, { syncStatus: "synced" });
     }
   }
 

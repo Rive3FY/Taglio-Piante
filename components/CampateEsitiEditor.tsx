@@ -42,18 +42,25 @@ export function CampateEsitiEditor({
     <section className="panel">
       <h2>Campate del lavoro</h2>
       <p className="muted">
-        Indica tagliata o tralasciata. Se ne hai tagliata una non prevista, aggiungila in fondo: entra
-        in elenco come aggiuntiva.
+        Indica solo se la campata è tagliata o tralasciata. Note e “da attenzionare” si mettono
+        dopo, nell’elenco campate.
       </p>
       <div className="esiti-list">
         {esiti.map((e) => {
-          const piano = pianificate.find((p) => p.id === e.campataId || p.normalizzata === e.normalizzata);
+          const piano = e.campataId
+            ? pianificate.find((p) => p.id === e.campataId)
+            : pianificate.find(
+                (p) =>
+                  p.normalizzata === e.normalizzata &&
+                  (!e.priorita || p.priorita === e.priorita),
+              );
+          const priorita = e.priorita ?? piano?.priorita;
           return (
             <div key={e.id} className={`esito-card esito-${e.esito}`}>
               <div className="esito-head">
                 <strong>{e.normalizzata}</strong>
-                {piano?.priorita ? (
-                  <span className={`badge badge-${piano.priorita}`}>{CAMPATA_PRIORITA_LABEL[piano.priorita]}</span>
+                {priorita ? (
+                  <span className={`badge badge-${priorita}`}>{CAMPATA_PRIORITA_LABEL[priorita]}</span>
                 ) : null}
                 {e.aggiuntiva ? <span className="badge badge-aggiuntiva">Non prevista</span> : null}
               </div>
@@ -73,16 +80,6 @@ export function CampateEsitiEditor({
                   Tralasciata
                 </button>
               </div>
-              {e.esito === "tralasciata" ? (
-                <label>
-                  Motivazione obbligatoria
-                  <input
-                    value={e.note ?? ""}
-                    onChange={(ev) => setEsito(e.id, { note: ev.target.value })}
-                    placeholder="Perché non è stata tagliata"
-                  />
-                </label>
-              ) : null}
             </div>
           );
         })}
@@ -116,5 +113,5 @@ function AggiungiCampata({ onAdd }: { onAdd: (testo: string) => void }) {
 }
 
 export function testoCampateDaEsiti(esiti: RapportinoCampata[]) {
-  return esiti.map((e) => e.normalizzata).join(", ");
+  return [...new Set(esiti.map((e) => e.normalizzata))].join(", ");
 }

@@ -75,6 +75,22 @@ export async function fillOfficialScheda(opts: {
     }
   };
 
+  const writeInBox = (text: string, box: { x: number; y: number; w: number; h: number }, size: number) => {
+    const value = safeText(text).trim();
+    if (!value) return;
+    let drawn = value;
+    let width = 0;
+    try {
+      width = font.widthOfTextAtSize(drawn, size);
+    } catch {
+      drawn = value.replace(/[^\x20-\x7E]/g, " ");
+      width = font.widthOfTextAtSize(drawn, size);
+    }
+    const x = box.x + Math.max(0, (box.w - width) / 2);
+    const y = box.y + (box.h - size) / 2 + size * 0.18;
+    write(drawn, x, y, size);
+  };
+
   write(linea?.codice ?? "", 40, 778, 10);
   write(lineaDescrizione(linea), 268, 778, 9);
   write(item.campata, 524, 778, 10);
@@ -83,8 +99,10 @@ export async function fillOfficialScheda(opts: {
   write(item.rappresentanteDitta, 58, 717.2, 9);
   write(item.ditta, 298, 717.2, 9);
 
-  write(formatDate(item.dataLavoro), 48, 91, 10);
-  if (item.nOperatori > 0) write(String(item.nOperatori), 518, 91, 10);
+  writeInBox(formatDate(item.dataLavoro), { x: 23.3, y: 85.2, w: 72.2, h: 15.6 }, 10);
+  if (item.nOperatori > 0) {
+    writeInBox(String(item.nOperatori), { x: 494.2, y: 100.8, w: 41.6, h: 15.6 }, 11);
+  }
 
   const qtyById = new Map(item.righe.map((r) => [r.prestazioneId, r.quantita]));
   for (const p of prestazioni) {
@@ -94,24 +112,30 @@ export async function fillOfficialScheda(opts: {
     write(String(q), QTY_X, y, 9);
   }
 
-  async function stamp(dataUrl: string | undefined, x: number, y: number, w: number, h: number) {
+  async function stamp(dataUrl: string | undefined, box: { x: number; y: number; w: number; h: number }) {
     if (!dataUrl?.startsWith("data:image")) return;
     try {
       const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
-      const scale = Math.min(w / img.width, h / img.height);
+      const scale = Math.min(box.w / img.width, box.h / img.height);
+      const width = img.width * scale;
+      const height = img.height * scale;
       page.drawImage(img, {
-        x,
-        y,
-        width: img.width * scale,
-        height: img.height * scale,
+        x: box.x,
+        y: box.y,
+        width,
+        height,
       });
     } catch {
       // firma non incorporabile
     }
   }
 
-  await stamp(item.firmaTerna, 42, 34, 200, 38);
-  await stamp(item.firmaOperatore, 342, 34, 200, 38);
+  // Giallo: Il Rappresentante TERNA / Il Designato TERNA (sinistra).
+  // Fucsia: Il Rappresentante della Ditta / Il Designato Ditta (destra).
+  await stamp(item.firmaTerna, { x: 32, y: 598, w: 250, h: 22 });
+  await stamp(item.firmaOperatore, { x: 318, y: 598, w: 250, h: 22 });
+  await stamp(item.firmaTerna, { x: 80, y: 52, w: 170, h: 20 });
+  await stamp(item.firmaOperatore, { x: 420, y: 52, w: 150, h: 20 });
 
   const bytes = await pdf.save();
   return bytes;

@@ -54,6 +54,7 @@ export type CampataLavoro = {
   dataTaglio?: string;
   operatore?: string;
   note?: string;
+  attenzionare?: boolean;
   rapportinoId?: string;
   importId?: string;
   syncStatus: SyncStatus;
@@ -90,8 +91,10 @@ export type RapportinoCampata = {
   campataId?: string;
   originale: string;
   normalizzata: string;
+  priorita?: CampataPriorita;
   esito: CampataEsito;
   note?: string;
+  attenzionare?: boolean;
   aggiuntiva?: boolean;
 };
 
@@ -168,6 +171,11 @@ export type SyncQueueItem = {
   lastError?: string;
 };
 
+/** Campate aggiuntive da togliere da Supabase dopo la cancellazione del rapportino. */
+export type CampataDeleteQueueItem = {
+  id: string;
+};
+
 export const STATO_LABEL: Record<RapportinoStato, string> = {
   bozza: "Bozza",
   da_prendere: "Da prendere",
@@ -179,7 +187,7 @@ export const SYNC_LABEL: Record<SyncStatus, string> = {
   local: "Solo locale",
   pending: "In coda",
   synced: "Sincronizzato",
-  error: "Errore sync",
+  error: "Invio non riuscito",
 };
 
 export const CAMPATA_STATO_LABEL: Record<CampataStatoLavoro, string> = {

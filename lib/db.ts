@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
   Campata,
+  CampataDeleteQueueItem,
   CampataLavoro,
   CampataStorico,
   Ditta,
@@ -40,6 +41,7 @@ class RapportiniDB extends Dexie {
   campateLavoro!: EntityTable<CampataLavoro, "id">;
   campateStorico!: EntityTable<CampataStorico, "id">;
   importCampate!: EntityTable<ImportCampate, "id">;
+  campateDeleteQueue!: EntityTable<CampataDeleteQueueItem, "id">;
   syncQueue!: EntityTable<SyncQueueItem, "id">;
 
   constructor() {
@@ -156,6 +158,20 @@ class RapportiniDB extends Dexie {
       importCampate: "id, createdAt",
       syncQueue: "id, rapportinoId, createdAt",
     });
+    this.version(10).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro: "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    });
   }
 }
 
@@ -254,11 +270,15 @@ export async function enqueueSync(
 }
 
 export async function deleteRapportino(id: string) {
+  const { annullaEsitiDaRapportino } = await import("./campate/apply");
+  await annullaEsitiDaRapportino(id);
   await enqueueSync(id, "delete");
   await db.transaction("rw", [db.rapportini, db.syncQueue], async () => {
     const pending = await db.syncQueue.where("rapportinoId").equals(id).toArray();
     for (const item of pending) {
-      if (item.action !== "delete") await db.syncQueue.delete(item.id);
+      if (item.action !== "delete" && item.action !== "campate") {
+        await db.syncQueue.delete(item.id);
+      }
     }
     await db.rapportini.delete(id);
   });

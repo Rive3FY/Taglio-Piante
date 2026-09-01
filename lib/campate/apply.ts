@@ -2,6 +2,7 @@ import { db, enqueueSync } from "@/lib/db";
 import { uid, tensioneDaCodice, todayIso } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import { campataLavoroToRow, campataStoricoToRow, importCampateToRow, lineaToRow } from "@/lib/supabase/mappers";
+import { upsertCampateLavoro } from "@/lib/supabase/remote";
 import type {
   CampataLavoro,
   CampataStorico,
@@ -38,7 +39,9 @@ export async function confermaImportCampate(opts: {
   const linee = await db.linee.toArray();
   const perCodice = new Map(linee.map((l) => [l.codice.toUpperCase(), l]));
   const esistenti = await db.campateLavoro.toArray();
-  const perChiave = new Map(esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata), c]));
+  const perChiave = new Map(
+    esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+  );
 
   const nuoveLinee: Linea[] = [];
   for (const codice of opts.anteprima.lineeNuove) {
@@ -59,10 +62,17 @@ export async function confermaImportCampate(opts: {
   for (const voce of opts.anteprima.voci) {
     const linea = perCodice.get(voce.codiceLinea);
     if (!linea) continue;
-    const presente = perChiave.get(voce.chiave);
+    const presente =
+      perChiave.get(voce.chiave) ??
+      esistenti.find(
+        (c) =>
+          c.codiceLinea.toUpperCase() === voce.codiceLinea.toUpperCase() &&
+          c.normalizzata === voce.normalizzata &&
+          (c.priorita ?? "_") === (voce.priorita ?? "_"),
+      );
     if (!presente) {
       const campata: CampataLavoro = {
-        id: idCampataLavoro(voce.codiceLinea, voce.normalizzata),
+        id: idCampataLavoro(voce.codiceLinea, voce.normalizzata, voce.priorita),
         lineaId: linea.id,
         codiceLinea: voce.codiceLinea,
         nomeLinea: voce.nomeLinea || linea.nome,
@@ -89,17 +99,10 @@ export async function confermaImportCampate(opts: {
       continue;
     }
 
-    const priorita =
-      presente.priorita && voce.priorita
-        ? presente.priorita === "urgente" || voce.priorita === "urgente"
-          ? "urgente"
-          : voce.priorita
-        : (voce.priorita ?? presente.priorita);
-    const changed = priorita !== presente.priorita || (voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea);
+    const changed = voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea;
     if (!changed) continue;
     const aggiornata: CampataLavoro = {
       ...presente,
-      priorita,
       nomeLinea: voce.nomeLinea || presente.nomeLinea,
       updatedAt: now,
       importId,
@@ -109,9 +112,9 @@ export async function confermaImportCampate(opts: {
     storico.push({
       id: uid("sto"),
       campataId: presente.id,
-      evento: presente.stato === "da_tagliare" ? "priorita_aggiornata" : "reimportata_senza_stato",
+      evento: "reimportata",
       stato: presente.stato,
-      priorita,
+      priorita: presente.priorita,
       note: `Import ${opts.fileName}`,
       createdAt: now,
     });
@@ -136,8 +139,7 @@ export async function confermaImportCampate(opts: {
   }
 
   if (daScrivere.length > 0) {
-    const { error } = await supabase.from("campate_lavoro").upsert(daScrivere.map(campataLavoroToRow));
-    if (error) throw new Error(error.message);
+    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow));
     await db.campateLavoro.bulkPut(daScrivere);
   }
 
@@ -175,7 +177,6 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
   const linea = await db.linee.get(item.lineaId);
   const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
-  const perChiave = new Map(tutte.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata), c]));
   const now = new Date().toISOString();
   const operatore = session?.nome || item.dipendenteTerna || item.presoDa || "Operatore";
   const data = item.dataLavoro || todayIso();
@@ -184,73 +185,167 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
   const storico: CampataStorico[] = [];
 
   for (const esito of esiti) {
-    if (esito.esito === "tralasciata" && !esito.note?.trim()) {
-      throw new Error(`La campata ${esito.normalizzata} è tralasciata: indica una nota.`);
-    }
-    const codiceLinea = linea?.codice ?? esito.originale.split("-")[0] ?? "";
-    const chiave = chiaveCampata(codiceLinea, esito.normalizzata);
-    const presente = perChiave.get(chiave) ?? (esito.campataId ? await db.campateLavoro.get(esito.campataId) : undefined);
     const stato = esito.esito === "tagliata" ? "tagliata" : "tralasciata";
+    const bersagli = tutte.filter((c) => {
+      if (esito.campataId) return c.id === esito.campataId;
+      if (c.normalizzata !== esito.normalizzata) return false;
+      if (esito.priorita) return c.priorita === esito.priorita;
+      return true;
+    });
 
-    if (!presente) {
+    if (bersagli.length === 0) {
       if (!linea) continue;
       const nuova: CampataLavoro = {
-        id: idCampataLavoro(linea.codice, esito.normalizzata),
+        id: idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita),
         lineaId: linea.id,
         codiceLinea: linea.codice,
         nomeLinea: linea.nome,
         tensioneKv: linea.tensioneKv ?? tensioneDaCodice(linea.codice),
         originale: esito.originale,
         normalizzata: esito.normalizzata,
+        priorita: esito.priorita,
         stato,
         origine: "aggiuntiva",
+        attenzionare: false,
         dataTaglio: data,
         operatore,
-        note: esito.note,
         rapportinoId: item.id,
         syncStatus: "pending",
         createdAt: now,
         updatedAt: now,
       };
       daScrivere.push(nuova);
-      perChiave.set(chiave, nuova);
+      tutte.push(nuova);
       storico.push({
         id: uid("sto"),
         campataId: nuova.id,
         evento: "aggiuntiva_da_rapportino",
         stato,
+        priorita: esito.priorita,
         operatore,
         rapportinoId: item.id,
-        note: esito.note,
         createdAt: now,
       });
       continue;
     }
 
-    const aggiornata: CampataLavoro = {
-      ...presente,
-      stato,
-      dataTaglio: data,
-      operatore,
-      note: esito.note ?? presente.note,
-      rapportinoId: item.id,
-      syncStatus: "pending",
-      updatedAt: now,
-    };
-    daScrivere.push(aggiornata);
-    storico.push({
-      id: uid("sto"),
-      campataId: presente.id,
-      evento: stato,
-      stato,
-      operatore,
-      rapportinoId: item.id,
-      note: esito.note,
-      createdAt: now,
-    });
+    for (const presente of bersagli) {
+      const aggiornata: CampataLavoro = {
+        ...presente,
+        stato,
+        dataTaglio: data,
+        operatore,
+        rapportinoId: item.id,
+        syncStatus: "pending",
+        updatedAt: now,
+      };
+      daScrivere.push(aggiornata);
+      storico.push({
+        id: uid("sto"),
+        campataId: presente.id,
+        evento: stato,
+        stato,
+        priorita: presente.priorita,
+        operatore,
+        rapportinoId: item.id,
+        createdAt: now,
+      });
+    }
   }
 
   if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
   if (storico.length > 0) await db.campateStorico.bulkPut(storico);
   await enqueueSync(item.id, "campate");
+}
+
+/**
+ * Quando si cancella un rapportino, le campate che aveva chiuso tornano da tagliare.
+ * Quelle nate solo da quel foglio (aggiuntive) si tolgono dalla tabella.
+ */
+export async function annullaEsitiDaRapportino(rapportinoId: string) {
+  const legate = await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray();
+  if (legate.length === 0) return;
+
+  const now = new Date().toISOString();
+  const daRipristinare: CampataLavoro[] = [];
+  const daEliminare: string[] = [];
+  const storico: CampataStorico[] = [];
+
+  for (const presente of legate) {
+    if (presente.origine === "aggiuntiva") {
+      daEliminare.push(presente.id);
+      continue;
+    }
+
+    const ripristinata: CampataLavoro = {
+      ...presente,
+      stato: "da_tagliare",
+      syncStatus: "pending",
+      updatedAt: now,
+    };
+    delete ripristinata.dataTaglio;
+    delete ripristinata.operatore;
+    delete ripristinata.rapportinoId;
+    daRipristinare.push(ripristinata);
+    storico.push({
+      id: uid("sto"),
+      campataId: presente.id,
+      evento: "ripristinata_da_cancellazione",
+      stato: "da_tagliare",
+      priorita: presente.priorita,
+      rapportinoId,
+      createdAt: now,
+    });
+  }
+
+  if (daRipristinare.length > 0) await db.campateLavoro.bulkPut(daRipristinare);
+  if (daEliminare.length > 0) {
+    await db.campateLavoro.bulkDelete(daEliminare);
+    await db.campateDeleteQueue.bulkPut(daEliminare.map((id) => ({ id })));
+  }
+  if (storico.length > 0) await db.campateStorico.bulkPut(storico);
+  await enqueueSync(rapportinoId, "campate");
+}
+
+/** Nota e “da attenzionare” si gestiscono dalla tabella campate, non dal rapportino. */
+export async function aggiornaDettagliCampata(
+  id: string,
+  patch: { attenzionare?: boolean; note?: string },
+  operatore?: string,
+) {
+  const presente = await db.campateLavoro.get(id);
+  if (!presente) return;
+
+  const now = new Date().toISOString();
+  const aggiornata: CampataLavoro = {
+    ...presente,
+    syncStatus: "pending",
+    updatedAt: now,
+  };
+  if (patch.attenzionare !== undefined) aggiornata.attenzionare = patch.attenzionare;
+  if (patch.note !== undefined) {
+    const nota = patch.note.trim();
+    if (nota) aggiornata.note = nota;
+    else delete aggiornata.note;
+  }
+
+  const evento =
+    patch.attenzionare === undefined
+      ? "nota"
+      : patch.attenzionare
+        ? "attenzionata"
+        : "attenzione_rimossa";
+
+  await db.campateLavoro.put(aggiornata);
+  await db.campateStorico.put({
+    id: uid("sto"),
+    campataId: id,
+    evento,
+    stato: presente.stato,
+    priorita: presente.priorita,
+    operatore,
+    note: aggiornata.note,
+    createdAt: now,
+  });
+  await enqueueSync(presente.rapportinoId || presente.id, "campate");
 }

@@ -11,11 +11,13 @@ export function RapportiniPerTensione({
   linee,
   hrefFor,
   vuoto,
+  onDelete,
 }: {
   items: Rapportino[];
   linee: Linea[];
   hrefFor: (item: Rapportino) => string;
   vuoto: string;
+  onDelete?: (item: Rapportino) => void;
 }) {
   const [q, setQ] = useState("");
   const [periodo, setPeriodo] = useState(PERIODO_VUOTO);
@@ -111,6 +113,7 @@ export function RapportiniPerTensione({
                 linee={linee}
                 hrefFor={hrefFor}
                 vuoto={vuoto}
+                onDelete={onDelete}
                 passo={5}
                 mostraTestata={false}
               />

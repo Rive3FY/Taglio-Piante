@@ -10,6 +10,7 @@ export function RapportiniElenco({
   linee,
   hrefFor,
   vuoto,
+  onDelete,
   passo = 5,
   ricercaDa = 8,
   mostraTestata = true,
@@ -19,6 +20,7 @@ export function RapportiniElenco({
   linee: Linea[];
   hrefFor: (item: Rapportino) => string;
   vuoto: string;
+  onDelete?: (item: Rapportino) => void;
   /** Quante schede mostrare subito e quante aggiungerne a ogni tocco. */
   passo?: number;
   /** Da quanti rapportini in su compare il campo di ricerca. */
@@ -108,6 +110,7 @@ export function RapportiniElenco({
               item={item}
               linea={lineaDi.get(item.lineaId)}
               href={hrefFor(item)}
+              onDelete={onDelete}
             />
           ))}
         </div>

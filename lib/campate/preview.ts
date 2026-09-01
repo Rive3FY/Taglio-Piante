@@ -2,12 +2,7 @@ import { chiaveCampata } from "./normalize";
 import type { CampataLavoro, CampataPriorita } from "@/lib/types";
 import type { RigaImportBruta, RigaImportScartata } from "./parse";
 
-export type AzioneImport =
-  | "nuova"
-  | "invariata"
-  | "priorita"
-  | "gia_lavorata"
-  | "duplicato";
+export type AzioneImport = "nuova" | "invariata" | "gia_lavorata" | "duplicato";
 
 export type VoceAnteprimaImport = {
   chiave: string;
@@ -26,16 +21,10 @@ export type AnteprimaImport = {
   nuove: number;
   esistenti: number;
   duplicati: number;
-  prioritaAggiornata: number;
+  doppiaPriorita: number;
   giaLavorate: number;
   lineeNuove: string[];
 };
-
-const PESI: Record<CampataPriorita, number> = { differibile: 1, urgente: 2 };
-
-function prioritaVince(a: CampataPriorita, b: CampataPriorita) {
-  return PESI[a] >= PESI[b] ? a : b;
-}
 
 export function costruisciAnteprima(
   righe: RigaImportBruta[],
@@ -47,19 +36,14 @@ export function costruisciAnteprima(
   let duplicati = 0;
 
   for (const r of righe) {
-    const chiave = chiaveCampata(r.codiceLinea, r.normalizzata);
+    const chiave = chiaveCampata(r.codiceLinea, r.normalizzata, r.priorita);
     const gia = perChiave.get(chiave);
     if (gia) {
       duplicati += 1;
-      const priorita = prioritaVince(gia.priorita, r.priorita);
       perChiave.set(chiave, {
         ...gia,
-        priorita,
         azione: "duplicato",
-        nota:
-          gia.priorita !== r.priorita
-            ? `Stessa campata più volte nel file: si tiene ${priorita.toUpperCase()}.`
-            : "Riga ripetuta nel file, ignorata in importazione.",
+        nota: "Stessa linea, campata e priorità ripetuta nel file: si importa una sola volta.",
       });
       continue;
     }
@@ -74,32 +58,46 @@ export function costruisciAnteprima(
     });
   }
 
-  const indiceEsistenti = new Map(esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata), c]));
+  const coppie = new Set<string>();
+  const viste = new Map<string, CampataPriorita>();
+  for (const voce of perChiave.values()) {
+    const fisica = `${voce.codiceLinea}|${voce.normalizzata}`;
+    const altra = viste.get(fisica);
+    if (altra && altra !== voce.priorita) {
+      coppie.add(fisica);
+      voce.nota = `Stessa campata presente anche come ${altra.toUpperCase()}: restano due interventi distinti.`;
+    } else {
+      viste.set(fisica, voce.priorita);
+    }
+  }
+  for (const voce of perChiave.values()) {
+    const fisica = `${voce.codiceLinea}|${voce.normalizzata}`;
+    if (!coppie.has(fisica) || voce.nota) continue;
+    voce.nota = "Stessa campata con l’altra priorità: restano due interventi distinti.";
+  }
+
+  const indiceEsistenti = new Map(
+    esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+  );
   const lineeNuove = new Set<string>();
 
   for (const voce of perChiave.values()) {
     if (!codiciLineaNoti.has(voce.codiceLinea)) lineeNuove.add(voce.codiceLinea);
     const presente = indiceEsistenti.get(voce.chiave);
-    if (!presente) {
-      if (voce.azione !== "duplicato") voce.azione = "nuova";
-      continue;
-    }
+    if (!presente) continue;
     if (presente.stato !== "da_tagliare") {
       voce.azione = "gia_lavorata";
-      voce.nota = `Già ${presente.stato.replace("_", " ")}: lo stato e lo storico restano, si aggiorna solo la priorità se serve.`;
-      continue;
-    }
-    if (presente.priorita && presente.priorita !== voce.priorita) {
-      voce.azione = "priorita";
-      voce.nota = `Priorità da ${presente.priorita} a ${voce.priorita}.`;
+      voce.nota = `Già ${presente.stato.replace("_", " ")}: stato e storico restano.`;
     } else {
       voce.azione = "invariata";
     }
   }
 
-  const voci = [...perChiave.values()].sort((a, b) =>
-    a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
-    a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }),
+  const voci = [...perChiave.values()].sort(
+    (a, b) =>
+      a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
+      a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+      a.priorita.localeCompare(b.priorita),
   );
 
   return {
@@ -108,7 +106,7 @@ export function costruisciAnteprima(
     nuove: voci.filter((v) => !indiceEsistenti.has(v.chiave)).length,
     esistenti: voci.filter((v) => indiceEsistenti.has(v.chiave)).length,
     duplicati,
-    prioritaAggiornata: voci.filter((v) => v.azione === "priorita").length,
+    doppiaPriorita: coppie.size,
     giaLavorate: voci.filter((v) => v.azione === "gia_lavorata").length,
     lineeNuove: [...lineeNuove].sort(),
   };

@@ -23,6 +23,46 @@ import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 const LAST_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
 
+function colonnaDaErrore(message: string) {
+  const m =
+    message.match(/could not find the ['"]([a-z0-9_]+)['"] column/i) ||
+    message.match(/column ['"]([a-z0-9_]+)['"]/i) ||
+    message.match(/['"]([a-z0-9_]+)['"] column of/i);
+  return m?.[1] ?? null;
+}
+
+async function upsertOmettendoColonneMancanti(
+  tabella: string,
+  rows: Record<string, unknown>[],
+  opts?: { ignoreDuplicates?: boolean },
+) {
+  const supabase = getSupabase();
+  if (!supabase || rows.length === 0) return;
+
+  let payload = rows;
+  const upsertOpts = opts?.ignoreDuplicates ? { ignoreDuplicates: true } : undefined;
+  for (let i = 0; i < 8; i += 1) {
+    const { error } = await supabase.from(tabella).upsert(payload, upsertOpts);
+    if (!error) return;
+    const col = colonnaDaErrore(error.message);
+    if (!col || payload.every((row) => !(col in row))) throw new Error(error.message);
+    payload = payload.map((row) => {
+      const copia = { ...row };
+      delete copia[col];
+      return copia;
+    });
+  }
+  throw new Error("Invio non riuscito: il database non è allineato con l’app.");
+}
+
+/** Scrive le campate su Supabase. Se manca una colonna (es. attenzionare), ritenta senza. */
+export async function upsertCampateLavoro(rows: ReturnType<typeof campataLavoroToRow>[]) {
+  await upsertOmettendoColonneMancanti(
+    "campate_lavoro",
+    rows as unknown as Record<string, unknown>[],
+  );
+}
+
 function dataUrlToBlob(dataUrl: string) {
   const [meta, b64] = dataUrl.split(",");
   const mime = meta?.match(/data:(.*?);/)?.[1] ?? "image/png";
@@ -76,13 +116,9 @@ export async function pushRapportino(item: Rapportino) {
     firmaTerna: firmaTernaPath,
   });
 
-  const { error } = await supabase.from("rapportini").upsert({
-    ...row,
-    deleted_at: null,
-  });
-  if (error) throw new Error(error.message);
-
-  await pushCampatePending(item.id);
+  await upsertOmettendoColonneMancanti("rapportini", [
+    { ...row, deleted_at: null } as Record<string, unknown>,
+  ]);
 }
 
 export async function deleteRemoteRapportino(id: string) {
@@ -97,29 +133,62 @@ export async function deleteRemoteRapportino(id: string) {
   if (error) throw new Error(error.message);
 }
 
-export async function pushCampatePending(rapportinoId?: string) {
+async function pushCampateEliminate() {
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const pending = rapportinoId
-    ? await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray()
-    : await db.campateLavoro.filter((c) => c.syncStatus === "pending" || c.syncStatus === "error").toArray();
+  let daEliminare: { id: string }[] = [];
+  try {
+    daEliminare = await db.campateDeleteQueue.toArray();
+  } catch (error) {
+    console.warn("Coda eliminazione campate non disponibile:", error);
+    return;
+  }
+  if (daEliminare.length === 0) return;
 
-  if (pending.length === 0) return;
-
-  const { error } = await supabase.from("campate_lavoro").upsert(pending.map(campataLavoroToRow));
+  const ids = daEliminare.map((r) => r.id);
+  await supabase.from("campate_storico").delete().in("campata_id", ids);
+  const { error } = await supabase.from("campate_lavoro").delete().in("id", ids);
   if (error) throw new Error(error.message);
+  await db.campateDeleteQueue.bulkDelete(ids);
+}
 
-  const ids = new Set(pending.map((c) => c.id));
-  const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
-  if (storico.length > 0) {
-    const { error: stoErr } = await supabase.from("campate_storico").upsert(storico.map(campataStoricoToRow));
-    if (stoErr) throw new Error(stoErr.message);
+export async function pushCampatePending(_rapportinoId?: string) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const rows = await db.campateLavoro
+    .filter((c) => c.syncStatus === "pending" || c.syncStatus === "error")
+    .toArray();
+
+  if (rows.length > 0) {
+    await upsertCampateLavoro(rows.map(campataLavoroToRow));
+
+    const ids = new Set(rows.map((c) => c.id));
+    const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
+    if (storico.length > 0) {
+      try {
+        await upsertOmettendoColonneMancanti(
+          "campate_storico",
+          storico.map(campataStoricoToRow) as unknown as Record<string, unknown>[],
+          { ignoreDuplicates: true },
+        );
+      } catch (error) {
+        console.warn("Storico campate non inviato:", error);
+      }
+    }
+
+    const now = new Date().toISOString();
+    for (const c of rows) {
+      await db.campateLavoro.update(c.id, { syncStatus: "synced", updatedAt: now });
+    }
   }
 
-  const now = new Date().toISOString();
-  for (const c of pending) {
-    await db.campateLavoro.update(c.id, { syncStatus: "synced", updatedAt: now });
+  try {
+    await pushCampateEliminate();
+  } catch (error) {
+    if (rows.length === 0) throw error;
+    console.warn("Eliminazione campate remote non riuscita:", error);
   }
 }
 
@@ -263,16 +332,18 @@ export async function pullCampateLavoro() {
     throw new Error(msg);
   }
 
+  const tombstones = new Set((await db.campateDeleteQueue.toArray()).map((t) => t.id));
   const remote = (campRes.data ?? []).map(rowToCampataLavoro);
   if (remote.length > 0) {
     const idsRemoti = new Set(remote.map((c) => c.id));
     const locali = await db.campateLavoro.toArray();
     const daRimuovere = locali
-      .filter((c) => c.syncStatus === "synced" && !idsRemoti.has(c.id))
+      .filter((c) => c.syncStatus === "synced" && !idsRemoti.has(c.id) && !tombstones.has(c.id))
       .map((c) => c.id);
     if (daRimuovere.length > 0) await db.campateLavoro.bulkDelete(daRimuovere);
 
     for (const c of remote) {
+      if (tombstones.has(c.id)) continue;
       const local = await db.campateLavoro.get(c.id);
       if (local?.syncStatus === "pending") continue;
       await db.campateLavoro.put(c);

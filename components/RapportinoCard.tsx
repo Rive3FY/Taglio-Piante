@@ -7,13 +7,15 @@ export function RapportinoCard({
   item,
   linea,
   href,
+  onDelete,
 }: {
   item: Rapportino;
   linea?: Linea;
   href: string;
+  onDelete?: (item: Rapportino) => void;
 }) {
-  return (
-    <Link href={href} className="rap-card">
+  const inner = (
+    <>
       <div className="rap-card-top">
         <strong>{item.numero}</strong>
         <StatoBadge stato={item.stato} />
@@ -31,6 +33,29 @@ export function RapportinoCard({
         <SyncBadge status={item.syncStatus} />
         <span>{item.righe.length} prestazioni</span>
       </div>
-    </Link>
+    </>
+  );
+
+  if (!onDelete) {
+    return (
+      <Link href={href} className="rap-card">
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <article className="rap-card rap-card-con-azioni">
+      <Link href={href} className="rap-card-link">
+        {inner}
+      </Link>
+      <button
+        type="button"
+        className="btn btn-danger btn-sm"
+        onClick={() => onDelete(item)}
+      >
+        Elimina
+      </button>
+    </article>
   );
 }

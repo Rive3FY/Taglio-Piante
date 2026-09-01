@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { RapportiniPerTensione } from "@/components/RapportiniPerTensione";
+import { confermaECancellaRapportino } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
 import { rapportiniDellaSezione, sezioneDa } from "@/lib/sezioni";
 
@@ -37,6 +38,7 @@ export default function ElencoSezionePage({
         linee={linee}
         hrefFor={(item) => `/operatore/${item.id}`}
         vuoto={config.vuoto}
+        onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
       />
     </>
   );

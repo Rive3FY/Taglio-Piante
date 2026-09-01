@@ -80,8 +80,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             setOffline(true);
           }
         }
-      } else if (cache && typeof navigator !== "undefined" && !navigator.onLine) {
-        // Offline: si riapre l'ultimo accesso per non bloccare il lavoro sul campo.
+      } else if (cache) {
+        // Niente sessione fresca (offline, segnale a tratti, token non rinnovato):
+        // si resta dentro con l’ultimo accesso, altrimenti in cantiere si finisce al login.
         setSessionState(cache);
         setOffline(true);
       } else {
@@ -93,11 +94,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase
       ? supabase.auth.onAuthStateChange((event) => {
-          if (event === "SIGNED_OUT") {
-            clearSession();
-            setSessionState(null);
-            setOffline(false);
+          if (event !== "SIGNED_OUT") return;
+          // Esci pulisce già la copia locale. Se il token scade senza rete, la copia resta
+          // e si continua a lavorare.
+          const cache = readSession();
+          if (cache) {
+            setSessionState(cache);
+            setOffline(true);
+            return;
           }
+          setSessionState(null);
+          setOffline(false);
         })
       : { data: { subscription: null } };
 

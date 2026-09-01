@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, enqueueSync, nextNumero, deleteRapportino } from "@/lib/db";
+import { db, enqueueSync, nextNumero } from "@/lib/db";
 import { formatDate, lineaDescrizione, todayIso, uid } from "@/lib/format";
 import { officialSchedaObjectUrl } from "@/lib/fillScheda";
 import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
+import { useSync } from "@/lib/SyncContext";
 import type { CampataLavoro, Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoCampata, RapportinoRiga } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
+import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
 
 const EMPTY_LINEE: Linea[] = [];
@@ -29,6 +32,7 @@ type Props = {
 export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
   const router = useRouter();
   const { session } = useSession();
+  const { online, syncNow } = useSync();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
   const ditte = useLiveQuery(() => db.ditte.toArray(), []) ?? EMPTY_DITTE;
   const prestazioniRaw = useLiveQuery(() => db.prestazioni.toArray(), []) ?? EMPTY_PREST;
@@ -63,12 +67,13 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     return m;
   });
   const [firmaOperatore, setFirmaOperatore] = useState(existing?.firmaOperatore);
-  const [firmaTernaManuale, setFirmaTernaManuale] = useState(existing?.firmaTerna);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const [dockReady, setDockReady] = useState(false);
+  const previewBlobRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (operatori.length === 0) return;
@@ -78,14 +83,19 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
   }, [existing?.dipendenteTerna, operatori, session?.nome]);
 
   useEffect(() => {
-    if (!previewUrl || !previewRef.current) return;
-    previewRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [previewUrl]);
+    setDockReady(true);
+    return () => {
+      if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
+    };
+  }, []);
 
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (!previewUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewUrl(null);
     };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [previewUrl]);
 
   // La firma TERNA arriva dal profilo di chi è indicato come dipendente.
@@ -93,7 +103,7 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     () => operatoriRecord.find((o) => o.nome === dipendenteTerna)?.firma,
     [operatoriRecord, dipendenteTerna],
   );
-  const firmaTerna = firmaTernaManuale ?? firmaProfilo;
+  const firmaTerna = firmaProfilo;
 
   const effectiveLineaId = lineaId;
   const effectiveDitta = ditta || ditte[0]?.ragioneSociale || "";
@@ -106,7 +116,11 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     () =>
       campateLinea
         .filter((c) => c.origine === "prevista" && c.stato === "da_tagliare")
-        .sort((a, b) => a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true })),
+        .sort(
+          (a, b) =>
+            a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+            (a.priorita ?? "").localeCompare(b.priorita ?? ""),
+        ),
     [campateLinea],
   );
 
@@ -123,6 +137,7 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
         campataId: c.id,
         originale: c.originale,
         normalizzata: c.normalizzata,
+        priorita: c.priorita,
         esito: "tagliata",
       })),
     );
@@ -137,76 +152,108 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
       setError("Indica la campata.");
       return null;
     }
-    if (esiti.some((e) => e.esito === "tralasciata" && !e.note?.trim())) {
-      setError("Per ogni campata tralasciata serve una motivazione.");
-      return null;
-    }
     setSaving(true);
     setError(null);
-    const now = new Date().toISOString();
-    const id = existing?.id ?? uid("rap");
-    const numero = existing?.numero ?? (await nextNumero());
-    const righe: RapportinoRiga[] = prestazioni
-      .filter((p) => (qty[p.id] ?? 0) > 0)
-      .map((p) => ({
-        id: uid("riga"),
-        prestazioneId: p.id,
-        quantita: qty[p.id],
-      }));
-    const campataTesto = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
-    const record: Rapportino = {
-      id,
-      numero,
-      lineaId: effectiveLineaId,
-      campata: campataTesto,
-      dataLavoro,
-      ditta: effectiveDitta.trim(),
-      rappresentanteDitta,
-      dipendenteTerna: dipendenteTerna.trim(),
-      nOperatori,
-      stato,
-      syncStatus: "pending",
-      righe,
-      esitiCampate: esiti.length > 0 ? esiti : undefined,
-      firmaOperatore,
-      firmaTerna,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      // Il tecnico che completa il rapportino di un operatore non ne diventa proprietario.
-      ownerId:
-        existing?.ownerId ??
-        (existing && session?.ruolo === "tecnico" ? undefined : session?.userId),
-      presoDa: extra.presoDa ?? existing?.presoDa ?? session?.nome,
-      presoAt: extra.presoAt ?? existing?.presoAt,
-      inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,
-      archiviatoAt: extra.archiviatoAt ?? existing?.archiviatoAt,
-    };
-    await db.rapportini.put(record);
-    if (session && (stato === "in_attesa" || stato === "archiviato")) {
-      await applicaEsitiDaRapportino(record, session);
+    try {
+      const now = new Date().toISOString();
+      const id = existing?.id ?? uid("rap");
+      const numero = existing?.numero ?? (await nextNumero());
+      const righe: RapportinoRiga[] = prestazioni
+        .filter((p) => (qty[p.id] ?? 0) > 0)
+        .map((p) => ({
+          id: uid("riga"),
+          prestazioneId: p.id,
+          quantita: qty[p.id],
+        }));
+      const campataTesto = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+      const record: Rapportino = {
+        id,
+        numero,
+        lineaId: effectiveLineaId,
+        campata: campataTesto,
+        dataLavoro,
+        ditta: effectiveDitta.trim(),
+        rappresentanteDitta,
+        dipendenteTerna: dipendenteTerna.trim(),
+        nOperatori,
+        stato,
+        syncStatus: "pending",
+        righe,
+        esitiCampate: esiti.length > 0 ? esiti : undefined,
+        firmaOperatore,
+        firmaTerna,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        ownerId:
+          existing?.ownerId ??
+          (existing && session?.ruolo === "tecnico" ? undefined : session?.userId),
+        presoDa: extra.presoDa ?? existing?.presoDa ?? session?.nome,
+        presoAt: extra.presoAt ?? existing?.presoAt,
+        inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,
+        archiviatoAt: extra.archiviatoAt ?? existing?.archiviatoAt,
+      };
+      await db.rapportini.put(record);
+      await enqueueSync(
+        id,
+        extra.archiviatoAt ? "archive" : extra.inviatoAt ? "submit" : extra.presoAt ? "take" : "upsert",
+      );
+      if (session && (stato === "in_attesa" || stato === "archiviato")) {
+        await applicaEsitiDaRapportino(record, session);
+      }
+      void syncNow();
+      return record;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Salvataggio non riuscito.");
+      return null;
+    } finally {
+      setSaving(false);
     }
-    await enqueueSync(
-      id,
-      extra.archiviatoAt ? "archive" : extra.inviatoAt ? "submit" : extra.presoAt ? "take" : "upsert",
-    );
-    setSaving(false);
-    return record;
   }
 
-  async function saveDraft() {
-    const stato =
-      existing?.stato === "da_prendere" || existing?.stato === "in_attesa"
-        ? existing.stato === "in_attesa"
-          ? "in_attesa"
-          : "bozza"
-        : (existing?.stato ?? "bozza");
-    const saved = await persist(stato);
-    if (!saved) return;
-    if (!existing) {
-      router.replace(
-        session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`,
-      );
+  function homeDopoInvio(inAttesa: boolean) {
+    if (session?.ruolo === "tecnico") return inAttesa ? "/tecnico/in-attesa" : "/tecnico";
+    return "/operatore";
+  }
+
+  async function salva() {
+    setOkMsg(null);
+    if (!effectiveLineaId) {
+      setError("Seleziona la linea.");
+      return;
     }
+    if (!campata.trim() && esiti.length === 0) {
+      setError("Indica la campata.");
+      return;
+    }
+
+    const completo =
+      Boolean(dipendenteTerna.trim()) &&
+      Boolean(effectiveDitta.trim()) &&
+      prestazioni.some((p) => (qty[p.id] ?? 0) > 0);
+
+    if (!completo) {
+      const stato =
+        existing?.stato === "in_attesa" || existing?.stato === "archiviato"
+          ? existing.stato
+          : "bozza";
+      const saved = await persist(stato);
+      if (!saved) return;
+      if (!existing) {
+        router.replace(
+          session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`,
+        );
+      }
+      setOkMsg("Salvato in locale. Completa ditta, dipendente TERNA e almeno una quantità per inviarlo.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const inAttesa = !firmaOperatore || !online;
+    const saved = await persist(inAttesa ? "in_attesa" : "archiviato", {
+      inviatoAt: now,
+      archiviatoAt: inAttesa ? existing?.archiviatoAt : now,
+    });
+    if (saved) router.push(homeDopoInvio(inAttesa));
   }
 
   async function previewSheet() {
@@ -243,11 +290,14 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     };
     try {
       const url = await officialSchedaObjectUrl({ item: draft, linea, prestazioni });
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(url);
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
+      previewBlobRef.current = url;
+      const opened = window.open(url, "_blank");
+      if (opened) {
+        setPreviewUrl(null);
+        opened.focus();
+      } else {
+        setPreviewUrl(url);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossibile preparare il foglio.");
@@ -256,58 +306,20 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
     }
   }
 
-  async function submit() {
-    if (!dipendenteTerna.trim()) {
-      setError("Indica il dipendente TERNA.");
-      return;
-    }
-    if (!effectiveDitta.trim()) {
-      setError("Indica la ditta.");
-      return;
-    }
-    const hasQty = prestazioni.some((p) => (qty[p.id] ?? 0) > 0);
-    if (!hasQty) {
-      setError("Inserisci almeno una quantità nelle prestazioni.");
-      return;
-    }
-    const now = new Date().toISOString();
-    if (firmaOperatore) {
-      const saved = await persist("archiviato", { inviatoAt: now, archiviatoAt: now });
-      if (saved) router.push(session?.ruolo === "tecnico" ? "/tecnico" : "/operatore");
-      return;
-    }
-    const saved = await persist("in_attesa", { inviatoAt: now });
-    if (saved) router.push(session?.ruolo === "tecnico" ? "/tecnico/in-attesa" : "/operatore");
-  }
-
-  async function removeExisting() {
-    if (!existing) return;
-    const ok = window.confirm(
-      `Cancellare il rapportino ${existing.numero}? L’operazione non si può annullare.`,
-    );
-    if (!ok) return;
-    setSaving(true);
-    try {
-      await deleteRapportino(existing.id);
-      router.push(session?.ruolo === "tecnico" ? "/tecnico/in-attesa" : "/operatore");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <form
+      id="rapportino-form"
       className="form-stack"
       onSubmit={(e) => {
         e.preventDefault();
-        void saveDraft();
+        void salva();
       }}
     >
       <section className="panel scheda-panel">
         {existing?.stato === "in_attesa" ? (
           <p className="muted">
-            Questo rapportino è in attesa. Puoi aggiungere la firma della ditta per archiviarlo, oppure
-            inviarlo così com’è.
+            Questo rapportino è in attesa. Salva con la firma della ditta per chiuderlo, oppure senza
+            firma per lasciarlo in attesa.
           </p>
         ) : null}
         <div className="scheda-head">
@@ -443,78 +455,79 @@ export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
                 />
               </label>
             </div>
-            <div className="sheet-signs">
-              {firmaProfilo && !firmaTernaManuale ? (
-                <div className="sign-block">
-                  <div className="sign-head">
-                    <div>
-                      <div className="sign-label">Il Designato TERNA</div>
-                      <div className="muted">
-                        Firma di {dipendenteTerna}, presa dal profilo: finisce già nel foglio ufficiale.
-                      </div>
-                    </div>
-                  </div>
-                  <div className="sign-frame sign-preview">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={firmaProfilo} alt={`Firma di ${dipendenteTerna}`} />
-                  </div>
-                </div>
-              ) : (
-                <SignaturePad
-                  label="Il Designato TERNA"
-                  hint={
-                    dipendenteTerna
-                      ? "Nessuna firma nel profilo: firma qui oppure chiedi al tecnico di caricarla."
-                      : "Scegli prima il dipendente TERNA per usare la sua firma salvata."
-                  }
-                  value={firmaTernaManuale}
-                  onChange={setFirmaTernaManuale}
-                />
-              )}
-              <SignaturePad
-                label="Il Designato Ditta"
-                hint="Opzionale: puoi inviare in attesa anche senza questa firma."
-                value={firmaOperatore}
-                onChange={setFirmaOperatore}
-              />
-            </div>
+            {dipendenteTerna && !firmaProfilo ? (
+              <p className="muted">
+                Manca la firma nel profilo di {dipendenteTerna}: sul foglio ufficiale non comparirà.
+                Chiedi al tecnico di caricarla.
+              </p>
+            ) : (
+              <p className="muted">
+                La firma TERNA si mette da sola dal profilo dell’operatore. Qui serve solo quella della
+                ditta.
+              </p>
+            )}
+            <SignaturePad
+              label="Il Designato Ditta"
+              hint={
+                online
+                  ? "Se manca, il rapportino va in attesa."
+                  : "Sei offline: anche con firma il rapportino resta in attesa finché non c’è rete."
+              }
+              value={firmaOperatore}
+              onChange={setFirmaOperatore}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={previewBusy}
+              onClick={() => void previewSheet()}
+            >
+              {previewBusy ? "Preparazione foglio…" : "Vedi foglio ufficiale"}
+            </button>
           </section>
 
-      {error ? <p className="form-error">{error}</p> : null}
-
-      {previewUrl ? (
-        <section ref={previewRef} className="panel form-preview-panel">
-          <div className="preview-head">
-            <h2>Foglio ufficiale</h2>
-            <a className="btn btn-ghost btn-sm" href={previewUrl} target="_blank" rel="noopener noreferrer">
-              Apri in nuova scheda
-            </a>
-          </div>
-          <iframe title="Foglio ufficiale scheda taglio piante" className="scheda-frame" src={previewUrl} />
-        </section>
+      {existing ? (
+        <div className="danger-actions">
+          <DeleteRapportinoButton
+            id={existing.id}
+            numero={existing.numero}
+            href={session?.ruolo === "tecnico" ? "/tecnico/in-attesa" : "/operatore"}
+          />
+        </div>
       ) : null}
 
-      <div className="form-actions-dock">
-        <button type="submit" className="btn btn-secondary" disabled={saving}>
-          {saving ? "Salvataggio…" : "Salva in locale"}
-        </button>
-        <button type="button" className="btn btn-ghost" disabled={previewBusy} onClick={() => void previewSheet()}>
-          {previewBusy ? "Preparazione foglio…" : "Vedi foglio ufficiale"}
-        </button>
-        <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
-          {firmaOperatore ? "Invia in archivio" : "Invia in attesa"}
-        </button>
-        {existing ? (
-          <button
-            type="button"
-            className="btn btn-danger"
-            disabled={saving}
-            onClick={() => void removeExisting()}
-          >
-            Cancella rapportino
-          </button>
-        ) : null}
-      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      {okMsg ? <p className="muted">{okMsg}</p> : null}
+
+      {dockReady
+        ? createPortal(
+            <div className="form-actions-dock">
+              <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving}>
+                {saving ? "Salvataggio…" : "Salva"}
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {dockReady && previewUrl
+        ? createPortal(
+            <div
+              className="scheda-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Foglio ufficiale"
+            >
+              <div className="scheda-overlay-bar">
+                <button type="button" className="btn btn-secondary" onClick={() => setPreviewUrl(null)}>
+                  Chiudi
+                </button>
+              </div>
+              <iframe title="Foglio ufficiale scheda taglio piante" src={previewUrl} />
+            </div>,
+            document.body,
+          )
+        : null}
     </form>
   );
 }
