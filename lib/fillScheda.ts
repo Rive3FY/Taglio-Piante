@@ -92,9 +92,57 @@ export async function fillOfficialScheda(opts: {
     write(drawn, x, y, size);
   };
 
+  const writeFit = (text: string, box: { x: number; y: number; w: number; h: number }, maxSize: number) => {
+    const value = safeText(text).trim();
+    if (!value) return;
+    const minSize = 5.5;
+    const lineGap = (size: number) => size * 1.12;
+    const misura = (s: string, size: number) => {
+      try {
+        return font.widthOfTextAtSize(s, size);
+      } catch {
+        return font.widthOfTextAtSize(s.replace(/[^\x20-\x7E]/g, " "), size);
+      }
+    };
+    const spezza = (size: number) => {
+      const parole = value.split(/,\s*/);
+      const righe: string[] = [""];
+      for (const p of parole) {
+        const pezzo = p.trim();
+        if (!pezzo) continue;
+        const candidato = righe[righe.length - 1] ? `${righe[righe.length - 1]}, ${pezzo}` : pezzo;
+        if (misura(candidato, size) <= box.w || !righe[righe.length - 1]) {
+          righe[righe.length - 1] = candidato;
+        } else {
+          righe.push(pezzo);
+        }
+      }
+      return righe.filter(Boolean);
+    };
+    let size = maxSize;
+    let righe = [value];
+    while (size >= minSize) {
+      if (misura(value, size) <= box.w) {
+        righe = [value];
+        break;
+      }
+      righe = spezza(size);
+      const altezza = righe.length * lineGap(size);
+      const troppoLarghe = righe.some((r) => misura(r, size) > box.w);
+      if (!troppoLarghe && altezza <= box.h) break;
+      size -= 0.4;
+    }
+    const totH = righe.length * lineGap(size);
+    let y = box.y + Math.max(0, (box.h - totH) / 2) + size * 0.18;
+    for (const riga of righe) {
+      write(riga, box.x, y, size);
+      y += lineGap(size);
+    }
+  };
+
   write(linea?.codice ?? "", 40, 778, 10);
   write(lineaDescrizione(linea), 268, 778, 9);
-  write(item.campata, 524, 778, 10);
+  writeFit(item.campata, { x: 500, y: 770, w: 78, h: 18 }, 10);
   write(formatDate(item.dataLavoro), 56, 747.2, 9);
   write(item.dipendenteTerna, 252, 747.2, 9);
   write(item.rappresentanteDitta, 58, 717.2, 9);
@@ -113,16 +161,22 @@ export async function fillOfficialScheda(opts: {
     write(String(q), QTY_X, y, 9);
   }
 
-  async function stamp(dataUrl: string | undefined, box: { x: number; y: number; w: number; h: number }) {
+  async function stamp(
+    dataUrl: string | undefined,
+    box: { x: number; y: number; w: number; h: number },
+    align: "center" | "bottom" = "center",
+  ) {
     if (!dataUrl?.startsWith("data:image")) return;
     try {
       const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
       const scale = Math.min(box.w / img.width, box.h / img.height);
       const width = img.width * scale;
       const height = img.height * scale;
+      const y =
+        align === "bottom" ? box.y : box.y + Math.max(0, (box.h - height) / 2);
       page.drawImage(img, {
         x: box.x + (box.w - width) / 2,
-        y: box.y + Math.max(0, (box.h - height) / 2),
+        y,
         width,
         height,
       });
@@ -131,10 +185,10 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  // Firme centrate sulle scritte del modulo (coordinate dal PDF ufficiale).
-  // Sopra: «Il Rappresentante TERNA» / «Il Rappresentante della Ditta».
-  await stamp(item.firmaTerna, { x: 18, y: 638, w: 110, h: 30 });
-  await stamp(item.firmaOperatore, { x: 305, y: 638, w: 135, h: 30 });
+  // Sopra: nello spazio vuoto tra il testo CONSEGNA (ultima riga y≈659)
+  // e le scritte «Il Rappresentante TERNA» / «Il Rappresentante della Ditta» (y=627).
+  await stamp(item.firmaTerna, { x: 18, y: 636, w: 110, h: 22 }, "bottom");
+  await stamp(item.firmaOperatore, { x: 305, y: 636, w: 135, h: 22 }, "bottom");
   // In basso: «Il Designato TERNA» / «Il Designato Ditta» (sotto le scritte).
   await stamp(item.firmaTerna, { x: 70, y: 40, w: 130, h: 32 });
   await stamp(item.firmaOperatore, { x: 455, y: 40, w: 150, h: 34 });

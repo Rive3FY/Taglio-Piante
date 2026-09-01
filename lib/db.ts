@@ -172,6 +172,26 @@ class RapportiniDB extends Dexie {
       campateDeleteQueue: "id",
       syncQueue: "id, rapportinoId, createdAt",
     });
+    this.version(11).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro: "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    }).upgrade(async (tx) => {
+      const rows = await tx.table("campateLavoro").toArray();
+      for (const row of rows) {
+        if (row.tipo) continue;
+        await tx.table("campateLavoro").update(row.id, { tipo: "campata" });
+      }
+    });
   }
 }
 

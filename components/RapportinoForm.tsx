@@ -16,6 +16,7 @@ import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
+import { eLavoroBasi, esitiClassificati } from "@/lib/campate/basi";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 
 const EMPTY_LINEE: Linea[] = [];
@@ -135,7 +136,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const pianificate = useMemo(
     () =>
       campateLinea
-        .filter((c) => c.origine === "prevista" && c.stato === "da_tagliare")
+        .filter((c) => c.tipo !== "base" && c.origine === "prevista" && c.stato === "da_tagliare")
         .sort(
           (a, b) =>
             a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
@@ -162,8 +163,25 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     if (existing.nOperatori > 0) setNOperatoriText(String(existing.nOperatori));
   }, [existing?.id, existing?.rappresentanteDitta, existing?.nOperatori, existing?.updatedAt]);
 
+  const testoBox = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata;
+  const qtyHaBase = useMemo(
+    () =>
+      eLavoroBasi(
+        testoBox,
+        {
+          righe: prestazioni
+            .filter((p) => (qty[p.id] ?? 0) > 0)
+            .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] })),
+        },
+        prestazioni,
+      ),
+    [prestazioni, qty, testoBox],
+  );
+
   const modoPrecompilato = Boolean(
-    precompilatoLineaId || precompilatoCampataId || (existing?.esitiCampate?.length ?? 0) > 0,
+    precompilatoLineaId ||
+      precompilatoCampataId ||
+      (existing?.esitiCampate?.some((e) => e.tipo !== "base") ?? false),
   );
 
   useEffect(() => {
@@ -231,7 +249,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           prestazioneId: p.id,
           quantita: qty[p.id],
         }));
-      const campataTesto = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+      const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+      const esitiSalvati = esitiClassificati(testoSorgente, { righe }, prestazioni, esiti);
+      const campataTesto = testoSorgente;
       const sigDitta = (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim();
       const nSquadra = nOperatori || squadra?.nOperatori || 0;
       const record: Rapportino = {
@@ -247,7 +267,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         stato,
         syncStatus: "pending",
         righe,
-        esitiCampate: esiti.length > 0 ? esiti : undefined,
+        esitiCampate: esitiSalvati.length > 0 ? esitiSalvati : undefined,
         firmaOperatore,
         firmaTerna,
         createdAt: existing?.createdAt ?? now,
@@ -336,11 +356,16 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     setPreviewBusy(true);
     setError(null);
     const now = new Date().toISOString();
+    const righePreview = prestazioni
+      .filter((p) => (qty[p.id] ?? 0) > 0)
+      .map((p) => ({ id: uid("riga"), prestazioneId: p.id, quantita: qty[p.id] }));
+    const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+    const esitiSalvati = esitiClassificati(testoSorgente, { righe: righePreview }, prestazioni, esiti);
     const draft: Rapportino = {
       id: existing?.id ?? "preview",
       numero: existing?.numero ?? "ANTEPRIMA",
       lineaId: effectiveLineaId,
-      campata: esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim(),
+      campata: testoSorgente,
       dataLavoro,
       ditta: effectiveDitta.trim(),
       rappresentanteDitta: (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim(),
@@ -348,12 +373,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       nOperatori: nOperatori || squadra?.nOperatori || 0,
       stato: existing?.stato ?? "bozza",
       syncStatus: "local",
-      righe: prestazioni
-        .filter((p) => (qty[p.id] ?? 0) > 0)
-        .map((p) => ({ id: uid("riga"), prestazioneId: p.id, quantita: qty[p.id] })),
+      righe: righePreview,
       firmaOperatore,
       firmaTerna,
-      esitiCampate: esiti.length > 0 ? esiti : undefined,
+      esitiCampate: esitiSalvati.length > 0 ? esitiSalvati : undefined,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -401,12 +424,21 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
             <input readOnly value={lineaDescrizione(linea)} />
           </label>
           <label>
-            Campata
+            {qtyHaBase ? "Basi" : "Campata"}
             {modoPrecompilato ? (
               <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
             ) : (
-              <input value={campata} onChange={(e) => setCampata(e.target.value)} />
+              <input
+                value={campata}
+                onChange={(e) => setCampata(e.target.value)}
+                placeholder="Es. 22-23 oppure 22"
+              />
             )}
+            {qtyHaBase ? (
+              <span className="muted">
+                I numeri coincidono con 5.1–5.4: sono basi, la tabella campate non si tocca.
+              </span>
+            ) : null}
           </label>
         </div>
 

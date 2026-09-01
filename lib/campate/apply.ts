@@ -8,11 +8,13 @@ import type {
   CampataStorico,
   ImportCampate,
   Linea,
+  Prestazione,
   Rapportino,
   RapportinoCampata,
   Session,
 } from "@/lib/types";
-import { idCampataLavoro, chiaveCampata, normalizzaCampata, spezzaCampateTesto } from "./normalize";
+import { idCampataLavoro, chiaveCampata } from "./normalize";
+import { esitiClassificati, isBaseLavoro } from "./basi";
 import type { AnteprimaImport } from "./preview";
 
 function richiediRete() {
@@ -40,7 +42,9 @@ export async function confermaImportCampate(opts: {
   const perCodice = new Map(linee.map((l) => [l.codice.toUpperCase(), l]));
   const esistenti = await db.campateLavoro.toArray();
   const perChiave = new Map(
-    esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+    esistenti
+      .filter((c) => c.tipo !== "base")
+      .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );
 
   const nuoveLinee: Linea[] = [];
@@ -79,6 +83,7 @@ export async function confermaImportCampate(opts: {
         tensioneKv: linea.tensioneKv ?? tensioneDaCodice(voce.codiceLinea),
         originale: voce.originale,
         normalizzata: voce.normalizzata,
+        tipo: "campata",
         priorita: voce.priorita,
         stato: "da_tagliare",
         origine: "prevista",
@@ -156,14 +161,15 @@ export async function confermaImportCampate(opts: {
   return riepilogo;
 }
 
-function esitiDaRapportino(item: Rapportino): RapportinoCampata[] {
-  if (item.esitiCampate && item.esitiCampate.length > 0) return item.esitiCampate;
-  return spezzaCampateTesto(item.campata).map((pezzo) => ({
-    id: uid("es"),
-    originale: pezzo,
-    normalizzata: normalizzaCampata(pezzo),
-    esito: "tagliata" as const,
-  }));
+function testoEsiti(item: Rapportino) {
+  return (
+    item.campata ||
+    (item.esitiCampate ?? []).map((e) => e.originale || e.normalizzata).join(", ")
+  );
+}
+
+function esitiDaRapportino(item: Rapportino, prestazioni: Prestazione[]) {
+  return esitiClassificati(testoEsiti(item), item, prestazioni, item.esitiCampate);
 }
 
 function bersagliPerEsito(
@@ -171,14 +177,22 @@ function bersagliPerEsito(
   esito: RapportinoCampata,
   codiceLinea: string,
 ): CampataLavoro[] {
-  if (esito.campataId) {
-    const byId = tutte.filter((c) => c.id === esito.campataId);
+  const cercaBase = esito.tipo === "base";
+  const nelTipo = tutte.filter((c) => (isBaseLavoro(c) ? cercaBase : !cercaBase));
+  // Una base non deve mai chiudere la campata pianificata, anche se l’id è rimasto attaccato.
+  if (esito.campataId && !cercaBase) {
+    const byId = nelTipo.filter((c) => c.id === esito.campataId);
     if (byId.length > 0) return byId;
   }
-  const idDeterministico = idCampataLavoro(codiceLinea, esito.normalizzata, esito.priorita);
-  const byDet = tutte.filter((c) => c.id === idDeterministico);
+  const idDeterministico = idCampataLavoro(
+    codiceLinea,
+    esito.normalizzata,
+    esito.priorita,
+    esito.tipo,
+  );
+  const byDet = nelTipo.filter((c) => c.id === idDeterministico);
   if (byDet.length > 0) return byDet;
-  return tutte.filter((c) => {
+  return nelTipo.filter((c) => {
     if (c.normalizzata !== esito.normalizzata) return false;
     if (esito.priorita) return c.priorita === esito.priorita;
     return true;
@@ -191,7 +205,12 @@ function bersagliPerEsito(
  */
 export async function applicaEsitiDaRapportino(item: Rapportino, session: Session | null) {
   if (item.stato !== "in_attesa" && item.stato !== "archiviato") return;
-  const esiti = esitiDaRapportino(item).filter((e) => e.normalizzata);
+  const prestazioni = await db.prestazioni.toArray();
+  const classificati = esitiDaRapportino(item, prestazioni).filter((e) => e.normalizzata);
+  const soloBasi = classificati.some((e) => e.tipo === "base");
+  const esiti = soloBasi
+    ? classificati.filter((e) => e.tipo === "base")
+    : classificati.filter((e) => e.tipo !== "base");
   if (esiti.length === 0) return;
 
   const linea = await db.linee.get(item.lineaId);
@@ -214,7 +233,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
     if (bersagli.length === 0) {
       if (!linea) continue;
-      const id = idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita);
+      const id = idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita, esito.tipo);
       if (tutte.some((c) => c.id === id) || daScrivere.some((c) => c.id === id)) continue;
       const nuova: CampataLavoro = {
         id,
@@ -224,6 +243,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
         tensioneKv: linea.tensioneKv ?? tensioneDaCodice(linea.codice),
         originale: esito.originale,
         normalizzata: esito.normalizzata,
+        tipo: esito.tipo ?? "campata",
         priorita: esito.priorita,
         stato,
         origine: "aggiuntiva",
@@ -251,6 +271,8 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
     }
 
     for (const presente of bersagli) {
+      if (soloBasi && !isBaseLavoro(presente)) continue;
+      if (!soloBasi && isBaseLavoro(presente)) continue;
       const aggiornata: CampataLavoro = {
         ...presente,
         stato,
@@ -301,7 +323,8 @@ async function campateCollegateAlRapportino(rapportinoId: string, item?: Rapport
   if (item) {
     const linea = await db.linee.get(item.lineaId);
     const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
-    for (const esito of esitiDaRapportino(item)) {
+    const prestazioni = await db.prestazioni.toArray();
+    for (const esito of esitiDaRapportino(item, prestazioni)) {
       for (const c of bersagliPerEsito(tutte, esito, linea?.codice ?? "")) aggiungi(c);
     }
   }

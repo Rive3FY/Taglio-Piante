@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import {
   aggregaMese,
   avanzamentoPriorita,
+  conteggioBasiTagliate,
   etichettaMese,
   formatEuro,
   formatQuantita,
@@ -16,6 +17,7 @@ import {
 import { etichettaUnita } from "@/lib/contabilita/listino";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
+import { GraficoBasi } from "@/components/GraficoBasi";
 import { CalendarioMese } from "@/components/CalendarioMese";
 
 function TabellaVoci({
@@ -94,6 +96,10 @@ export default function ContabilitaPage() {
   const restano = giorniAllaChiusura(meseEffettivo, oggi);
   const urgente = useMemo(() => avanzamentoPriorita(campate, "urgente"), [campate]);
   const differibile = useMemo(() => avanzamentoPriorita(campate, "differibile"), [campate]);
+  const basiMese = useMemo(
+    () => conteggioBasiTagliate(campate, meseEffettivo),
+    [campate, meseEffettivo],
+  );
   const conteggiGiorno = useMemo(() => {
     const m = new Map<string, number>();
     for (const g of aggregato.perGiorno) m.set(g.data, g.rapportini);
@@ -149,6 +155,10 @@ export default function ContabilitaPage() {
           <span className="muted">Totale</span>
           <strong>{formatEuro(aggregato.importo)}</strong>
         </div>
+        <div className="panel">
+          <span className="muted">Basi tagliate</span>
+          <strong>{basiMese.totale}</strong>
+        </div>
       </div>
 
       <h2>Avanzamento campate</h2>
@@ -162,6 +172,8 @@ export default function ContabilitaPage() {
           dati={differibile}
         />
       </div>
+
+      <GraficoBasi totale={basiMese.totale} perLinea={basiMese.perLinea} />
 
       <section className="panel">
         <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>

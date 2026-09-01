@@ -60,7 +60,10 @@ export function CampateElenco({
 
   const lineeOpzioni = useMemo(() => {
     const map = new Map<string, string>();
-    for (const c of campate) map.set(c.codiceLinea, c.nomeLinea);
+    for (const c of campate) {
+      if (c.tipo === "base") continue;
+      map.set(c.codiceLinea, c.nomeLinea);
+    }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "it"));
   }, [campate]);
 
@@ -72,6 +75,7 @@ export function CampateElenco({
   const filtrate = useMemo(() => {
     const term = q.trim().toLowerCase();
     return [...campate]
+      .filter((c) => c.tipo !== "base")
       .sort(
         (a, b) =>
           a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
@@ -99,13 +103,14 @@ export function CampateElenco({
   const restanti = filtrate.length - mostrate.length;
 
   const conteggi = useMemo(() => {
+    const set = campate.filter((c) => c.tipo !== "base");
     return {
-      totale: campate.length,
-      daTagliare: campate.filter((c) => c.stato === "da_tagliare").length,
-      tagliate: campate.filter((c) => c.stato === "tagliata").length,
-      tralasciate: campate.filter((c) => c.stato === "tralasciata").length,
-      aggiuntive: campate.filter((c) => c.origine === "aggiuntiva").length,
-      attenzione: campate.filter((c) => c.attenzionare).length,
+      totale: set.length,
+      daTagliare: set.filter((c) => c.stato === "da_tagliare").length,
+      tagliate: set.filter((c) => c.stato === "tagliata").length,
+      tralasciate: set.filter((c) => c.stato === "tralasciata").length,
+      aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
+      attenzione: set.filter((c) => c.attenzionare).length,
     };
   }, [campate]);
 

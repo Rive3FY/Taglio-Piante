@@ -29,7 +29,13 @@ export function RapportinoCard({
       </div>
       <div className="rap-card-meta">
         <span>{formatDate(item.dataLavoro)}</span>
-        {item.campata ? <span>Campata {item.campata}</span> : null}
+        {item.campata ? (
+          <span>
+            {item.esitiCampate?.some((e) => e.tipo === "base")
+              ? `Basi ${item.campata}`
+              : `Campata ${item.campata}`}
+          </span>
+        ) : null}
         {item.ditta ? <span>{item.ditta}</span> : null}
         {item.rappresentanteDitta ? <span>{item.rappresentanteDitta}</span> : null}
       </div>

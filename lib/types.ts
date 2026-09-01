@@ -48,6 +48,8 @@ export type CampataLavoro = {
   tensioneKv?: number;
   originale: string;
   normalizzata: string;
+  /** Assente o campata = span; base = sostegno/pulizia basamento (voci 5.2–5.4). */
+  tipo?: CampataTipo;
   priorita?: CampataPriorita;
   stato: CampataStatoLavoro;
   origine: CampataOrigine;
@@ -91,6 +93,7 @@ export type RapportinoCampata = {
   campataId?: string;
   originale: string;
   normalizzata: string;
+  tipo?: CampataTipo;
   priorita?: CampataPriorita;
   esito: CampataEsito;
   note?: string;
@@ -204,4 +207,9 @@ export const CAMPATA_PRIORITA_LABEL: Record<CampataPriorita, string> = {
 export const CAMPATA_ORIGINE_LABEL: Record<CampataOrigine, string> = {
   prevista: "Prevista",
   aggiuntiva: "Aggiuntiva",
+};
+
+export const CAMPATA_TIPO_LABEL: Record<CampataTipo, string> = {
+  campata: "Campata",
+  base: "Base",
 };

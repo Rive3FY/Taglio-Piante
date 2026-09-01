@@ -182,6 +182,7 @@ create table if not exists campate_lavoro (
   tensione_kv numeric,
   originale text not null,
   normalizzata text not null,
+  tipo text not null default 'campata' check (tipo in ('campata', 'base')),
   priorita text check (priorita is null or priorita in ('urgente', 'differibile')),
   stato text not null check (stato in ('da_tagliare', 'tagliata', 'tralasciata')),
   origine text not null check (origine in ('prevista', 'aggiuntiva')),
@@ -195,10 +196,24 @@ create table if not exists campate_lavoro (
   updated_at timestamptz not null
 );
 
+alter table campate_lavoro add column if not exists tipo text not null default 'campata';
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'campate_lavoro_tipo_check'
+  ) then
+    alter table campate_lavoro
+      add constraint campate_lavoro_tipo_check
+      check (tipo in ('campata', 'base'));
+  end if;
+end $$;
+
 -- Stessa campata fisica può essere sia urgente sia differibile: due interventi distinti.
+-- La base (pulizia 5.2–5.4) è un registro a parte, stesso numero di sostegno.
 drop index if exists campate_lavoro_unica_idx;
 create unique index if not exists campate_lavoro_unica_idx
-  on campate_lavoro (codice_linea, normalizzata, (coalesce(priorita, '')));
+  on campate_lavoro (codice_linea, normalizzata, (coalesce(priorita, '')), tipo);
 create index if not exists campate_lavoro_linea_idx on campate_lavoro(linea_id);
 create index if not exists campate_lavoro_stato_idx on campate_lavoro(stato);
 

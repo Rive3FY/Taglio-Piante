@@ -188,7 +188,7 @@ export function avanzamentoPriorita(
   campate: CampataLavoro[],
   priorita: CampataPriorita,
 ): AvanzamentoPriorita {
-  const set = campate.filter((c) => c.priorita === priorita);
+  const set = campate.filter((c) => c.tipo !== "base" && c.priorita === priorita);
   return {
     priorita,
     totale: set.length,
@@ -196,6 +196,35 @@ export function avanzamentoPriorita(
     daTagliare: set.filter((c) => c.stato === "da_tagliare").length,
     tralasciate: set.filter((c) => c.stato === "tralasciata").length,
   };
+}
+
+export type BasiPerLinea = {
+  lineaId: string;
+  codiceLinea: string;
+  nomeLinea: string;
+  tagliate: number;
+};
+
+export function conteggioBasiTagliate(campate: CampataLavoro[], mese?: string) {
+  const basi = campate.filter((c) => c.tipo === "base" && c.stato === "tagliata");
+  const nelMese = mese
+    ? basi.filter((c) => c.dataTaglio && c.dataTaglio.slice(0, 7) === mese)
+    : basi;
+  const perLineaMap = new Map<string, BasiPerLinea>();
+  for (const c of nelMese) {
+    const voce = perLineaMap.get(c.lineaId) ?? {
+      lineaId: c.lineaId,
+      codiceLinea: c.codiceLinea,
+      nomeLinea: c.nomeLinea,
+      tagliate: 0,
+    };
+    voce.tagliate += 1;
+    perLineaMap.set(c.lineaId, voce);
+  }
+  const perLinea = [...perLineaMap.values()].sort(
+    (a, b) => b.tagliate - a.tagliate || a.codiceLinea.localeCompare(b.codiceLinea, "it"),
+  );
+  return { totale: nelMese.length, perLinea };
 }
 
 export function formatEuro(n: number | null) {

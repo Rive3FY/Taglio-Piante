@@ -77,7 +77,9 @@ export function costruisciAnteprima(
   }
 
   const indiceEsistenti = new Map(
-    esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+    esistenti
+      .filter((c) => c.tipo !== "base")
+      .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );
   const lineeNuove = new Set<string>();
 
