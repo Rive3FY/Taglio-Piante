@@ -37,9 +37,11 @@ type DittaRow = {
   partita_iva: string | null;
 };
 
-type OperatoreRow = {
-  id: string;
+type ProfiloRow = {
+  user_id: string;
   nome: string;
+  email: string;
+  ruolo: Operatore["ruolo"];
   updated_at: string;
 };
 
@@ -143,19 +145,13 @@ export function dittaToRow(ditta: Ditta) {
   };
 }
 
-export function rowToOperatore(row: OperatoreRow): Operatore {
+export function rowToOperatore(row: ProfiloRow): Operatore {
   return {
-    id: row.id,
+    id: row.user_id,
     nome: row.nome,
+    email: row.email,
+    ruolo: row.ruolo,
     updatedAt: row.updated_at,
-  };
-}
-
-export function operatoreToRow(operatore: Operatore) {
-  return {
-    id: operatore.id,
-    nome: operatore.nome,
-    updated_at: operatore.updatedAt,
   };
 }
 

@@ -12,7 +12,7 @@ export function AppHeader({
   backHref?: string;
 }) {
   const { online, pending, syncing, syncNow } = useSync();
-  const { session, logout } = useSession();
+  const { session, offline, logout } = useSession();
 
   return (
     <header className="app-header">
@@ -48,14 +48,16 @@ export function AppHeader({
           <div className="user-chip">
             <span>
               {session.nome}
-              <small>{session.ruolo === "tecnico" ? "Tecnico" : "Operatore"}</small>
+              <small>
+                {session.ruolo === "tecnico" ? "Tecnico" : "Operatore"}
+                {offline ? " · accesso offline" : ""}
+              </small>
             </span>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => {
-                logout();
-                window.location.assign("/");
+                void logout().finally(() => window.location.assign("/"));
               }}
             >
               Esci

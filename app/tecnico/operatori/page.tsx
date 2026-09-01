@@ -3,30 +3,37 @@
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { addOperatore, removeOperatore, renameOperatore } from "@/lib/operatori";
+import {
+  addOperatore,
+  removeOperatore,
+  renameOperatore,
+  resetPasswordOperatore,
+} from "@/lib/operatori";
+import { useSession } from "@/lib/SessionContext";
+
+type Azione = { tipo: "rinomina" | "password"; id: string } | null;
 
 export default function OperatoriPage() {
+  const { session } = useSession();
   const operatori = useLiveQuery(() => db.operatori.orderBy("nome").toArray(), []) ?? [];
-  const [nuovo, setNuovo] = useState("");
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editNome, setEditNome] = useState("");
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [azione, setAzione] = useState<Azione>(null);
+  const [valore, setValore] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errore, setErrore] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  async function run(action: () => Promise<boolean>, okMessage: string) {
+  async function esegui(action: () => Promise<void>, messaggio: string) {
     setBusy(true);
-    setError(null);
+    setErrore(null);
     setInfo(null);
     try {
-      const synced = await action();
-      setInfo(
-        synced
-          ? okMessage
-          : `${okMessage} Sincronizzazione in sospeso: la modifica è per ora solo su questo dispositivo.`,
-      );
+      await action();
+      setInfo(messaggio);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Operazione non riuscita.");
+      setErrore(e instanceof Error ? e.message : "Operazione non riuscita.");
     } finally {
       setBusy(false);
     }
@@ -36,65 +43,97 @@ export default function OperatoriPage() {
     <>
       <h2>Operatori</h2>
       <p className="muted">
-        Chi compare nell’elenco può accedere come operatore e firmare i rapportini come dipendente TERNA.
+        Ogni operatore ha un account con email e password. Senza account non si entra nell’app e non
+        si vedono i rapportini.
       </p>
 
       <section className="panel">
-        <h2>Aggiungi operatore</h2>
-        <div className="inline-form">
-          <label>
-            Nome e cognome
-            <input
-              value={nuovo}
-              onChange={(e) => setNuovo(e.target.value)}
-              placeholder="Es. Mario Rossi"
-            />
-          </label>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || !nuovo.trim()}
-            onClick={() =>
-              void run(async () => {
-                const synced = await addOperatore(nuovo);
-                setNuovo("");
-                return synced;
-              }, "Operatore aggiunto.")
-            }
-          >
-            {busy ? "Salvataggio…" : "Aggiungi"}
-          </button>
-        </div>
-        {error ? <p className="form-error">{error}</p> : null}
+        <h2>Nuovo operatore</h2>
+        <label>
+          Nome e cognome
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Es. Mario Rossi" />
+        </label>
+        <label>
+          Email
+          <input
+            type="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="mario.rossi@esempio.it"
+          />
+        </label>
+        <label>
+          Password iniziale
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Almeno 8 caratteri"
+          />
+        </label>
+        <p className="muted">
+          Comunica la password all’operatore: potrai reimpostarla in qualsiasi momento da questa pagina.
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy || !nome.trim() || !email.trim() || password.length < 8}
+          onClick={() =>
+            void esegui(async () => {
+              await addOperatore({ nome, email, password });
+              setNome("");
+              setEmail("");
+              setPassword("");
+            }, "Account creato: l’operatore può accedere subito.")
+          }
+        >
+          {busy ? "Creazione…" : "Crea account"}
+        </button>
+        {errore ? <p className="form-error">{errore}</p> : null}
         {info ? <p className="muted">{info}</p> : null}
       </section>
 
       <section className="panel">
         <h2>Elenco ({operatori.length})</h2>
         {operatori.length === 0 ? (
-          <p className="muted">Nessun operatore in elenco.</p>
+          <p className="muted">Nessun account ancora creato.</p>
         ) : (
           <ul className="operatori-list">
-            {operatori.map((op) => (
-              <li key={op.id}>
-                {editId === op.id ? (
-                  <>
-                    <input
-                      value={editNome}
-                      onChange={(e) => setEditNome(e.target.value)}
-                      aria-label="Nuovo nome"
-                    />
+            {operatori.map((op) => {
+              const isTecnico = op.ruolo === "tecnico";
+              const inModifica = azione?.id === op.id;
+              return (
+                <li key={op.id}>
+                  <div className="operatori-info">
+                    <strong>{op.nome}</strong>
+                    <span className="muted">{op.email}</span>
+                    {isTecnico ? <span className="badge badge-archiviato">Tecnico</span> : null}
+                  </div>
+
+                  {inModifica ? (
                     <div className="operatori-actions">
+                      <input
+                        type={azione?.tipo === "password" ? "text" : "text"}
+                        value={valore}
+                        onChange={(e) => setValore(e.target.value)}
+                        placeholder={azione?.tipo === "password" ? "Nuova password" : "Nuovo nome"}
+                        aria-label={azione?.tipo === "password" ? "Nuova password" : "Nuovo nome"}
+                      />
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={busy || !editNome.trim()}
+                        disabled={busy || !valore.trim()}
                         onClick={() =>
-                          void run(async () => {
-                            const synced = await renameOperatore(op.id, editNome);
-                            setEditId(null);
-                            return synced;
-                          }, "Nome aggiornato.")
+                          void esegui(async () => {
+                            if (azione?.tipo === "password") {
+                              await resetPasswordOperatore(op.id, valore);
+                            } else {
+                              await renameOperatore(op.id, valore);
+                            }
+                            setAzione(null);
+                            setValore("");
+                          }, azione?.tipo === "password" ? "Password aggiornata." : "Nome aggiornato.")
                         }
                       >
                         Salva
@@ -102,45 +141,57 @@ export default function OperatoriPage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
-                        onClick={() => setEditId(null)}
+                        onClick={() => {
+                          setAzione(null);
+                          setValore("");
+                        }}
                       >
                         Annulla
                       </button>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <strong>{op.nome}</strong>
+                  ) : (
                     <div className="operatori-actions">
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
                         onClick={() => {
-                          setEditId(op.id);
-                          setEditNome(op.nome);
+                          setAzione({ tipo: "rinomina", id: op.id });
+                          setValore(op.nome);
                         }}
                       >
                         Rinomina
                       </button>
                       <button
                         type="button"
-                        className="btn btn-danger btn-sm"
-                        disabled={busy}
+                        className="btn btn-ghost btn-sm"
                         onClick={() => {
-                          const ok = window.confirm(
-                            `Rimuovere ${op.nome} dall’elenco operatori? I rapportini già compilati restano invariati.`,
-                          );
-                          if (!ok) return;
-                          void run(() => removeOperatore(op.id), "Operatore rimosso.");
+                          setAzione({ tipo: "password", id: op.id });
+                          setValore("");
                         }}
                       >
-                        Elimina
+                        Nuova password
                       </button>
+                      {isTecnico || op.id === session?.userId ? null : (
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Eliminare l’account di ${op.nome}? Non potrà più accedere. I rapportini già inviati restano in archivio.`,
+                            );
+                            if (!ok) return;
+                            void esegui(() => removeOperatore(op.id), "Account eliminato.");
+                          }}
+                        >
+                          Elimina
+                        </button>
+                      )}
                     </div>
-                  </>
-                )}
-              </li>
-            ))}
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

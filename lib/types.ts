@@ -7,8 +7,10 @@ export type RapportinoStato = "bozza" | "da_prendere" | "in_attesa" | "archiviat
 export type SyncStatus = "local" | "pending" | "synced" | "error";
 
 export type Session = {
+  userId: string;
   ruolo: Ruolo;
   nome: string;
+  email: string;
 };
 
 export type Linea = {
@@ -40,6 +42,8 @@ export type OperatoreTerna = {
 export type Operatore = {
   id: string;
   nome: string;
+  email: string;
+  ruolo: Ruolo;
   updatedAt: string;
 };
 

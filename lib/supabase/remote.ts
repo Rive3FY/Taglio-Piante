@@ -1,10 +1,9 @@
 import { db } from "@/lib/db";
-import type { Operatore, Rapportino } from "@/lib/types";
+import type { Rapportino } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
   dittaToRow,
   lineaToRow,
-  operatoreToRow,
   prestazioneToRow,
   rapportinoToRow,
   rowToDitta,
@@ -14,7 +13,7 @@ import {
   rowToRapportino,
   type RapportinoRow,
 } from "./mappers";
-import { SEED_APP_OPERATORI, SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
+import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 
 const LAST_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
@@ -45,17 +44,15 @@ async function downloadSignature(path?: string | null) {
   if (!path) return undefined;
   const supabase = getSupabase();
   if (!supabase) return undefined;
-  const { data } = supabase.storage.from(SIGNATURE_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) return undefined;
   try {
-    const res = await fetch(data.publicUrl);
-    if (!res.ok) return undefined;
-    const blob = await res.blob();
+    // Bucket privato: il download passa dalle policy, non da un URL pubblico.
+    const { data, error } = await supabase.storage.from(SIGNATURE_BUCKET).download(path);
+    if (error || !data) return undefined;
     return await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
+      reader.readAsDataURL(data);
     });
   } catch {
     return undefined;
@@ -173,17 +170,17 @@ export async function pullReferenceData() {
   if (now - lastReferencePullAt < 5 * 60 * 1000) return;
   lastReferencePullAt = now;
 
-  const [lineeRes, ditteRes, prestRes, operatoriRes] = await Promise.all([
+  const [lineeRes, ditteRes, prestRes, profiliRes] = await Promise.all([
     supabase.from("linee").select("*"),
     supabase.from("ditte").select("*"),
     supabase.from("prestazioni").select("*"),
-    supabase.from("operatori").select("*"),
+    supabase.from("profili").select("user_id, nome, email, ruolo, updated_at"),
   ]);
 
   if (lineeRes.error) throw new Error(lineeRes.error.message);
   if (ditteRes.error) throw new Error(ditteRes.error.message);
   if (prestRes.error) throw new Error(prestRes.error.message);
-  if (operatoriRes.error) throw new Error(operatoriRes.error.message);
+  if (profiliRes.error) throw new Error(profiliRes.error.message);
 
   if ((lineeRes.data ?? []).length > 0) {
     await db.linee.bulkPut((lineeRes.data ?? []).map(rowToLinea));
@@ -197,31 +194,12 @@ export async function pullReferenceData() {
     await db.prestazioni.bulkPut((prestRes.data ?? []).map(rowToPrestazione));
   }
 
-  const operatori = (operatoriRes.data ?? []).map(rowToOperatore);
+  const operatori = (profiliRes.data ?? []).map(rowToOperatore);
+  const remoteIds = new Set(operatori.map((o) => o.id));
   const locali = await db.operatori.toArray();
-  if (operatori.length > 0) {
-    const remoteIds = new Set(operatori.map((o) => o.id));
-    const rimossi = locali.filter((o) => !remoteIds.has(o.id)).map((o) => o.id);
-    if (rimossi.length > 0) await db.operatori.bulkDelete(rimossi);
-    await db.operatori.bulkPut(operatori);
-  } else if (locali.length > 0) {
-    const { error } = await supabase.from("operatori").upsert(locali.map(operatoreToRow));
-    if (error) throw new Error(error.message);
-  }
-}
-
-export async function pushOperatore(operatore: Operatore) {
-  const supabase = getSupabase();
-  if (!supabase) return;
-  const { error } = await supabase.from("operatori").upsert(operatoreToRow(operatore));
-  if (error) throw new Error(error.message);
-}
-
-export async function deleteRemoteOperatore(id: string) {
-  const supabase = getSupabase();
-  if (!supabase) return;
-  const { error } = await supabase.from("operatori").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  const rimossi = locali.filter((o) => !remoteIds.has(o.id)).map((o) => o.id);
+  if (rimossi.length > 0) await db.operatori.bulkDelete(rimossi);
+  if (operatori.length > 0) await db.operatori.bulkPut(operatori);
 }
 
 export async function seedRemoteReferenceData() {
@@ -241,11 +219,6 @@ export async function seedRemoteReferenceData() {
     .from("prestazioni")
     .upsert(SEED_PRESTAZIONI.map(prestazioneToRow));
   if (prestError) throw new Error(prestError.message);
-
-  const { error: operatoriError } = await supabase
-    .from("operatori")
-    .upsert(SEED_APP_OPERATORI.map(operatoreToRow));
-  if (operatoriError) throw new Error(operatoriError.message);
 
   return true;
 }
@@ -273,4 +246,13 @@ export async function fetchNextNumero() {
 
 export function supabaseReady() {
   return isSupabaseConfigured() && typeof navigator !== "undefined" && navigator.onLine;
+}
+
+/** Senza account autenticato le policy RLS bloccano tutto: meglio non tentare nemmeno. */
+export async function supabaseAutenticato() {
+  if (!supabaseReady()) return false;
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getSession();
+  return Boolean(data.session);
 }

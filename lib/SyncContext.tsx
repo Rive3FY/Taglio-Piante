@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { processSyncQueue, subscribeOnline } from "@/lib/sync";
+import { useSession } from "@/lib/SessionContext";
 
 type SyncContextValue = {
   online: boolean;
@@ -22,6 +23,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const pending = useLiveQuery(() => db.syncQueue.count(), []) ?? 0;
+  const { session } = useSession();
+  const userId = session?.userId;
 
   const syncNow = useCallback(async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -54,6 +57,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       window.clearInterval(timer);
     };
   }, [syncNow]);
+
+  // Dopo il login serve una passata subito, altrimenti i dati arrivano solo al giro successivo.
+  useEffect(() => {
+    if (!userId) return;
+    void syncNow();
+  }, [userId, syncNow]);
 
   const value = useMemo(
     () => ({ online, pending, lastSyncAt, syncing, syncNow }),

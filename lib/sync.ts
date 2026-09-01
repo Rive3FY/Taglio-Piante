@@ -6,6 +6,7 @@ import {
   pullRapportini,
   pullReferenceData,
   pushRapportino,
+  supabaseAutenticato,
 } from "@/lib/supabase/remote";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -15,12 +16,17 @@ export async function processSyncQueue() {
     return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
   }
 
+  const autenticato = await supabaseAutenticato();
+  if (isSupabaseConfigured() && !autenticato) {
+    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
+  }
+
   const items = await db.syncQueue.orderBy("createdAt").toArray();
   let processed = 0;
 
   for (const item of items) {
     try {
-      if (isSupabaseConfigured()) {
+      if (autenticato) {
         if (item.action === "delete") {
           await deleteRemoteRapportino(item.rapportinoId);
         } else {
@@ -56,7 +62,7 @@ export async function processSyncQueue() {
   }
 
   let pulled = 0;
-  if (isSupabaseConfigured()) {
+  if (autenticato) {
     try {
       await pullReferenceData();
       await pullDeletedRapportini();

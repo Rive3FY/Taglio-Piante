@@ -19,7 +19,12 @@ import {
   seedRapportini,
 } from "./seed";
 import { isSupabaseConfigured } from "./supabase/client";
-import { pullReferenceData, seedRemoteReferenceData, supabaseReady } from "./supabase/remote";
+import {
+  pullReferenceData,
+  seedRemoteReferenceData,
+  supabaseAutenticato,
+  supabaseReady,
+} from "./supabase/remote";
 
 class RapportiniDB extends Dexie {
   linee!: EntityTable<Linea, "id">;
@@ -119,6 +124,19 @@ class RapportiniDB extends Dexie {
     }).upgrade(async (tx) => {
       await tx.table("operatori").bulkPut(SEED_APP_OPERATORI);
     });
+    this.version(8).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      syncQueue: "id, rapportinoId, createdAt",
+    }).upgrade(async (tx) => {
+      // Gli operatori ora corrispondono ad account Supabase: si ricaricano dal cloud.
+      await tx.table("operatori").clear();
+    });
   }
 }
 
@@ -157,11 +175,7 @@ export function ensureSeeded() {
         if (!exists) await db.ditte.add(ditta);
       }
 
-      if ((await db.operatori.count()) === 0) {
-        await db.operatori.bulkPut(SEED_APP_OPERATORI);
-      }
-
-      if (supabaseReady()) {
+      if (await supabaseAutenticato()) {
         try {
           await seedRemoteReferenceData();
           await pullReferenceData();
