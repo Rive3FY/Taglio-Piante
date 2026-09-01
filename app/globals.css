@@ -554,7 +554,7 @@ select.inline-field { width: auto; min-width: 160px; }
 }
 .campata-storico td { background: #fffdf8; }
 .storico-list { margin: 8px 0 0; padding-left: 18px; }
-.esiti-list { display: grid; gap: 10px; }
+.esiti-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .esito-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
 .esito-card.esito-tagliata { border-color: #86efac; background: #f0fdf4; }
 .esito-card.esito-tralasciata { border-color: #f87171; background: #fef2f2; }

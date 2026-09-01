@@ -11,6 +11,7 @@ import {
   pushRapportino,
   supabaseAutenticato,
 } from "@/lib/supabase/remote";
+import { ripristinaCampateOrfane } from "@/lib/campate/apply";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -36,45 +37,53 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
     return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
   }
 
-  const items = await db.syncQueue.orderBy("createdAt").toArray();
+  const falliti = new Set<string>();
   let processed = 0;
 
-  for (const item of items) {
-    try {
-      if (autenticato) {
-        if (item.action === "delete") {
-          await deleteRemoteRapportino(item.rapportinoId);
-        } else if (item.action === "campate") {
-          await pushCampatePending(item.rapportinoId);
-        } else {
-          const rapportino = await db.rapportini.get(item.rapportinoId);
-          if (!rapportino) {
-            await db.syncQueue.delete(item.id);
-            continue;
+  while (true) {
+    const items = (await db.syncQueue.orderBy("createdAt").toArray()).filter((i) => !falliti.has(i.id));
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      try {
+        if (autenticato) {
+          if (item.action === "delete") {
+            await deleteRemoteRapportino(item.rapportinoId);
+          } else if (item.action === "campate") {
+            await pushCampatePending(item.rapportinoId);
+          } else {
+            const rapportino = await db.rapportini.get(item.rapportinoId);
+            if (!rapportino) {
+              await deleteRemoteRapportino(item.rapportinoId);
+              await db.syncQueue.delete(item.id);
+              processed += 1;
+              continue;
+            }
+            await pushRapportino(rapportino);
           }
-          await pushRapportino(rapportino);
+        } else {
+          await delay(180);
         }
-      } else {
-        await delay(180);
-      }
 
-      await db.syncQueue.delete(item.id);
-      processed += 1;
+        await db.syncQueue.delete(item.id);
+        processed += 1;
 
-      if (item.action !== "delete") {
-        const restanti = await db.syncQueue.where("rapportinoId").equals(item.rapportinoId).toArray();
-        await db.rapportini.update(item.rapportinoId, {
-          syncStatus: restanti.length > 0 ? "pending" : "synced",
-          updatedAt: new Date().toISOString(),
+        if (item.action !== "delete" && item.action !== "campate") {
+          const restanti = await db.syncQueue.where("rapportinoId").equals(item.rapportinoId).toArray();
+          await db.rapportini.update(item.rapportinoId, {
+            syncStatus: restanti.length > 0 ? "pending" : "synced",
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch (error) {
+        falliti.add(item.id);
+        await db.syncQueue.update(item.id, {
+          attempts: item.attempts + 1,
+          lastError: error instanceof Error ? error.message : "Errore sconosciuto",
         });
-      }
-    } catch (error) {
-      await db.syncQueue.update(item.id, {
-        attempts: item.attempts + 1,
-        lastError: error instanceof Error ? error.message : "Errore sconosciuto",
-      });
-      if (item.action !== "delete") {
-        await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
+        if (item.action !== "delete" && item.action !== "campate") {
+          await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
+        }
       }
     }
   }
@@ -87,6 +96,11 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
     }
   }
 
+  if (autenticato) {
+    const orfanePrima = await ripristinaCampateOrfane();
+    if (orfanePrima > 0) await pushCampatePending();
+  }
+
   let pulled = 0;
   if (autenticato) {
     try {
@@ -96,6 +110,11 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
     } catch (error) {
       console.warn("Pull Supabase non riuscito:", error);
     }
+  }
+
+  if (autenticato) {
+    const orfaneDopo = await ripristinaCampateOrfane();
+    if (orfaneDopo > 0) await pushCampatePending();
   }
 
   const pending = await db.syncQueue.count();

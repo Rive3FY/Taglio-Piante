@@ -271,13 +271,14 @@ export async function enqueueSync(
 
 export async function deleteRapportino(id: string) {
   const { annullaEsitiDaRapportino } = await import("./campate/apply");
-  await annullaEsitiDaRapportino(id);
+  const item = await db.rapportini.get(id);
+  await annullaEsitiDaRapportino(id, item);
   await enqueueSync(id, "delete");
   await db.transaction("rw", [db.rapportini, db.syncQueue], async () => {
     const pending = await db.syncQueue.where("rapportinoId").equals(id).toArray();
-    for (const item of pending) {
-      if (item.action !== "delete" && item.action !== "campate") {
-        await db.syncQueue.delete(item.id);
+    for (const queueItem of pending) {
+      if (queueItem.action !== "delete" && queueItem.action !== "campate") {
+        await db.syncQueue.delete(queueItem.id);
       }
     }
     await db.rapportini.delete(id);

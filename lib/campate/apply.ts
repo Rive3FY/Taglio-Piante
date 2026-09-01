@@ -282,12 +282,98 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
   await enqueueSync(item.id, "campate");
 }
 
+async function campateCollegateAlRapportino(rapportinoId: string, item?: Rapportino | null) {
+  const trovate = new Map<string, CampataLavoro>();
+  const aggiungi = (c?: CampataLavoro) => {
+    if (c) trovate.set(c.id, c);
+  };
+
+  for (const c of await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray()) {
+    aggiungi(c);
+  }
+
+  const storico = await db.campateStorico.toArray();
+  for (const s of storico) {
+    if (s.rapportinoId !== rapportinoId) continue;
+    aggiungi(await db.campateLavoro.get(s.campataId));
+  }
+
+  if (item) {
+    const linea = await db.linee.get(item.lineaId);
+    const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
+    for (const esito of esitiDaRapportino(item)) {
+      for (const c of bersagliPerEsito(tutte, esito, linea?.codice ?? "")) aggiungi(c);
+    }
+  }
+
+  return [...trovate.values()];
+}
+
+function ripristinaCampataChiusa(presente: CampataLavoro, now: string): CampataLavoro {
+  const dalFile =
+    presente.origine === "prevista" || Boolean(presente.importId);
+  const ripristinata: CampataLavoro = {
+    ...presente,
+    origine: dalFile ? "prevista" : presente.origine,
+    stato: "da_tagliare",
+    syncStatus: "pending",
+    updatedAt: now,
+  };
+  delete ripristinata.dataTaglio;
+  delete ripristinata.operatore;
+  delete ripristinata.rapportinoId;
+  return ripristinata;
+}
+
+/**
+ * Campate tagliate/tralasciate il cui rapportino non c’è più: tornano da tagliare.
+ * Sistema i residui delle prove cancellate, anche dopo un sync che aveva lasciato lo stato vecchio.
+ */
+export async function ripristinaCampateOrfane() {
+  const vivi = new Set((await db.rapportini.toArray()).map((r) => r.id));
+  const campate = await db.campateLavoro.toArray();
+  const storico = await db.campateStorico.toArray();
+  const logPer = new Map<string, CampataStorico[]>();
+  for (const s of storico) {
+    const list = logPer.get(s.campataId) ?? [];
+    list.push(s);
+    logPer.set(s.campataId, list);
+  }
+  const now = new Date().toISOString();
+  const daRipristinare: CampataLavoro[] = [];
+  const daEliminare: string[] = [];
+
+  for (const presente of campate) {
+    if (presente.stato === "da_tagliare") continue;
+    if (presente.rapportinoId && vivi.has(presente.rapportinoId)) continue;
+
+    const log = logPer.get(presente.id) ?? [];
+    const dalFile =
+      presente.origine === "prevista" ||
+      Boolean(presente.importId) ||
+      log.some((s) => s.evento === "importata" || s.evento === "reimportata");
+    if (presente.origine === "aggiuntiva" && !dalFile) {
+      daEliminare.push(presente.id);
+      continue;
+    }
+    daRipristinare.push(ripristinaCampataChiusa(presente, now));
+  }
+
+  if (daRipristinare.length === 0 && daEliminare.length === 0) return 0;
+  if (daRipristinare.length > 0) await db.campateLavoro.bulkPut(daRipristinare);
+  if (daEliminare.length > 0) {
+    await db.campateLavoro.bulkDelete(daEliminare);
+    await db.campateDeleteQueue.bulkPut(daEliminare.map((id) => ({ id })));
+  }
+  return daRipristinare.length + daEliminare.length;
+}
+
 /**
  * Quando si cancella un rapportino, le campate che aveva chiuso tornano da tagliare.
  * Si cancellano solo quelle nate da quel foglio, mai una campata importata dal file.
  */
-export async function annullaEsitiDaRapportino(rapportinoId: string) {
-  const legate = await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray();
+export async function annullaEsitiDaRapportino(rapportinoId: string, item?: Rapportino | null) {
+  const legate = await campateCollegateAlRapportino(rapportinoId, item);
   if (legate.length === 0) return;
 
   const now = new Date().toISOString();
