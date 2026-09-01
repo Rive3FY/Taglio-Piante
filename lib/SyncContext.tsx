@@ -28,7 +28,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     setSyncing(true);
     try {
       const result = await processSyncQueue();
-      if (result.processed > 0 || result.pending === 0) {
+      if (result.processed > 0 || result.pulled > 0 || result.pending === 0) {
         setLastSyncAt(new Date().toISOString());
       }
     } finally {
@@ -42,6 +42,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (navigator.onLine) void syncNow();
     };
     const unsub = subscribeOnline(refresh);
+    void syncNow();
     const timer = window.setInterval(() => {
       if (navigator.onLine) void syncNow();
     }, 12000);

@@ -16,6 +16,8 @@ import {
   SEED_PRESTAZIONI,
   seedRapportini,
 } from "./seed";
+import { isSupabaseConfigured } from "./supabase/client";
+import { pullReferenceData, seedRemoteReferenceData, supabaseReady } from "./supabase/remote";
 
 class RapportiniDB extends Dexie {
   linee!: EntityTable<Linea, "id">;
@@ -139,15 +141,48 @@ export function ensureSeeded() {
         const exists = await db.ditte.get(ditta.id);
         if (!exists) await db.ditte.add(ditta);
       }
+
+      if (supabaseReady()) {
+        try {
+          await seedRemoteReferenceData();
+          await pullReferenceData();
+        } catch (error) {
+          console.warn("Sync anagrafiche Supabase non riuscita:", error);
+        }
+      } else if (isSupabaseConfigured()) {
+        console.info("Supabase configurato: le anagrafiche si sincronizzano quando torna la rete.");
+      }
     })();
   }
   return seedPromise;
 }
 
 export async function nextNumero() {
-  const n = await db.rapportini.count();
   const year = new Date().getFullYear();
-  return `RT-${year}-${String(n + 1).padStart(4, "0")}`;
+  const prefix = `RT-${year}-`;
+  let maxSeq = 0;
+
+  const locals = await db.rapportini.toArray();
+  for (const item of locals) {
+    if (!item.numero.startsWith(prefix)) continue;
+    const seq = Number(item.numero.slice(prefix.length));
+    if (!Number.isNaN(seq)) maxSeq = Math.max(maxSeq, seq);
+  }
+
+  if (supabaseReady()) {
+    try {
+      const { fetchNextNumero } = await import("./supabase/remote");
+      const remote = await fetchNextNumero();
+      if (remote?.startsWith(prefix)) {
+        const seq = Number(remote.slice(prefix.length));
+        if (!Number.isNaN(seq)) maxSeq = Math.max(maxSeq, seq);
+      }
+    } catch {
+      // usa solo il massimo locale
+    }
+  }
+
+  return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 }
 
 export async function enqueueSync(
@@ -165,8 +200,12 @@ export async function enqueueSync(
 }
 
 export async function deleteRapportino(id: string) {
+  await enqueueSync(id, "delete");
   await db.transaction("rw", [db.rapportini, db.syncQueue], async () => {
-    await db.syncQueue.where("rapportinoId").equals(id).delete();
+    const pending = await db.syncQueue.where("rapportinoId").equals(id).toArray();
+    for (const item of pending) {
+      if (item.action !== "delete") await db.syncQueue.delete(item.id);
+    }
     await db.rapportini.delete(id);
   });
 }

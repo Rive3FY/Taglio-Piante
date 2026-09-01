@@ -82,7 +82,7 @@ export type Rapportino = {
 export type SyncQueueItem = {
   id: string;
   rapportinoId: string;
-  action: "upsert" | "submit" | "archive" | "take";
+  action: "upsert" | "submit" | "archive" | "take" | "delete";
   createdAt: string;
   attempts: number;
   lastError?: string;
