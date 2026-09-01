@@ -1,0 +1,19 @@
+{
+  "name": "Rapportini Taglio",
+  "short_name": "Rapportini",
+  "description": "Rapportini taglio vegetazione — compilazione offline, firma e archivio linee",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c1f18",
+  "theme_color": "#0c1f18",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
