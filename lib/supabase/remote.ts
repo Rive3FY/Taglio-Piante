@@ -174,7 +174,7 @@ export async function pullReferenceData() {
     supabase.from("linee").select("*"),
     supabase.from("ditte").select("*"),
     supabase.from("prestazioni").select("*"),
-    supabase.from("profili").select("user_id, nome, email, ruolo, updated_at"),
+    supabase.from("profili").select("user_id, nome, email, ruolo, firma, updated_at"),
   ]);
 
   if (lineeRes.error) throw new Error(lineeRes.error.message);

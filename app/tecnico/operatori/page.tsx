@@ -8,7 +8,9 @@ import {
   removeOperatore,
   renameOperatore,
   resetPasswordOperatore,
+  setFirmaOperatore,
 } from "@/lib/operatori";
+import { normalizzaFirma } from "@/lib/firma";
 import { useSession } from "@/lib/SessionContext";
 
 type Azione = { tipo: "rinomina" | "password"; id: string } | null;
@@ -44,7 +46,8 @@ export default function OperatoriPage() {
       <h2>Operatori</h2>
       <p className="muted">
         Ogni operatore ha un account con email e password. Senza account non si entra nell’app e non
-        si vedono i rapportini.
+        si vedono i rapportini. La firma caricata qui viene messa in automatico come firma TERNA sui
+        rapportini di quella persona.
       </p>
 
       <section className="panel">
@@ -109,6 +112,44 @@ export default function OperatoriPage() {
                     <strong>{op.nome}</strong>
                     <span className="muted">{op.email}</span>
                     {isTecnico ? <span className="badge badge-archiviato">Tecnico</span> : null}
+                    <div className="firma-profilo">
+                      {op.firma ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={op.firma} alt={`Firma di ${op.nome}`} />
+                      ) : (
+                        <span className="muted">Nessuna firma caricata</span>
+                      )}
+                    </div>
+                    <div className="operatori-actions">
+                      <label className="btn btn-ghost btn-sm file-btn">
+                        {op.firma ? "Cambia firma" : "Carica firma"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+                            void esegui(async () => {
+                              const dataUrl = await normalizzaFirma(file);
+                              await setFirmaOperatore(op.id, dataUrl);
+                            }, `Firma di ${op.nome} salvata.`);
+                          }}
+                        />
+                      </label>
+                      {op.firma ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void esegui(() => setFirmaOperatore(op.id, null), "Firma rimossa.")
+                          }
+                        >
+                          Rimuovi firma
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   {inModifica ? (

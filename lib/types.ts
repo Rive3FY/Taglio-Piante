@@ -44,6 +44,8 @@ export type Operatore = {
   nome: string;
   email: string;
   ruolo: Ruolo;
+  /** Firma personale in PNG: usata come firma TERNA nei rapportini. */
+  firma?: string;
   updatedAt: string;
 };
 

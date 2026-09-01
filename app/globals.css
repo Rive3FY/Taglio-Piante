@@ -376,7 +376,28 @@ select.inline-field { width: auto; min-width: 160px; }
   background: #f7faf8;
 }
 .operatori-list li input { flex: 1 1 200px; }
-.operatori-info { display: grid; gap: 2px; }
+.operatori-info { display: grid; gap: 2px; flex: 1 1 260px; }
+.firma-profilo {
+  margin-top: 6px;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+}
+.firma-profilo img {
+  max-height: 56px;
+  max-width: 240px;
+  object-fit: contain;
+}
+.file-btn { position: relative; overflow: hidden; cursor: pointer; }
+.file-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.sign-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  padding: 8px;
+}
+.sign-preview img { max-height: 100%; max-width: 100%; object-fit: contain; }
 .operatori-info .badge { justify-self: start; margin-top: 4px; }
 .operatori-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 

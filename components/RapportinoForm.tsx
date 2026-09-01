@@ -53,7 +53,7 @@ export function RapportinoForm({ existing }: Props) {
     return m;
   });
   const [firmaOperatore, setFirmaOperatore] = useState(existing?.firmaOperatore);
-  const [firmaTerna, setFirmaTerna] = useState(existing?.firmaTerna);
+  const [firmaTernaManuale, setFirmaTernaManuale] = useState(existing?.firmaTerna);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -77,6 +77,13 @@ export function RapportinoForm({ existing }: Props) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  // La firma TERNA arriva dal profilo di chi è indicato come dipendente.
+  const firmaProfilo = useMemo(
+    () => operatoriRecord.find((o) => o.nome === dipendenteTerna)?.firma,
+    [operatoriRecord, dipendenteTerna],
+  );
+  const firmaTerna = firmaTernaManuale ?? firmaProfilo;
 
   const effectiveLineaId = lineaId;
   const effectiveDitta = ditta || ditte[0]?.ragioneSociale || "";
@@ -383,12 +390,33 @@ export function RapportinoForm({ existing }: Props) {
               </label>
             </div>
             <div className="sheet-signs">
-              <SignaturePad
-                label="Il Designato TERNA"
-                hint="Usa la S Pen sul tablet. Il salvataggio è locale finché non c’è rete."
-                value={firmaTerna}
-                onChange={setFirmaTerna}
-              />
+              {firmaProfilo && !firmaTernaManuale ? (
+                <div className="sign-block">
+                  <div className="sign-head">
+                    <div>
+                      <div className="sign-label">Il Designato TERNA</div>
+                      <div className="muted">
+                        Firma di {dipendenteTerna}, presa dal profilo: finisce già nel foglio ufficiale.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="sign-frame sign-preview">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={firmaProfilo} alt={`Firma di ${dipendenteTerna}`} />
+                  </div>
+                </div>
+              ) : (
+                <SignaturePad
+                  label="Il Designato TERNA"
+                  hint={
+                    dipendenteTerna
+                      ? "Nessuna firma nel profilo: firma qui oppure chiedi al tecnico di caricarla."
+                      : "Scegli prima il dipendente TERNA per usare la sua firma salvata."
+                  }
+                  value={firmaTernaManuale}
+                  onChange={setFirmaTernaManuale}
+                />
+              )}
               <SignaturePad
                 label="Il Designato Ditta"
                 hint="Opzionale: puoi inviare in attesa anche senza questa firma."

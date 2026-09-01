@@ -69,6 +69,18 @@ export async function resetPasswordOperatore(userId: string, password: string) {
   await chiamaApi("PATCH", { userId, password });
 }
 
+export async function setFirmaOperatore(userId: string, firma: string | null) {
+  await chiamaApi("PATCH", { userId, firma });
+  const attuale = await db.operatori.get(userId);
+  if (attuale) {
+    await db.operatori.put({
+      ...attuale,
+      firma: firma ?? undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+}
+
 export async function removeOperatore(userId: string) {
   await chiamaApi("DELETE", { userId });
   await db.operatori.delete(userId);

@@ -35,9 +35,13 @@ create table if not exists profili (
   nome text not null,
   email text not null,
   ruolo text not null default 'operatore' check (ruolo in ('operatore', 'tecnico')),
+  firma text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Firma salvata una volta sola: finisce in automatico come firma TERNA.
+alter table profili add column if not exists firma text;
 
 create table if not exists rapportini (
   id text primary key,

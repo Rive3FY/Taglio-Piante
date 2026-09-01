@@ -61,17 +61,25 @@ export async function PATCH(request: Request) {
   if (!auth.ok) return errore(auth.message, auth.status);
 
   const body = (await request.json().catch(() => null)) as
-    | { userId?: string; nome?: string; password?: string }
+    | { userId?: string; nome?: string; password?: string; firma?: string | null }
     | null;
 
   const userId = normalizza(body?.userId);
   const nome = normalizza(body?.nome);
   const password = typeof body?.password === "string" ? body.password : "";
+  const cambiaFirma = Boolean(body && "firma" in body);
+  const firma = typeof body?.firma === "string" ? body.firma : null;
 
   if (!userId) return errore("Operatore non indicato.", 400);
-  if (!nome && !password) return errore("Niente da aggiornare.", 400);
+  if (!nome && !password && !cambiaFirma) return errore("Niente da aggiornare.", 400);
   if (password && password.length < 8) {
     return errore("La password deve avere almeno 8 caratteri.", 400);
+  }
+  if (firma && !firma.startsWith("data:image/")) {
+    return errore("Formato firma non valido.", 400);
+  }
+  if (firma && firma.length > 1_000_000) {
+    return errore("Firma troppo pesante: usa un’immagine più piccola.", 400);
   }
 
   if (nome) {
@@ -89,6 +97,14 @@ export async function PATCH(request: Request) {
 
   if (password) {
     const { error } = await auth.admin.auth.admin.updateUserById(userId, { password });
+    if (error) return errore(error.message, 400);
+  }
+
+  if (cambiaFirma) {
+    const { error } = await auth.admin
+      .from("profili")
+      .update({ firma, updated_at: new Date().toISOString() })
+      .eq("user_id", userId);
     if (error) return errore(error.message, 400);
   }
 

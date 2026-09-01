@@ -42,6 +42,7 @@ type ProfiloRow = {
   nome: string;
   email: string;
   ruolo: Operatore["ruolo"];
+  firma: string | null;
   updated_at: string;
 };
 
@@ -151,6 +152,7 @@ export function rowToOperatore(row: ProfiloRow): Operatore {
     nome: row.nome,
     email: row.email,
     ruolo: row.ruolo,
+    firma: row.firma ?? undefined,
     updatedAt: row.updated_at,
   };
 }
