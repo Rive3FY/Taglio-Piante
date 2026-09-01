@@ -1,4 +1,15 @@
-import type { Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
+import type {
+  CampataLavoro,
+  CampataStorico,
+  Ditta,
+  ImportCampate,
+  Linea,
+  Operatore,
+  Prestazione,
+  Rapportino,
+  RapportinoCampata,
+  RapportinoRiga,
+} from "@/lib/types";
 
 type RapportinoRow = {
   id: string;
@@ -12,8 +23,10 @@ type RapportinoRow = {
   n_operatori: number;
   stato: Rapportino["stato"];
   righe: RapportinoRiga[];
+  esiti_campate?: RapportinoCampata[] | null;
   firma_operatore_path: string | null;
   firma_terna_path: string | null;
+  owner_id?: string | null;
   preso_da: string | null;
   preso_at: string | null;
   inviato_at: string | null;
@@ -69,8 +82,11 @@ export function rapportinoToRow(
     n_operatori: item.nOperatori,
     stato: item.stato,
     righe: item.righe,
+    esiti_campate: item.esitiCampate ?? [],
     firma_operatore_path: paths.firmaOperatore ?? null,
     firma_terna_path: paths.firmaTerna ?? null,
+    // Se il proprietario non è noto si omette, per non sovrascrivere quello già salvato.
+    ...(item.ownerId ? { owner_id: item.ownerId } : {}),
     preso_da: item.presoDa ?? null,
     preso_at: item.presoAt ?? null,
     inviato_at: item.inviatoAt ?? null,
@@ -97,8 +113,10 @@ export function rowToRapportino(
     stato: row.stato,
     syncStatus: "synced",
     righe: row.righe ?? [],
+    esitiCampate: row.esiti_campate ?? undefined,
     firmaOperatore: signatures.firmaOperatore,
     firmaTerna: signatures.firmaTerna,
+    ownerId: row.owner_id ?? undefined,
     presoDa: row.preso_da ?? undefined,
     presoAt: row.preso_at ?? undefined,
     inviatoAt: row.inviato_at ?? undefined,
@@ -173,6 +191,107 @@ export function prestazioneToRow(p: Prestazione) {
     descrizione: p.descrizione,
     unita_misura: p.unitaMisura,
     updated_at: new Date().toISOString(),
+  };
+}
+
+export function campataLavoroToRow(c: CampataLavoro) {
+  return {
+    id: c.id,
+    linea_id: c.lineaId,
+    codice_linea: c.codiceLinea,
+    nome_linea: c.nomeLinea,
+    tensione_kv: c.tensioneKv ?? null,
+    originale: c.originale,
+    normalizzata: c.normalizzata,
+    priorita: c.priorita ?? null,
+    stato: c.stato,
+    origine: c.origine,
+    data_taglio: c.dataTaglio ?? null,
+    operatore: c.operatore ?? null,
+    note: c.note ?? null,
+    rapportino_id: c.rapportinoId ?? null,
+    import_id: c.importId ?? null,
+    created_at: c.createdAt,
+    updated_at: c.updatedAt,
+  };
+}
+
+export function rowToCampataLavoro(row: ReturnType<typeof campataLavoroToRow> & { tensione_kv?: number | null }): CampataLavoro {
+  return {
+    id: row.id,
+    lineaId: row.linea_id,
+    codiceLinea: row.codice_linea,
+    nomeLinea: row.nome_linea,
+    tensioneKv: row.tensione_kv ?? undefined,
+    originale: row.originale,
+    normalizzata: row.normalizzata,
+    priorita: (row.priorita as CampataLavoro["priorita"]) ?? undefined,
+    stato: row.stato as CampataLavoro["stato"],
+    origine: row.origine as CampataLavoro["origine"],
+    dataTaglio: row.data_taglio ?? undefined,
+    operatore: row.operatore ?? undefined,
+    note: row.note ?? undefined,
+    rapportinoId: row.rapportino_id ?? undefined,
+    importId: row.import_id ?? undefined,
+    syncStatus: "synced",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function campataStoricoToRow(s: CampataStorico) {
+  return {
+    id: s.id,
+    campata_id: s.campataId,
+    evento: s.evento,
+    stato: s.stato ?? null,
+    priorita: s.priorita ?? null,
+    operatore: s.operatore ?? null,
+    rapportino_id: s.rapportinoId ?? null,
+    note: s.note ?? null,
+    created_at: s.createdAt,
+  };
+}
+
+export function rowToCampataStorico(row: ReturnType<typeof campataStoricoToRow>): CampataStorico {
+  return {
+    id: row.id,
+    campataId: row.campata_id,
+    evento: row.evento,
+    stato: (row.stato as CampataStorico["stato"]) ?? undefined,
+    priorita: (row.priorita as CampataStorico["priorita"]) ?? undefined,
+    operatore: row.operatore ?? undefined,
+    rapportinoId: row.rapportino_id ?? undefined,
+    note: row.note ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export function importCampateToRow(i: ImportCampate) {
+  return {
+    id: i.id,
+    file_name: i.fileName,
+    created_at: i.createdAt,
+    created_by: i.createdBy,
+    riconosciute: i.riconosciute,
+    nuove: i.nuove,
+    esistenti: i.esistenti,
+    duplicati: i.duplicati,
+    scartate: i.scartate,
+  };
+}
+
+export function rowToImportCampate(row: ReturnType<typeof importCampateToRow>): ImportCampate {
+  return {
+    id: row.id,
+    fileName: row.file_name,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+    riconosciute: row.riconosciute,
+    nuove: row.nuove,
+    esistenti: row.esistenti,
+    duplicati: row.duplicati,
+    scartate: row.scartate,
   };
 }
 

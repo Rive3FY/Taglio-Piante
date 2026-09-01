@@ -47,8 +47,37 @@ export function lineaDescrizione(linea?: Linea | null) {
   return linea.nome;
 }
 
+/** Le prime due cifre del codice dicono la tensione della linea. */
+const TENSIONE_DA_PREFISSO: Record<string, number> = {
+  "21": 380,
+  "22": 220,
+  "23": 150,
+  "24": 60,
+};
+
+export const TENSIONI = [380, 220, 150, 60] as const;
+
+export function tensioneDaCodice(codice?: string | null) {
+  if (!codice) return undefined;
+  return TENSIONE_DA_PREFISSO[codice.trim().slice(0, 2).toUpperCase()];
+}
+
+export function tensioneLinea(linea?: Linea | null) {
+  if (!linea) return undefined;
+  if (linea.tensioneKv) return linea.tensioneKv;
+  return tensioneDaCodice(linea.codice);
+}
+
+export function tensioneLabel(kv?: number) {
+  return kv ? `${kv} kV` : "Altro";
+}
+
 export function lineaKicker(linea: Linea) {
-  return linea.zona ? `${linea.codice} · ${linea.zona}` : linea.codice;
+  const parti = [linea.codice];
+  const kv = tensioneLinea(linea);
+  if (kv) parti.push(tensioneLabel(kv));
+  if (linea.zona) parti.push(linea.zona);
+  return parti.join(" · ");
 }
 
 export function campataLabel(c: { codice: string; tipo: string; daSupporto: string; aSupporto: string }) {

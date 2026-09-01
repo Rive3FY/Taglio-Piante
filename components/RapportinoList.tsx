@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { RapportinoCard } from "@/components/RapportinoCard";
+import { RapportiniPerTensione } from "@/components/RapportiniPerTensione";
 import type { RapportinoStato } from "@/lib/types";
 
 export function RapportinoList({
@@ -23,20 +23,12 @@ export function RapportinoList({
   return (
     <>
       <h2>{title}</h2>
-      {items.length === 0 ? (
-        <p className="muted">{empty}</p>
-      ) : (
-        <div className="form-stack">
-          {items.map((item) => (
-            <RapportinoCard
-              key={item.id}
-              item={item}
-              linea={linee.find((l) => l.id === item.lineaId)}
-              href={`/tecnico/rapportini/${item.id}`}
-            />
-          ))}
-        </div>
-      )}
+      <RapportiniPerTensione
+        items={items}
+        linee={linee}
+        hrefFor={(item) => `/tecnico/rapportini/${item.id}`}
+        vuoto={empty}
+      />
     </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { tensioneLabel, tensioneLinea } from "@/lib/format";
 import type { Linea } from "@/lib/types";
 
 type Props = {
@@ -81,14 +82,20 @@ export function LineaPicker({ linee, value, onChange }: Props) {
           {matches.length === 0 ? (
             <li className="linea-suggest-empty">Nessuna linea trovata</li>
           ) : (
-            matches.map((l) => (
-              <li key={l.id}>
-                <button type="button" role="option" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(l)}>
-                  <strong>{l.codice}</strong>
-                  <span>{l.nome}</span>
-                </button>
-              </li>
-            ))
+            matches.map((l) => {
+              const kv = tensioneLinea(l);
+              return (
+                <li key={l.id}>
+                  <button type="button" role="option" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(l)}>
+                    <span className="linea-suggest-top">
+                      <strong>{l.codice}</strong>
+                      {kv ? <span className={`kv-badge kv-${kv}`}>{tensioneLabel(kv)}</span> : null}
+                    </span>
+                    <span>{l.nome}</span>
+                  </button>
+                </li>
+              );
+            })
           )}
         </ul>
       ) : null}

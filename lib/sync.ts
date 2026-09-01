@@ -1,10 +1,13 @@
 import { db } from "@/lib/db";
+import { rapportinoVisibile } from "@/lib/sezioni";
+import type { Session } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   deleteRemoteRapportino,
   pullDeletedRapportini,
   pullRapportini,
   pullReferenceData,
+  pushCampatePending,
   pushRapportino,
   supabaseAutenticato,
 } from "@/lib/supabase/remote";
@@ -29,6 +32,8 @@ export async function processSyncQueue() {
       if (autenticato) {
         if (item.action === "delete") {
           await deleteRemoteRapportino(item.rapportinoId);
+        } else if (item.action === "campate") {
+          await pushCampatePending(item.rapportinoId);
         } else {
           const rapportino = await db.rapportini.get(item.rapportinoId);
           if (!rapportino) {
@@ -42,7 +47,7 @@ export async function processSyncQueue() {
       }
 
       const now = new Date().toISOString();
-      if (item.action !== "delete") {
+      if (item.action !== "delete" && item.action !== "campate") {
         await db.rapportini.update(item.rapportinoId, {
           syncStatus: "synced",
           updatedAt: now,
@@ -55,7 +60,7 @@ export async function processSyncQueue() {
         attempts: item.attempts + 1,
         lastError: error instanceof Error ? error.message : "Errore sconosciuto",
       });
-      if (item.action !== "delete") {
+      if (item.action !== "delete" && item.action !== "campate") {
         await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
       }
     }
@@ -74,6 +79,23 @@ export async function processSyncQueue() {
 
   const pending = await db.syncQueue.count();
   return { processed, pending, pulled };
+}
+
+/**
+ * Un operatore non deve conservare sul telefono i rapportini degli altri, nemmeno
+ * quelli scaricati prima che la visibilità venisse ristretta. Si toccano solo i
+ * record già sincronizzati, così il lavoro non ancora inviato resta al suo posto.
+ */
+export async function purgaRapportiniAltrui(session: Session | null) {
+  if (!session || session.ruolo === "tecnico") return 0;
+
+  const tutti = await db.rapportini.toArray();
+  const daRimuovere = tutti
+    .filter((r) => r.syncStatus === "synced" && !rapportinoVisibile(r, session))
+    .map((r) => r.id);
+
+  if (daRimuovere.length > 0) await db.rapportini.bulkDelete(daRimuovere);
+  return daRimuovere.length;
 }
 
 export function subscribeOnline(handler: () => void) {

@@ -37,6 +37,21 @@ Le stesse tre variabili vanno su **Vercel → Settings → Environment Variables
 
 Il tecnico può rinominare un operatore, assegnargli una nuova password o eliminarne l'account.
 
+## Chi vede cosa
+
+| Ruolo | Rapportini | Profili e firme |
+|-------|-----------|-----------------|
+| Operatore | Solo quelli che ha creato | Solo il proprio |
+| Tecnico | Tutti | Tutti |
+
+Il filtro non è solo nell'interfaccia: le policy RLS di Supabase legano ogni rapportino al campo `owner_id`, quindi un operatore non può leggere i rapportini degli altri nemmeno chiamando l'API. Al primo accesso dopo l'aggiornamento il dispositivo cancella dalla copia locale i rapportini non suoi già scaricati.
+
+Chi aggiorna un'installazione esistente deve rieseguire `supabase/schema.sql`: è riscrivibile e assegna `owner_id` ai rapportini già presenti in base al nome in `preso_da`. Aggiunge anche le tabelle delle campate operative.
+
+## Campate
+
+Il tecnico carica un file nello stesso formato del fac-simile LIDAR (**Carica file campate**): il parser legge intestazione e righe, non i dati di un file specifico. Ogni riga diventa una campata nel database (`22` → `21-22`). Priorità (urgente/differibile) e stato (da tagliare/tagliata/tralasciata) restano distinti. I rapportini aggiornano lo stato; una campata tagliata ma non prevista entra come **aggiuntiva**. L'elenco è visibile a tecnico e operatori; solo il tecnico importa i file.
+
 Il primo accesso richiede la rete. Dopo, l'app si riapre anche offline usando l'ultimo accesso salvato sul dispositivo, così il lavoro sul campo non si blocca.
 
 ## Sincronizzazione

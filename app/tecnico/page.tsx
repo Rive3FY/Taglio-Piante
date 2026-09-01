@@ -4,52 +4,149 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { lineaDescrizione, lineaKicker } from "@/lib/format";
+import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
+import type { Linea } from "@/lib/types";
+
+type Filtro = number | "tutte";
 
 export default function TecnicoLineePage() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
   const [q, setQ] = useState("");
+  const [filtro, setFiltro] = useState<Filtro>("tutte");
+  const [aperti, setAperti] = useState<number[]>([]);
 
-  const filtered = useMemo(() => {
+  const conteggi = useMemo(() => {
+    const mappa = new Map<string, { inAttesa: number; archiviati: number }>();
+    for (const r of rapportini) {
+      const voce = mappa.get(r.lineaId) ?? { inAttesa: 0, archiviati: 0 };
+      if (r.stato === "in_attesa") voce.inAttesa += 1;
+      if (r.stato === "archiviato") voce.archiviati += 1;
+      mappa.set(r.lineaId, voce);
+    }
+    return mappa;
+  }, [rapportini]);
+
+  const cercate = useMemo(() => {
     const term = q.trim().toLowerCase();
-    const list = [...linee].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
-    if (!term) return list;
-    return list.filter(
-      (l) =>
-        l.codice.toLowerCase().includes(term) ||
-        l.nome.toLowerCase().includes(term),
+    const lista = [...linee].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    if (!term) return lista;
+    return lista.filter(
+      (l) => l.codice.toLowerCase().includes(term) || l.nome.toLowerCase().includes(term),
     );
   }, [linee, q]);
+
+  const perTensione = useMemo(() => {
+    const gruppi = new Map<number | 0, Linea[]>();
+    for (const linea of cercate) {
+      const kv = tensioneLinea(linea) ?? 0;
+      const gruppo = gruppi.get(kv) ?? [];
+      gruppo.push(linea);
+      gruppi.set(kv, gruppo);
+    }
+    return gruppi;
+  }, [cercate]);
+
+  const gruppiVisibili = useMemo(() => {
+    const chiavi = [...TENSIONI, 0].filter((kv) => (perTensione.get(kv) ?? []).length > 0);
+    if (filtro === "tutte") return chiavi;
+    return chiavi.filter((kv) => kv === filtro);
+  }, [perTensione, filtro]);
+
+  const totaleVisibile = gruppiVisibili.reduce(
+    (tot, kv) => tot + (perTensione.get(kv) ?? []).length,
+    0,
+  );
+
+  // Con una ricerca o un filtro attivo i gruppi restano aperti: sono già pochi risultati.
+  const sempreAperti = q.trim().length > 0 || filtro !== "tutte";
+  const isAperto = (kv: number) => sempreAperti || aperti.includes(kv);
+
+  function toggle(kv: number) {
+    setAperti((prev) => (prev.includes(kv) ? prev.filter((k) => k !== kv) : [...prev, kv]));
+  }
 
   return (
     <>
       <h2>Elenco linee</h2>
-      <p className="muted">Apri una linea per vedere i rapportini In attesa e Archiviati.</p>
+      <p className="muted">
+        Le linee sono raggruppate per tensione, che si legge dalle prime due cifre del codice.
+      </p>
+
       <label>
         Cerca linea
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Codice o nome"
-        />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Codice o nome" />
       </label>
-      <div className="linee-grid">
-        {filtered.map((linea) => {
-          const ofLine = rapportini.filter((r) => r.lineaId === linea.id);
+
+      <div className="chip-row">
+        <button
+          type="button"
+          className={`chip ${filtro === "tutte" ? "on" : ""}`}
+          onClick={() => setFiltro("tutte")}
+        >
+          Tutte <span className="chip-count">{cercate.length}</span>
+        </button>
+        {TENSIONI.map((kv) => {
+          const quante = (perTensione.get(kv) ?? []).length;
           return (
-            <Link key={linea.id} href={`/tecnico/linee/${linea.id}`} className="linea-card">
-              <div className="kicker">{lineaKicker(linea)}</div>
-              <h2>{lineaDescrizione(linea)}</h2>
-              <div className="rap-card-meta">
-                <span>In attesa {ofLine.filter((r) => r.stato === "in_attesa").length}</span>
-                <span>Archiviati {ofLine.filter((r) => r.stato === "archiviato").length}</span>
-              </div>
-            </Link>
+            <button
+              key={kv}
+              type="button"
+              className={`chip ${filtro === kv ? "on" : ""}`}
+              disabled={quante === 0}
+              onClick={() => setFiltro(filtro === kv ? "tutte" : kv)}
+            >
+              {tensioneLabel(kv)} <span className="chip-count">{quante}</span>
+            </button>
           );
         })}
       </div>
-      {filtered.length === 0 ? <p className="muted">Nessuna linea trovata.</p> : null}
+
+      {totaleVisibile === 0 ? <p className="muted">Nessuna linea trovata.</p> : null}
+
+      {gruppiVisibili.map((kv) => {
+        const gruppo = perTensione.get(kv) ?? [];
+        const aperto = isAperto(kv);
+        return (
+          <section key={kv} className="panel linee-gruppo">
+            <button
+              type="button"
+              className="linee-gruppo-head"
+              onClick={() => toggle(kv)}
+              aria-expanded={aperto}
+            >
+              <span className={`chevron ${aperto ? "giu" : ""}`} aria-hidden="true">
+                ›
+              </span>
+              <span className={`kv-badge kv-${kv || "altro"}`}>{tensioneLabel(kv || undefined)}</span>
+              <span className="muted">{gruppo.length} linee</span>
+            </button>
+            {aperto ? (
+              <ul className="linee-list">
+                {gruppo.map((linea) => {
+                  const c = conteggi.get(linea.id);
+                  return (
+                    <li key={linea.id}>
+                      <Link href={`/tecnico/linee/${linea.id}`}>
+                        <span className="linea-codice">{linea.codice}</span>
+                        <span className="linea-nome">{linea.nome}</span>
+                        <span className="linea-conteggi">
+                          {c?.inAttesa ? (
+                            <span className="badge badge-in_attesa">{c.inAttesa} in attesa</span>
+                          ) : null}
+                          {c?.archiviati ? (
+                            <span className="badge badge-archiviato">{c.archiviati} archiviati</span>
+                          ) : null}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </section>
+        );
+      })}
     </>
   );
 }

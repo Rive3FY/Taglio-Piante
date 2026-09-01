@@ -1,7 +1,10 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
   Campata,
+  CampataLavoro,
+  CampataStorico,
   Ditta,
+  ImportCampate,
   Linea,
   Operatore,
   OperatoreTerna,
@@ -34,6 +37,9 @@ class RapportiniDB extends Dexie {
   ditte!: EntityTable<Ditta, "id">;
   prestazioni!: EntityTable<Prestazione, "id">;
   rapportini!: EntityTable<Rapportino, "id">;
+  campateLavoro!: EntityTable<CampataLavoro, "id">;
+  campateStorico!: EntityTable<CampataStorico, "id">;
+  importCampate!: EntityTable<ImportCampate, "id">;
   syncQueue!: EntityTable<SyncQueueItem, "id">;
 
   constructor() {
@@ -137,6 +143,19 @@ class RapportiniDB extends Dexie {
       // Gli operatori ora corrispondono ad account Supabase: si ricaricano dal cloud.
       await tx.table("operatori").clear();
     });
+    this.version(9).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro: "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt",
+      syncQueue: "id, rapportinoId, createdAt",
+    });
   }
 }
 
@@ -229,7 +248,9 @@ export async function enqueueSync(
     createdAt: new Date().toISOString(),
     attempts: 0,
   });
-  await db.rapportini.update(rapportinoId, { syncStatus: "pending" });
+  if (action !== "campate") {
+    await db.rapportini.update(rapportinoId, { syncStatus: "pending" });
+  }
 }
 
 export async function deleteRapportino(id: string) {

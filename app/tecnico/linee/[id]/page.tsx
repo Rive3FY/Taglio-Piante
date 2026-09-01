@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { RapportinoCard } from "@/components/RapportinoCard";
+import { RapportiniElenco } from "@/components/RapportiniElenco";
 import { lineaDescrizione, lineaKicker } from "@/lib/format";
 type CartellaKey = "in_attesa" | "archiviato";
 
@@ -77,18 +77,14 @@ function LineaArchivio({
       {current ? (
         <section className="panel">
           <h2>{CARTELLE.find((c) => c.key === cartella)?.label}</h2>
-          {current.length === 0 ? (
-            <p className="muted">Cartella vuota.</p>
-          ) : (
-            current.map((item) => (
-              <RapportinoCard
-                key={item.id}
-                item={item}
-                linea={linea}
-                href={`/tecnico/rapportini/${item.id}`}
-              />
-            ))
-          )}
+          <RapportiniElenco
+            items={current}
+            linee={[linea]}
+            hrefFor={(item) => `/tecnico/rapportini/${item.id}`}
+            vuoto="Cartella vuota."
+            passo={8}
+            filtroData
+          />
         </section>
       ) : (
         <p className="muted">Apri una cartella per vedere i rapportini di questa linea.</p>

@@ -2,11 +2,16 @@ import { db } from "@/lib/db";
 import type { Rapportino } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
+  campataLavoroToRow,
+  campataStoricoToRow,
   dittaToRow,
   lineaToRow,
   prestazioneToRow,
   rapportinoToRow,
+  rowToCampataLavoro,
+  rowToCampataStorico,
   rowToDitta,
+  rowToImportCampate,
   rowToLinea,
   rowToOperatore,
   rowToPrestazione,
@@ -76,6 +81,8 @@ export async function pushRapportino(item: Rapportino) {
     deleted_at: null,
   });
   if (error) throw new Error(error.message);
+
+  await pushCampatePending(item.id);
 }
 
 export async function deleteRemoteRapportino(id: string) {
@@ -88,6 +95,32 @@ export async function deleteRemoteRapportino(id: string) {
     .update({ deleted_at: now, updated_at: now })
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+export async function pushCampatePending(rapportinoId?: string) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const pending = rapportinoId
+    ? await db.campateLavoro.where("rapportinoId").equals(rapportinoId).toArray()
+    : await db.campateLavoro.filter((c) => c.syncStatus === "pending" || c.syncStatus === "error").toArray();
+
+  if (pending.length === 0) return;
+
+  const { error } = await supabase.from("campate_lavoro").upsert(pending.map(campataLavoroToRow));
+  if (error) throw new Error(error.message);
+
+  const ids = new Set(pending.map((c) => c.id));
+  const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
+  if (storico.length > 0) {
+    const { error: stoErr } = await supabase.from("campate_storico").upsert(storico.map(campataStoricoToRow));
+    if (stoErr) throw new Error(stoErr.message);
+  }
+
+  const now = new Date().toISOString();
+  for (const c of pending) {
+    await db.campateLavoro.update(c.id, { syncStatus: "synced", updatedAt: now });
+  }
 }
 
 export async function pullRapportini() {
@@ -180,10 +213,17 @@ export async function pullReferenceData() {
   if (lineeRes.error) throw new Error(lineeRes.error.message);
   if (ditteRes.error) throw new Error(ditteRes.error.message);
   if (prestRes.error) throw new Error(prestRes.error.message);
-  if (profiliRes.error) throw new Error(profiliRes.error.message);
 
   if ((lineeRes.data ?? []).length > 0) {
-    await db.linee.bulkPut((lineeRes.data ?? []).map(rowToLinea));
+    const linee = (lineeRes.data ?? []).map(rowToLinea);
+    // Le linee si gestiscono solo dall'area tecnico: il remoto è la fonte di verità,
+    // così le eliminazioni arrivano anche sugli altri dispositivi.
+    const idsRemoti = new Set(linee.map((l) => l.id));
+    const rimosse = (await db.linee.toArray())
+      .filter((l) => !idsRemoti.has(l.id))
+      .map((l) => l.id);
+    if (rimosse.length > 0) await db.linee.bulkDelete(rimosse);
+    await db.linee.bulkPut(linee);
   }
 
   if ((ditteRes.data ?? []).length > 0) {
@@ -194,12 +234,57 @@ export async function pullReferenceData() {
     await db.prestazioni.bulkPut((prestRes.data ?? []).map(rowToPrestazione));
   }
 
+  // I profili si controllano per ultimi: se falliscono, linee e anagrafiche sono già aggiornate.
+  if (profiliRes.error) throw new Error(profiliRes.error.message);
+
   const operatori = (profiliRes.data ?? []).map(rowToOperatore);
   const remoteIds = new Set(operatori.map((o) => o.id));
   const locali = await db.operatori.toArray();
   const rimossi = locali.filter((o) => !remoteIds.has(o.id)).map((o) => o.id);
   if (rimossi.length > 0) await db.operatori.bulkDelete(rimossi);
   if (operatori.length > 0) await db.operatori.bulkPut(operatori);
+
+  await pullCampateLavoro();
+}
+
+export async function pullCampateLavoro() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const [campRes, stoRes, impRes] = await Promise.all([
+    supabase.from("campate_lavoro").select("*"),
+    supabase.from("campate_storico").select("*"),
+    supabase.from("import_campate").select("*"),
+  ]);
+
+  if (campRes.error || stoRes.error || impRes.error) {
+    const msg = campRes.error?.message ?? stoRes.error?.message ?? impRes.error?.message ?? "";
+    if (msg.includes("schema cache") || msg.includes("does not exist")) return;
+    throw new Error(msg);
+  }
+
+  const remote = (campRes.data ?? []).map(rowToCampataLavoro);
+  if (remote.length > 0) {
+    const idsRemoti = new Set(remote.map((c) => c.id));
+    const locali = await db.campateLavoro.toArray();
+    const daRimuovere = locali
+      .filter((c) => c.syncStatus === "synced" && !idsRemoti.has(c.id))
+      .map((c) => c.id);
+    if (daRimuovere.length > 0) await db.campateLavoro.bulkDelete(daRimuovere);
+
+    for (const c of remote) {
+      const local = await db.campateLavoro.get(c.id);
+      if (local?.syncStatus === "pending") continue;
+      await db.campateLavoro.put(c);
+    }
+  }
+
+  if ((stoRes.data ?? []).length > 0) {
+    await db.campateStorico.bulkPut((stoRes.data ?? []).map(rowToCampataStorico));
+  }
+  if ((impRes.data ?? []).length > 0) {
+    await db.importCampate.bulkPut((impRes.data ?? []).map(rowToImportCampate));
+  }
 }
 
 export async function seedRemoteReferenceData() {
@@ -229,16 +314,12 @@ export async function fetchNextNumero() {
 
   const year = new Date().getFullYear();
   const prefix = `RT-${year}-`;
-  const { data, error } = await supabase
-    .from("rapportini")
-    .select("numero")
-    .like("numero", `${prefix}%`)
-    .order("numero", { ascending: false })
-    .limit(1);
+  // Funzione lato database: legge il massimo su tutti i rapportini, non solo sui propri.
+  const { data, error } = await supabase.rpc("prossimo_numero", { prefisso: prefix });
 
   if (error) throw new Error(error.message);
 
-  const last = data?.[0]?.numero as string | undefined;
+  const last = (data as string | null) ?? undefined;
   const seq = last ? Number(last.slice(prefix.length)) : 0;
   if (Number.isNaN(seq)) return `${prefix}0001`;
   return `${prefix}${String(seq + 1).padStart(4, "0")}`;

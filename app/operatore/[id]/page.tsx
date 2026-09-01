@@ -8,6 +8,7 @@ import { RapportinoForm } from "@/components/RapportinoForm";
 import { RapportinoSheet } from "@/components/RapportinoSheet";
 import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
+import { rapportinoVisibile } from "@/lib/sezioni";
 
 export default function OperatoreRapportinoPage({
   params,
@@ -35,6 +36,9 @@ export default function OperatoreRapportinoPage({
 
   if (item === undefined) return <p className="muted">Caricamento…</p>;
   if (!item) return <p className="muted">Rapportino non trovato sul dispositivo.</p>;
+  if (!rapportinoVisibile(item, session)) {
+    return <p className="muted">Questo rapportino è di un altro operatore.</p>;
+  }
 
   const readOnly = item.stato === "archiviato";
 

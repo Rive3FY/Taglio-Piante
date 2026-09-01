@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { processSyncQueue, subscribeOnline } from "@/lib/sync";
+import { processSyncQueue, purgaRapportiniAltrui, subscribeOnline } from "@/lib/sync";
 import { useSession } from "@/lib/SessionContext";
 
 type SyncContextValue = {
@@ -61,8 +61,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Dopo il login serve una passata subito, altrimenti i dati arrivano solo al giro successivo.
   useEffect(() => {
     if (!userId) return;
-    void syncNow();
-  }, [userId, syncNow]);
+    void (async () => {
+      await purgaRapportiniAltrui(session);
+      await syncNow();
+    })();
+  }, [userId, session, syncNow]);
 
   const value = useMemo(
     () => ({ online, pending, lastSyncAt, syncing, syncNow }),

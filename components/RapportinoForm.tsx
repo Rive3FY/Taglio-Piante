@@ -8,9 +8,11 @@ import { formatDate, lineaDescrizione, todayIso, uid } from "@/lib/format";
 import { officialSchedaObjectUrl } from "@/lib/fillScheda";
 import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
-import type { Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoRiga } from "@/lib/types";
+import type { CampataLavoro, Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoCampata, RapportinoRiga } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { SignaturePad } from "./SignaturePad";
+import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
+import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
@@ -20,9 +22,11 @@ const DEFAULT_RAPPRESENTANTE = "Sali Kali";
 
 type Props = {
   existing?: Rapportino;
+  /** Se valorizzato, il rapportino parte dalle campate pianificate di quella linea. */
+  precompilatoLineaId?: string;
 };
 
-export function RapportinoForm({ existing }: Props) {
+export function RapportinoForm({ existing, precompilatoLineaId }: Props) {
   const router = useRouter();
   const { session } = useSession();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
@@ -35,8 +39,14 @@ export function RapportinoForm({ existing }: Props) {
   const operatoriRecord = useLiveQuery(() => db.operatori.orderBy("nome").toArray(), []) ?? EMPTY_OPERATORI;
   const operatori = useMemo(() => operatoriRecord.map((o) => o.nome), [operatoriRecord]);
 
-  const [lineaId, setLineaId] = useState(existing?.lineaId ?? "");
+  const [lineaId, setLineaId] = useState(existing?.lineaId ?? precompilatoLineaId ?? "");
+  const campateLinea =
+    useLiveQuery(
+      () => (lineaId ? db.campateLavoro.where("lineaId").equals(lineaId).toArray() : Promise.resolve([] as CampataLavoro[])),
+      [lineaId],
+    ) ?? [];
   const [campata, setCampata] = useState(existing?.campata ?? "");
+  const [esiti, setEsiti] = useState<RapportinoCampata[]>(existing?.esitiCampate ?? []);
   const [dataLavoro, setDataLavoro] = useState(existing?.dataLavoro ?? todayIso());
   const [ditta, setDitta] = useState(existing?.ditta ?? "");
   const [rappresentanteDitta, setRappresentanteDitta] = useState(
@@ -92,13 +102,43 @@ export function RapportinoForm({ existing }: Props) {
     [linee, effectiveLineaId],
   );
 
+  const pianificate = useMemo(
+    () =>
+      campateLinea
+        .filter((c) => c.origine === "prevista" && c.stato === "da_tagliare")
+        .sort((a, b) => a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true })),
+    [campateLinea],
+  );
+
+  const modoPrecompilato = Boolean(precompilatoLineaId || (existing?.esitiCampate?.length ?? 0) > 0);
+
+  useEffect(() => {
+    if (!modoPrecompilato) return;
+    if (existing?.esitiCampate?.length) return;
+    if (esiti.length > 0) return;
+    if (pianificate.length === 0) return;
+    setEsiti(
+      pianificate.map((c) => ({
+        id: uid("es"),
+        campataId: c.id,
+        originale: c.originale,
+        normalizzata: c.normalizzata,
+        esito: "tagliata",
+      })),
+    );
+  }, [modoPrecompilato, existing?.esitiCampate, pianificate, esiti.length]);
+
   async function persist(stato: Rapportino["stato"], extra: Partial<Rapportino> = {}) {
     if (!effectiveLineaId) {
       setError("Seleziona la linea.");
       return null;
     }
-    if (!campata.trim()) {
+    if (!campata.trim() && esiti.length === 0) {
       setError("Indica la campata.");
+      return null;
+    }
+    if (esiti.some((e) => e.esito === "tralasciata" && !e.note?.trim())) {
+      setError("Per ogni campata tralasciata serve una motivazione.");
       return null;
     }
     setSaving(true);
@@ -113,11 +153,12 @@ export function RapportinoForm({ existing }: Props) {
         prestazioneId: p.id,
         quantita: qty[p.id],
       }));
+    const campataTesto = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
     const record: Rapportino = {
       id,
       numero,
       lineaId: effectiveLineaId,
-      campata: campata.trim(),
+      campata: campataTesto,
       dataLavoro,
       ditta: effectiveDitta.trim(),
       rappresentanteDitta,
@@ -126,16 +167,24 @@ export function RapportinoForm({ existing }: Props) {
       stato,
       syncStatus: "pending",
       righe,
+      esitiCampate: esiti.length > 0 ? esiti : undefined,
       firmaOperatore,
       firmaTerna,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
+      // Il tecnico che completa il rapportino di un operatore non ne diventa proprietario.
+      ownerId:
+        existing?.ownerId ??
+        (existing && session?.ruolo === "tecnico" ? undefined : session?.userId),
       presoDa: extra.presoDa ?? existing?.presoDa ?? session?.nome,
       presoAt: extra.presoAt ?? existing?.presoAt,
       inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,
       archiviatoAt: extra.archiviatoAt ?? existing?.archiviatoAt,
     };
     await db.rapportini.put(record);
+    if (session && (stato === "in_attesa" || stato === "archiviato")) {
+      await applicaEsitiDaRapportino(record, session);
+    }
     await enqueueSync(
       id,
       extra.archiviatoAt ? "archive" : extra.inviatoAt ? "submit" : extra.presoAt ? "take" : "upsert",
@@ -165,7 +214,7 @@ export function RapportinoForm({ existing }: Props) {
       setError("Seleziona la linea.");
       return;
     }
-    if (!campata.trim()) {
+    if (!campata.trim() && esiti.length === 0) {
       setError("Indica la campata.");
       return;
     }
@@ -176,7 +225,7 @@ export function RapportinoForm({ existing }: Props) {
       id: existing?.id ?? "preview",
       numero: existing?.numero ?? "ANTEPRIMA",
       lineaId: effectiveLineaId,
-      campata: campata.trim(),
+      campata: esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim(),
       dataLavoro,
       ditta: effectiveDitta.trim(),
       rappresentanteDitta,
@@ -272,10 +321,11 @@ export function RapportinoForm({ existing }: Props) {
           </label>
           <label>
             Campata
-            <input
-              value={campata}
-              onChange={(e) => setCampata(e.target.value)}
-            />
+            {modoPrecompilato ? (
+              <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
+            ) : (
+              <input value={campata} onChange={(e) => setCampata(e.target.value)} />
+            )}
           </label>
         </div>
 
@@ -330,6 +380,10 @@ export function RapportinoForm({ existing }: Props) {
           responsabilità.
         </p>
       </section>
+
+      {modoPrecompilato ? (
+        <CampateEsitiEditor pianificate={pianificate} esiti={esiti} onChange={setEsiti} />
+      ) : null}
 
       <section className="panel">
         <h2>Descrizione prestazioni e quantità</h2>
