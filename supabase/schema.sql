@@ -255,8 +255,17 @@ create policy "campate_lavoro_select" on campate_lavoro
   for select to authenticated using (true);
 
 drop policy if exists "campate_lavoro_write" on campate_lavoro;
-create policy "campate_lavoro_write" on campate_lavoro
-  for all to authenticated using (true) with check (true);
+drop policy if exists "campate_lavoro_insert" on campate_lavoro;
+create policy "campate_lavoro_insert" on campate_lavoro
+  for insert to authenticated with check (true);
+
+drop policy if exists "campate_lavoro_update" on campate_lavoro;
+create policy "campate_lavoro_update" on campate_lavoro
+  for update to authenticated using (true) with check (true);
+
+drop policy if exists "campate_lavoro_delete" on campate_lavoro;
+create policy "campate_lavoro_delete" on campate_lavoro
+  for delete to authenticated using (true);
 
 drop policy if exists "campate_storico_select" on campate_storico;
 create policy "campate_storico_select" on campate_storico

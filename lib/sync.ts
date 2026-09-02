@@ -15,7 +15,7 @@ import { ripristinaCampateOrfane } from "@/lib/campate/apply";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type SyncResult = { processed: number; pending: number; pulled: number };
+type SyncResult = { processed: number; pending: number; pulled: number; pullError: string | null };
 
 let syncInCorso: Promise<SyncResult> | null = null;
 
@@ -29,12 +29,12 @@ export async function processSyncQueue() {
 
 async function eseguiSyncQueue(): Promise<SyncResult> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
+    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0, pullError: null };
   }
 
   const autenticato = await supabaseAutenticato();
   if (isSupabaseConfigured() && !autenticato) {
-    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0 };
+    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0, pullError: null };
   }
 
   const falliti = new Set<string>();
@@ -79,7 +79,8 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
         falliti.add(item.id);
         await db.syncQueue.update(item.id, {
           attempts: item.attempts + 1,
-          lastError: error instanceof Error ? error.message : "Errore sconosciuto",
+          lastError:
+            error instanceof Error ? error.message.slice(0, 280) : "Errore sconosciuto",
         });
         if (item.action !== "delete" && item.action !== "campate") {
           await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
@@ -102,12 +103,15 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
   }
 
   let pulled = 0;
+  let pullError: string | null = null;
   if (autenticato) {
     try {
       await pullReferenceData();
       await pullDeletedRapportini();
       pulled = await pullRapportini();
     } catch (error) {
+      pullError =
+        error instanceof Error ? error.message.slice(0, 280) : "Lettura dal server non riuscita.";
       console.warn("Pull Supabase non riuscito:", error);
     }
   }
@@ -118,7 +122,7 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
   }
 
   const pending = await db.syncQueue.count();
-  return { processed, pending, pulled };
+  return { processed, pending, pulled, pullError };
 }
 
 /**

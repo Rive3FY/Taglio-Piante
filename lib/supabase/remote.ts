@@ -26,9 +26,24 @@ const SIGNATURE_BUCKET = "firme";
 function colonnaDaErrore(message: string) {
   const m =
     message.match(/could not find the ['"]([a-z0-9_]+)['"] column/i) ||
+    message.match(/column ['"]([a-z0-9_]+)['"] of ['"]\w+['"]/i) ||
     message.match(/column ['"]([a-z0-9_]+)['"]/i) ||
     message.match(/['"]([a-z0-9_]+)['"] column of/i);
   return m?.[1] ?? null;
+}
+
+/** Traduce gli errori PostgREST/RLS in messaggi utili sul campo. */
+export function messaggioErroreSupabase(message: string) {
+  if (/row-level security|violates row-level security/i.test(message)) {
+    return "Permesso negato sul database (policy RLS). In Supabase → SQL esegui tutto supabase/schema.sql, poi verifica che il tuo account abbia un profilo con ruolo corretto.";
+  }
+  if (/schema cache|does not exist|could not find the/i.test(message)) {
+    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (serve anche la colonna dist_int sulle campate).";
+  }
+  if (/foreign key constraint|violates foreign key/i.test(message)) {
+    return "Dati non allineati: manca la linea collegata sul database. Sincronizza le anagrafiche o riesegui supabase/schema.sql.";
+  }
+  return message;
 }
 
 async function upsertOmettendoColonneMancanti(
@@ -45,7 +60,9 @@ async function upsertOmettendoColonneMancanti(
     const { error } = await supabase.from(tabella).upsert(payload, upsertOpts);
     if (!error) return;
     const col = colonnaDaErrore(error.message);
-    if (!col || payload.every((row) => !(col in row))) throw new Error(error.message);
+    if (!col || payload.every((row) => !(col in row))) {
+      throw new Error(messaggioErroreSupabase(error.message));
+    }
     payload = payload.map((row) => {
       const copia = { ...row };
       delete copia[col];
@@ -108,6 +125,11 @@ export async function pushRapportino(item: Rapportino) {
   const supabase = getSupabase();
   if (!supabase) return;
 
+  const {
+    data: { session: authSession },
+  } = await supabase.auth.getSession();
+  const authUid = authSession?.user?.id;
+
   const firmaOperatorePath = await uploadSignature(item.id, "operatore", item.firmaOperatore);
   const firmaTernaPath = await uploadSignature(item.id, "terna", item.firmaTerna);
 
@@ -116,8 +138,15 @@ export async function pushRapportino(item: Rapportino) {
     firmaTerna: firmaTernaPath,
   });
 
+  const owner_id = item.ownerId ?? authUid ?? null;
+  if (!owner_id) {
+    throw new Error(
+      "Impossibile inviare il rapportino: manca il proprietario. Esci e accedi di nuovo, poi riprova.",
+    );
+  }
+
   await upsertOmettendoColonneMancanti("rapportini", [
-    { ...row, deleted_at: null } as Record<string, unknown>,
+    { ...row, owner_id, deleted_at: null } as Record<string, unknown>,
   ]);
 }
 
@@ -353,8 +382,7 @@ export async function pullCampateLavoro() {
 
   if (campRes.error || stoRes.error || impRes.error) {
     const msg = campRes.error?.message ?? stoRes.error?.message ?? impRes.error?.message ?? "";
-    if (msg.includes("schema cache") || msg.includes("does not exist")) return;
-    throw new Error(msg);
+    throw new Error(messaggioErroreSupabase(msg));
   }
 
   const tombstones = new Set((await db.campateDeleteQueue.toArray()).map((t) => t.id));

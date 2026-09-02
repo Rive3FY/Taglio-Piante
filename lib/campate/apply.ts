@@ -2,7 +2,7 @@ import { db, enqueueSync } from "@/lib/db";
 import { uid, tensioneDaCodice, todayIso } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import { campataLavoroToRow, campataStoricoToRow, importCampateToRow, lineaToRow } from "@/lib/supabase/mappers";
-import { upsertCampateLavoro } from "@/lib/supabase/remote";
+import { messaggioErroreSupabase, upsertCampateLavoro } from "@/lib/supabase/remote";
 import type {
   CampataLavoro,
   CampataStorico,
@@ -145,7 +145,7 @@ export async function confermaImportCampate(opts: {
 
   if (nuoveLinee.length > 0) {
     const { error } = await supabase.from("linee").upsert(nuoveLinee.map(lineaToRow));
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(messaggioErroreSupabase(error.message));
     await db.linee.bulkPut(nuoveLinee);
   }
 
@@ -156,12 +156,12 @@ export async function confermaImportCampate(opts: {
 
   if (storico.length > 0) {
     const { error } = await supabase.from("campate_storico").insert(storico.map(campataStoricoToRow));
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(messaggioErroreSupabase(error.message));
     await db.campateStorico.bulkPut(storico);
   }
 
   const { error: impErr } = await supabase.from("import_campate").insert(importCampateToRow(riepilogo));
-  if (impErr) throw new Error(impErr.message);
+  if (impErr) throw new Error(messaggioErroreSupabase(impErr.message));
   await db.importCampate.put(riepilogo);
 
   return riepilogo;

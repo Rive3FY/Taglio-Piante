@@ -272,9 +272,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         firmaTerna,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-        ownerId:
-          existing?.ownerId ??
-          (existing && session?.ruolo === "tecnico" ? undefined : session?.userId),
+        ownerId: existing?.ownerId ?? session?.userId,
         presoDa: extra.presoDa ?? existing?.presoDa ?? session?.nome,
         presoAt: extra.presoAt ?? existing?.presoAt,
         inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,

@@ -23,10 +23,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   );
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [pullError, setPullError] = useState<string | null>(null);
   const codaRaw = useLiveQuery(() => db.syncQueue.orderBy("createdAt").toArray(), []);
   const coda = Array.isArray(codaRaw) ? codaRaw : [];
   const pending = coda.length;
-  const lastError = coda.find((item) => item.lastError)?.lastError ?? null;
+  const queueError = coda.find((item) => item.lastError)?.lastError ?? null;
+  const lastError = queueError ?? pullError;
   const { session } = useSession();
   const userId = session?.userId;
 
@@ -35,6 +37,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     setSyncing(true);
     try {
       const result = await processSyncQueue();
+      setPullError(result.pullError);
       if (result.processed > 0 || result.pulled > 0 || result.pending === 0) {
         setLastSyncAt(new Date().toISOString());
       }
