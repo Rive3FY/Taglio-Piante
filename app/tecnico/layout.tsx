@@ -17,10 +17,12 @@ export default function TecnicoLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   return (
     <RoleGuard ruolo="tecnico">
-      <AppHeader title="Area tecnico" backHref={tecnicoBackHref(pathname)} />
-      <div className="page page-with-dock">
-        <TecnicoNav />
-        {children}
+      <div className="tecnico-shell">
+        <AppHeader title="Area tecnico" backHref={tecnicoBackHref(pathname)} />
+        <div className="tecnico-body">
+          <TecnicoNav />
+          <div className="page page-with-dock tecnico-main">{children}</div>
+        </div>
       </div>
     </RoleGuard>
   );

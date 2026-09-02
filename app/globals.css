@@ -634,17 +634,44 @@ select.inline-field { width: auto; min-width: 160px; }
 }
 .sign-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
 
+.tecnico-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.tecnico-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tecnico-main.page {
+  width: min(1100px, calc(100% - 16px));
+  margin-top: 12px;
+}
+
 .tech-nav {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 8px max(12px, env(safe-area-inset-right)) 4px max(12px, env(safe-area-inset-left));
+  margin: 0;
 }
+.tech-nav::-webkit-scrollbar { display: none; }
 .tech-nav a {
+  flex: 0 0 auto;
   background: white;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 10px 14px;
   font-weight: 650;
+  font-size: 14px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
 }
 .tech-nav a.active { background: var(--header); color: white; border-color: var(--header); }
 
@@ -931,4 +958,62 @@ select.inline-field { width: auto; min-width: 160px; }
   .hero h1 { font-size: 26px; }
   .inline-field, select.inline-field { min-width: 0; width: 100%; margin: 6px 0; display: block; }
   .contab-estrai { grid-template-columns: 1fr; }
+
+  .tecnico-shell .app-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .tecnico-shell .app-header h1 { font-size: 16px; }
+  .tecnico-shell .app-header-left { flex: 1 1 auto; min-width: 0; }
+  .tecnico-shell .app-header-right {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+  .tecnico-shell .user-chip {
+    padding: 2px 2px 2px 10px;
+  }
+  .tecnico-shell .user-chip small { display: none; }
+  .tecnico-shell .sync-pill { padding: 7px 10px; }
+  .tecnico-main.page { margin-bottom: 28px; gap: 12px; }
+  .tecnico-main .panel { padding: 14px; }
+  .contab-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campate-table { min-width: 860px; }
+  .campate-table th, .campate-table td { padding: 10px 8px; }
+}
+
+@media (min-width: 960px) {
+  .tecnico-body {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: stretch;
+    flex: 1;
+  }
+  .tech-nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: visible;
+    align-self: stretch;
+    gap: 4px;
+    padding: 20px 12px 32px;
+    margin: 0;
+    background: #d8e3dc;
+    border-right: 1px solid var(--line);
+  }
+  .tech-nav a {
+    width: 100%;
+    border-radius: 12px;
+    padding: 11px 14px;
+    justify-content: flex-start;
+  }
+  .tecnico-main.page {
+    width: min(1220px, calc(100% - 40px));
+    margin: 24px auto 48px;
+    gap: 18px;
+  }
+  .tecnico-main .panel { padding: 22px; }
+  .tecnico-main .elenco-head h2,
+  .tecnico-main .panel h2 { font-size: 20px; }
 }
