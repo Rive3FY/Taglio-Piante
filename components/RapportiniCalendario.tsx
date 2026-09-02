@@ -78,8 +78,8 @@ export function RapportiniCalendario({
     try {
       await downloadOfficialSchede(
         delGiorno.map((item) => ({ item, linea: lineaDi.get(item.lineaId) })),
-        prestazioni,
         `Schede_taglio_${giorno}.pdf`,
+        prestazioni,
       );
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");

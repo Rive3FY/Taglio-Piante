@@ -1,7 +1,20 @@
 import fs from "fs";
 import path from "path";
 import { createCanvas } from "@napi-rs/canvas";
-import { fillOfficialScheda } from "../lib/fillScheda.ts";
+
+const template = fs.readFileSync(path.join(process.cwd(), "public/scheda-taglio.pdf"));
+globalThis.fetch = async (input) => {
+  const url = String(input);
+  if (url.includes("scheda-taglio.pdf")) {
+    return {
+      ok: true,
+      arrayBuffer: async () => template.buffer.slice(template.byteOffset, template.byteOffset + template.byteLength),
+    };
+  }
+  throw new Error(`fetch non mockato: ${url}`);
+};
+
+const { fillOfficialScheda } = await import("../lib/fillScheda.ts");
 
 const item = {
   id: "rap_test",
@@ -28,7 +41,7 @@ const prestazioni = [
   { id: "p61", codice: "6.1", descrizione: "Trasporto", unitaMisura: "Mc" },
 ];
 
-const bytes = await fillOfficialScheda({ item, linea, prestazioni });
+const bytes = await fillOfficialScheda({ item, linea, prestazioni: undefined });
 fs.writeFileSync("/tmp/scheda-test-new.pdf", bytes);
 
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");

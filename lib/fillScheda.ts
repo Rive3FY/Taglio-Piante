@@ -1,3 +1,5 @@
+"use client";
+
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
@@ -14,21 +16,15 @@ import {
   type Box,
 } from "./schedaLayout";
 
-let templateCache: ArrayBuffer | null = null;
+let templateCache: Uint8Array | null = null;
 
-async function loadTemplate() {
+async function loadTemplateBytes(): Promise<Uint8Array> {
   if (!templateCache) {
-    if (typeof window === "undefined") {
-      const fs = await import("node:fs");
-      const path = await import("node:path");
-      templateCache = fs.readFileSync(path.join(process.cwd(), "public/scheda-taglio.pdf")).buffer;
-    } else {
-      const res = await fetch("/scheda-taglio.pdf");
-      if (!res.ok) throw new Error("Impossibile caricare il foglio ufficiale.");
-      templateCache = await res.arrayBuffer();
-    }
+    const res = await fetch("/scheda-taglio.pdf", { cache: "no-store" });
+    if (!res.ok) throw new Error("Impossibile caricare il foglio ufficiale.");
+    templateCache = new Uint8Array(await res.arrayBuffer());
   }
-  return templateCache.slice(0);
+  return new Uint8Array(templateCache);
 }
 
 function safeText(value?: string | null) {
@@ -48,19 +44,26 @@ function dataUrlToBytes(dataUrl: string) {
   return bytes;
 }
 
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 type Writer = {
-  writeInBox: (text: string, box: Box, size: number) => void;
-  writeFit: (text: string, box: Box, maxSize: number) => void;
+  writeInBox: (text: string | null | undefined, box: Box, size: number) => void;
+  writeFit: (text: string | null | undefined, box: Box, maxSize: number) => void;
   writeComb: (
-    text: string,
-    cells: ReadonlyArray<{ x: number; w: number }>,
-    row: Pick<Box, "y" | "h">,
+    text: string | null | undefined,
+    cells: ReadonlyArray<{ x: number; w: number }> | undefined,
+    row: Pick<Box, "y" | "h"> | undefined,
     size?: number,
     uppercase?: boolean,
   ) => void;
 };
 
-function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: Awaited<ReturnType<PDFDocument["embedFont"]>>): Writer {
+function createWriter(
+  page: ReturnType<PDFDocument["getPages"]>[number],
+  font: Awaited<ReturnType<PDFDocument["embedFont"]>>,
+): Writer {
   const ink = rgb(0.08, 0.12, 0.18);
 
   const write = (text: string, x: number, y: number, size = 9) => {
@@ -81,7 +84,7 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     }
   };
 
-  const writeInBox = (text: string, box: Box, size: number) => {
+  const writeInBox = (text: string | null | undefined, box: Box, size: number) => {
     const value = safeText(text).trim();
     if (!value) return;
     let drawn = value;
@@ -97,7 +100,7 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     write(drawn, x, y, size);
   };
 
-  const writeFit = (text: string, box: Box, maxSize: number) => {
+  const writeFit = (text: string | null | undefined, box: Box, maxSize: number) => {
     const value = safeText(text).trim();
     if (!value) return;
     const minSize = 5.5;
@@ -105,8 +108,8 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     const spezza = (size: number) => {
       const parole = value.split(/,\s*/);
       const righe: string[] = [""];
-      for (const p of parole) {
-        const pezzo = p.trim();
+      for (let i = 0; i < parole.length; i += 1) {
+        const pezzo = parole[i]!.trim();
         if (!pezzo) continue;
         const candidato = righe[righe.length - 1] ? `${righe[righe.length - 1]}, ${pezzo}` : pezzo;
         if (misura(candidato, size) <= box.w || !righe[righe.length - 1]) {
@@ -132,7 +135,8 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     }
     const totH = righe.length * lineGap(size);
     let y = box.y + Math.max(0, (box.h - totH) / 2) + size * 0.18;
-    for (const riga of righe) {
+    for (let i = 0; i < righe.length; i += 1) {
+      const riga = righe[i]!;
       const width = misura(riga, size);
       const x = box.x + Math.max(0, (box.w - width) / 2);
       write(riga, x, y, size);
@@ -141,7 +145,7 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
   };
 
   const writeComb = (
-    text: string | undefined | null,
+    text: string | null | undefined,
     cells: ReadonlyArray<{ x: number; w: number }> | undefined,
     row: Pick<Box, "y" | "h"> | undefined,
     size = 8.5,
@@ -163,65 +167,72 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
 export async function fillOfficialScheda(opts: {
   item: Rapportino;
   linea?: Linea;
-  prestazioni: Prestazione[];
+  prestazioni?: Prestazione[] | null;
 }) {
-  const { item, linea, prestazioni = [] } = opts;
-  const pdf = await PDFDocument.load(await loadTemplate());
-  const page = pdf.getPages()[0];
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const w = createWriter(page, font);
+  const { item, linea } = opts;
+  const prestazioni = asArray(opts.prestazioni);
 
-  w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
-  w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
-  w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
+  try {
+    const pdf = await PDFDocument.load(await loadTemplateBytes());
+    const page = pdf.getPages()[0];
+    if (!page) throw new Error("Il foglio ufficiale non contiene pagine.");
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const w = createWriter(page, font);
 
-  w.writeComb(formatDate(item.dataLavoro), SCHEDA_IN_DATA.cells, SCHEDA_IN_DATA, 8);
-  w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA.cells, SCHEDA_IN_DATA_TERNA, 7.5, true);
+    w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
+    w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
+    w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
 
-  w.writeComb(item.rappresentanteDitta, SCHEDA_AL_SIG_REP.cells, SCHEDA_AL_SIG_REP, 8, true);
-  w.writeComb(item.ditta, SCHEDA_AL_SIG_DITTA.cells, SCHEDA_AL_SIG_DITTA, 8, true);
-
-  w.writeComb(formatDate(item.dataLavoro), SCHEDA_FOOTER.date.cells, SCHEDA_FOOTER.date, 8);
-  if (item.nOperatori > 0) {
-    w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
-  }
-
-  const qtyById = new Map((item.righe ?? []).map((r) => [r.prestazioneId, r.quantita]));
-  for (const p of prestazioni) {
-    const q = qtyById.get(p.id);
-    const y = SCHEDA_QTY.y[p.codice];
-    if (!y || !q || q <= 0) continue;
-    w.writeInBox(String(q), { x: SCHEDA_QTY.x, y, w: SCHEDA_QTY.w, h: SCHEDA_QTY.h }, 10);
-  }
-
-  async function stamp(dataUrl: string | undefined, box: Box) {
-    if (!dataUrl?.startsWith("data:image")) return;
-    try {
-      const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
-      const scale = Math.min(box.w / img.width, box.h / img.height);
-      const width = img.width * scale;
-      const height = img.height * scale;
-      page.drawImage(img, {
-        x: box.x + (box.w - width) / 2,
-        y: box.y + Math.max(0, (box.h - height) / 2),
-        width,
-        height,
-      });
-    } catch {
-      // firma non incorporabile
+    w.writeComb(formatDate(item.dataLavoro ?? ""), SCHEDA_IN_DATA.cells, SCHEDA_IN_DATA, 8);
+    w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA.cells, SCHEDA_IN_DATA_TERNA, 7.5, true);
+    w.writeComb(item.rappresentanteDitta, SCHEDA_AL_SIG_REP.cells, SCHEDA_AL_SIG_REP, 8, true);
+    w.writeComb(item.ditta, SCHEDA_AL_SIG_DITTA.cells, SCHEDA_AL_SIG_DITTA, 8, true);
+    w.writeComb(formatDate(item.dataLavoro ?? ""), SCHEDA_FOOTER.date.cells, SCHEDA_FOOTER.date, 8);
+    if (item.nOperatori > 0) {
+      w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
     }
+
+    const qtyById = new Map(asArray(item.righe).map((r) => [r.prestazioneId, r.quantita]));
+    for (let i = 0; i < prestazioni.length; i += 1) {
+      const p = prestazioni[i]!;
+      const q = qtyById.get(p.id);
+      const y = SCHEDA_QTY.y[p.codice];
+      if (!y || !q || q <= 0) continue;
+      w.writeInBox(String(q), { x: SCHEDA_QTY.x, y, w: SCHEDA_QTY.w, h: SCHEDA_QTY.h }, 10);
+    }
+
+    async function stamp(dataUrl: string | undefined, box: Box) {
+      if (!dataUrl?.startsWith("data:image")) return;
+      try {
+        const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
+        const scale = Math.min(box.w / img.width, box.h / img.height);
+        const width = img.width * scale;
+        const height = img.height * scale;
+        page.drawImage(img, {
+          x: box.x + (box.w - width) / 2,
+          y: box.y + Math.max(0, (box.h - height) / 2),
+          width,
+          height,
+        });
+      } catch {
+        // firma non incorporabile
+      }
+    }
+
+    await stamp(item.firmaTerna, SCHEDA_FIRME.designatoTerna);
+    await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta);
+
+    return pdf.save();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Compilazione foglio PDF non riuscita: ${msg}`);
   }
-
-  await stamp(item.firmaTerna, SCHEDA_FIRME.designatoTerna);
-  await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta);
-
-  return pdf.save();
 }
 
 export async function downloadOfficialScheda(opts: {
   item: Rapportino;
   linea?: Linea;
-  prestazioni: Prestazione[];
+  prestazioni?: Prestazione[] | null;
 }) {
   const bytes = await fillOfficialScheda(opts);
   scaricaBlob(
@@ -233,31 +244,39 @@ export async function downloadOfficialScheda(opts: {
 
 export async function downloadOfficialSchede(
   fogli: { item: Rapportino; linea?: Linea }[],
-  prestazioni: Prestazione[],
   filename: string,
+  prestazioni?: Prestazione[] | null,
 ) {
-  if (fogli.length === 0) return;
-  if (fogli.length === 1) {
-    await downloadOfficialScheda({ ...fogli[0], prestazioni });
+  const lista = asArray(fogli);
+  const prest = asArray(prestazioni);
+  if (lista.length === 0) return;
+
+  if (lista.length === 1) {
+    await downloadOfficialScheda({ ...lista[0]!, prestazioni: prest });
     return;
   }
+
   const merged = await PDFDocument.create();
   let ok = 0;
   let ultimoErrore = "";
-  for (const foglio of fogli) {
+
+  for (let i = 0; i < lista.length; i += 1) {
+    const foglio = lista[i]!;
     try {
-      const bytes = await fillOfficialScheda({ ...foglio, prestazioni });
+      const bytes = await fillOfficialScheda({ ...foglio, prestazioni: prest });
       const src = await PDFDocument.load(bytes);
-      const pagine = await merged.copyPages(src, src.getPageIndices());
-      for (const pagina of pagine) merged.addPage(pagina);
+      const count = src.getPageCount();
+      const indices = count > 0 ? Array.from({ length: count }, (_, idx) => idx) : [0];
+      const pagine = merged.copyPages(src, indices);
+      if (!Array.isArray(pagine)) throw new Error("Unione PDF non riuscita.");
+      for (let j = 0; j < pagine.length; j += 1) merged.addPage(pagine[j]!);
       ok += 1;
     } catch (e) {
       ultimoErrore = e instanceof Error ? e.message : "foglio non generato";
     }
   }
-  if (ok === 0) {
-    throw new Error(ultimoErrore || "Nessun foglio da scaricare.");
-  }
+
+  if (ok === 0) throw new Error(ultimoErrore || "Nessun foglio da scaricare.");
   const bytes = await merged.save();
   scaricaBlob(bytes, filename, "application/pdf");
 }
@@ -265,7 +284,7 @@ export async function downloadOfficialSchede(
 export async function officialSchedaObjectUrl(opts: {
   item: Rapportino;
   linea?: Linea;
-  prestazioni: Prestazione[];
+  prestazioni?: Prestazione[] | null;
 }) {
   const bytes = await fillOfficialScheda(opts);
   const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });

@@ -1,4 +1,4 @@
-const CACHE = "rapportini-taglio-v15";
+const CACHE = "rapportini-taglio-v16";
 const PRECACHE = ["/", "/manifest.json", "/icon.svg", "/scheda-taglio.pdf"];
 
 self.addEventListener("install", (event) => {
@@ -9,9 +9,10 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
-    ).then(() => self.clients.claim()),
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -26,7 +27,7 @@ self.addEventListener("fetch", (event) => {
     request.headers.has("Next-Router-State-Tree") ||
     request.headers.has("Next-Router-Prefetch");
 
-  if (isRsc) {
+  if (isRsc || url.pathname.startsWith("/_next/static/")) {
     event.respondWith(fetch(request));
     return;
   }
@@ -34,7 +35,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok && url.pathname.startsWith("/_next/static/")) {
+        if (response.ok && url.pathname === "/scheda-taglio.pdf") {
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
         }
@@ -47,4 +48,8 @@ self.addEventListener("fetch", (event) => {
         return Response.error();
       }),
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
