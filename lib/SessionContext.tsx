@@ -20,6 +20,26 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+function dispositivoOffline() {
+  return typeof navigator !== "undefined" && !navigator.onLine;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = window.setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(id);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(id);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function profiloDaSupabase(auth: SupabaseSession): Promise<Session> {
   const supabase = getSupabase();
   if (!supabase) throw new Error("Supabase non configurato.");
@@ -55,78 +75,82 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     let annullato = false;
     const supabase = getSupabase();
 
-    (async () => {
-      await ensureSeeded();
-      if (annullato) return;
-
-      if (!supabase) {
-        setReady(true);
-        return;
-      }
-
-      const cache = readSession();
-      const { data } = await supabase.auth.getSession();
-
-      if (data.session) {
-        try {
-          const profilo = await profiloDaSupabase(data.session);
-          if (annullato) return;
-          writeSession(profilo);
-          setSessionState(profilo);
-          setOffline(false);
-        } catch {
-          // Sessione valida ma profilo non raggiungibile: si prosegue con la copia locale.
-          if (cache) {
-            setSessionState(cache);
-            setOffline(true);
-          }
+    async function confermaOnline() {
+      if (!supabase || dispositivoOffline() || annullato) return;
+      try {
+        const { data } = await withTimeout(supabase.auth.getSession(), 3500);
+        if (annullato) return;
+        let auth = data.session;
+        if (!auth) {
+          const { data: refreshed } = await withTimeout(supabase.auth.refreshSession(), 3500);
+          auth = refreshed.session ?? null;
         }
-      } else if (cache) {
-        if (typeof navigator !== "undefined" && navigator.onLine) {
-          const { data: refreshed } = await supabase.auth.refreshSession();
-          if (refreshed.session) {
-            try {
-              const profilo = await profiloDaSupabase(refreshed.session);
-              if (annullato) return;
-              writeSession(profilo);
-              setSessionState(profilo);
-              setOffline(false);
-            } catch {
-              if (annullato) return;
-              setSessionState(cache);
-              setOffline(true);
-            }
-          } else {
-            setSessionState(cache);
-            setOffline(true);
-          }
-        } else {
+        if (!auth) return;
+        const profilo = await withTimeout(profiloDaSupabase(auth), 4000);
+        if (annullato) return;
+        writeSession(profilo);
+        setSessionState(profilo);
+        setOffline(false);
+      } catch {
+        const cache = readSession();
+        if (cache && !annullato) {
           setSessionState(cache);
           setOffline(true);
         }
-      } else {
-        clearSession();
       }
+    }
 
-      if (!annullato) setReady(true);
+    (async () => {
+      try {
+        await withTimeout(ensureSeeded(), 4000).catch(() => undefined);
+        if (annullato) return;
+
+        const cache = readSession();
+        if (cache) {
+          setSessionState(cache);
+          setOffline(true);
+        } else if (!supabase) {
+          clearSession();
+        }
+
+        // Con profilo locale l'app deve aprirsi subito: getSession/refresh
+        // di Supabase in assenza di rete non falliscono, restano in attesa.
+        if (cache) {
+          setReady(true);
+          if (!dispositivoOffline()) void confermaOnline();
+          return;
+        }
+
+        if (!supabase || dispositivoOffline()) {
+          return;
+        }
+
+        await confermaOnline();
+        if (!annullato && !readSession()) clearSession();
+      } finally {
+        if (!annullato) setReady(true);
+      }
     })();
 
     const { data: listener } = supabase
       ? supabase.auth.onAuthStateChange((event) => {
           if (event !== "SIGNED_OUT") return;
           void (async () => {
-            if (typeof navigator !== "undefined" && navigator.onLine) {
-              const { data: refreshed } = await supabase.auth.refreshSession();
-              if (refreshed.session) {
-                try {
-                  const profilo = await profiloDaSupabase(refreshed.session);
+            if (!dispositivoOffline()) {
+              try {
+                const { data: refreshed } = await withTimeout(
+                  supabase.auth.refreshSession(),
+                  3500,
+                );
+                if (refreshed.session) {
+                  const profilo = await withTimeout(profiloDaSupabase(refreshed.session), 4000);
                   writeSession(profilo);
                   setSessionState(profilo);
                   setOffline(false);
                   return;
-                } catch {
-                  // token non rinnovabile: si prosegue con la copia locale
                 }
+              } catch {
+                // token non rinnovabile: si prosegue con la copia locale
               }
             }
             const cache = readSession();
@@ -150,7 +174,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) throw new Error("Supabase non è configurato su questo dispositivo.");
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    if (dispositivoOffline()) {
       throw new Error("Serve la rete per accedere. Riprova quando hai segnale.");
     }
 
@@ -180,7 +204,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     clearPullCursor();
     setSessionState(null);
     setOffline(false);
-    if (supabase) await supabase.auth.signOut();
+    if (supabase) {
+      try {
+        await withTimeout(supabase.auth.signOut(), 4000);
+      } catch {
+        // anche senza rete l'uscita locale deve completarsi
+      }
+    }
   }, []);
 
   const value = useMemo<SessionContextValue>(

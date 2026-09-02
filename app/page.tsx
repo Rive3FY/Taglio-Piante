@@ -31,6 +31,7 @@ export default function HomePage() {
   }
 
   if (!ready) return <div className="page-loading">Preparazione archivio locale…</div>;
+  if (session) return <div className="page-loading">Apertura…</div>;
 
   return (
     <main className="page">

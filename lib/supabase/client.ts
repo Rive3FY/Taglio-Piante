@@ -23,6 +23,16 @@ export function getSupabase() {
         },
       },
     );
+    if (typeof window !== "undefined") {
+      const auth = client.auth;
+      const syncRefresh = () => {
+        if (navigator.onLine) auth.startAutoRefresh();
+        else auth.stopAutoRefresh();
+      };
+      syncRefresh();
+      window.addEventListener("online", syncRefresh);
+      window.addEventListener("offline", syncRefresh);
+    }
   }
   return client;
 }

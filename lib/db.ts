@@ -22,13 +22,7 @@ import {
   SEED_PRESTAZIONI,
   seedRapportini,
 } from "./seed";
-import { isSupabaseConfigured } from "./supabase/client";
-import {
-  pullReferenceData,
-  seedRemoteReferenceData,
-  supabaseAutenticato,
-  supabaseReady,
-} from "./supabase/remote";
+import { supabaseReady } from "./supabase/remote";
 
 class RapportiniDB extends Dexie {
   linee!: EntityTable<Linea, "id">;
@@ -272,17 +266,6 @@ export function ensureSeeded() {
       for (const ditta of SEED_DITTE) {
         const exists = await db.ditte.get(ditta.id);
         if (!exists) await db.ditte.add(ditta);
-      }
-
-      if (await supabaseAutenticato()) {
-        try {
-          await seedRemoteReferenceData();
-          await pullReferenceData();
-        } catch (error) {
-          console.warn("Sync anagrafiche Supabase non riuscita:", error);
-        }
-      } else if (isSupabaseConfigured()) {
-        console.info("Supabase configurato: le anagrafiche si sincronizzano quando torna la rete.");
       }
     })();
   }
