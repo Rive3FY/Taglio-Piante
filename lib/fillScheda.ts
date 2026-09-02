@@ -2,56 +2,29 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
 import { scaricaBlob } from "./download";
-
-/** Colonna quantità sul nuovo foglio ufficiale (716×1015 pt). */
-const QTY_X = 668;
-
-const QTY_Y: Record<string, number> = {
-  "1.1": 717.9,
-  "1.2": 696.2,
-  "1.3": 674.5,
-  "1.4": 652.9,
-  "1.5": 631.2,
-  "2.1": 609.5,
-  "2.2": 587.8,
-  "2.3": 566.1,
-  "2.4": 536.2,
-  "2.5": 498,
-  "3.1": 468.2,
-  "3.2": 445.7,
-  "3.3": 424.6,
-  "3.4": 401.7,
-  "3.5": 368.9,
-  "4.1": 340.5,
-  "4.2": 321.7,
-  "4.3": 302.9,
-  "5.1": 284.1,
-  "5.2": 265.4,
-  "5.3": 246.6,
-  "5.4": 227.7,
-  "5.5": 208.9,
-  "5.6": 190.1,
-  "5.7": 171.3,
-  "6.1": 152.6,
-  "6.2": 133.8,
-  "6.3": 113.1,
-};
-
-/** Firme CONSEGNA: tra la nota legale (y≈794) e le didascalie (y≈773). */
-const FIRMA_CONSEGNA_TERNA = { x: 24, y: 786, w: 132, h: 20 };
-const FIRMA_CONSEGNA_DITTA = { x: 398, y: 786, w: 162, h: 20 };
-
-/** Firme in chiusura: tra «Data / N° operatori» (y≈81) e «Il Designato …» (y≈54). */
-const FIRMA_DESIGNATO_TERNA = { x: 96, y: 56, w: 132, h: 26 };
-const FIRMA_DESIGNATO_DITTA = { x: 560, y: 56, w: 158, h: 26 };
+import {
+  SCHEDA_AL_SIG,
+  SCHEDA_FIRME,
+  SCHEDA_FOOTER,
+  SCHEDA_HEADER,
+  SCHEDA_IN_DATA,
+  SCHEDA_QTY,
+  type Box,
+} from "./schedaLayout";
 
 let templateCache: ArrayBuffer | null = null;
 
 async function loadTemplate() {
   if (!templateCache) {
-    const res = await fetch("/scheda-taglio.pdf");
-    if (!res.ok) throw new Error("Impossibile caricare il foglio ufficiale.");
-    templateCache = await res.arrayBuffer();
+    if (typeof window === "undefined") {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      templateCache = fs.readFileSync(path.join(process.cwd(), "public/scheda-taglio.pdf")).buffer;
+    } else {
+      const res = await fetch("/scheda-taglio.pdf");
+      if (!res.ok) throw new Error("Impossibile caricare il foglio ufficiale.");
+      templateCache = await res.arrayBuffer();
+    }
   }
   return templateCache.slice(0);
 }
@@ -73,15 +46,19 @@ function dataUrlToBytes(dataUrl: string) {
   return bytes;
 }
 
-export async function fillOfficialScheda(opts: {
-  item: Rapportino;
-  linea?: Linea;
-  prestazioni: Prestazione[];
-}) {
-  const { item, linea, prestazioni } = opts;
-  const pdf = await PDFDocument.load(await loadTemplate());
-  const page = pdf.getPages()[0];
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
+type Writer = {
+  writeInBox: (text: string, box: Box, size: number) => void;
+  writeFit: (text: string, box: Box, maxSize: number) => void;
+  writeComb: (
+    text: string,
+    cells: ReadonlyArray<{ x: number; w: number }>,
+    row: Pick<Box, "y" | "h">,
+    size?: number,
+    uppercase?: boolean,
+  ) => void;
+};
+
+function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: Awaited<ReturnType<PDFDocument["embedFont"]>>): Writer {
   const ink = rgb(0.08, 0.12, 0.18);
 
   const write = (text: string, x: number, y: number, size = 9) => {
@@ -94,7 +71,7 @@ export async function fillOfficialScheda(opts: {
     }
   };
 
-  const writeInBox = (text: string, box: { x: number; y: number; w: number; h: number }, size: number) => {
+  const writeInBox = (text: string, box: Box, size: number) => {
     const value = safeText(text).trim();
     if (!value) return;
     let drawn = value;
@@ -110,7 +87,7 @@ export async function fillOfficialScheda(opts: {
     write(drawn, x, y, size);
   };
 
-  const writeFit = (text: string, box: { x: number; y: number; w: number; h: number }, maxSize: number) => {
+  const writeFit = (text: string, box: Box, maxSize: number) => {
     const value = safeText(text).trim();
     if (!value) return;
     const minSize = 5.5;
@@ -158,30 +135,62 @@ export async function fillOfficialScheda(opts: {
     }
   };
 
-  write(linea?.codice ?? "", 48, 942, 10);
-  write(lineaDescrizione(linea), 323, 942, 9);
-  writeFit(item.campata, { x: 618, y: 934, w: 88, h: 22 }, 10);
-  write(formatDate(item.dataLavoro), 68, 917.6, 9);
-  write(item.dipendenteTerna, 303, 917.6, 9);
-  write(item.rappresentanteDitta, 70, 881.5, 9);
-  write(item.ditta, 359, 881.5, 9);
+  const writeComb = (
+    text: string,
+    cells: ReadonlyArray<{ x: number; w: number }>,
+    row: Pick<Box, "y" | "h">,
+    size = 8.5,
+    uppercase = false,
+  ) => {
+    const raw = safeText(text).trim();
+    if (!raw) return;
+    const chars = (uppercase ? raw.toUpperCase() : raw).replace(/\s+/g, " ");
+    const max = Math.min(chars.length, cells.length);
+    for (let i = 0; i < max; i += 1) {
+      writeInBox(chars[i]!, { x: cells[i]!.x, y: row.y, w: cells[i]!.w, h: row.h }, size);
+    }
+  };
 
-  writeInBox(formatDate(item.dataLavoro), { x: 88, y: 62, w: 92, h: 16 }, 10);
+  return { writeInBox, writeFit, writeComb };
+}
+
+export async function fillOfficialScheda(opts: {
+  item: Rapportino;
+  linea?: Linea;
+  prestazioni: Prestazione[];
+}) {
+  const { item, linea, prestazioni } = opts;
+  const pdf = await PDFDocument.load(await loadTemplate());
+  const page = pdf.getPages()[0];
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const w = createWriter(page, font);
+
+  w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
+  w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 9);
+  w.writeFit(item.campata, SCHEDA_HEADER.campata, 10);
+
+  w.writeFit(formatDate(item.dataLavoro), SCHEDA_IN_DATA.data, 8);
+  w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA.terna.cells, SCHEDA_IN_DATA.terna, 7.5);
+
+  w.writeFit(item.rappresentanteDitta, SCHEDA_AL_SIG.rep, 8);
+  w.writeFit(item.ditta, SCHEDA_AL_SIG.ditta, 8);
+
+  w.writeFit(formatDate(item.dataLavoro), SCHEDA_FOOTER.date, 8);
   if (item.nOperatori > 0) {
-    writeInBox(String(item.nOperatori), { x: 520, y: 62, w: 48, h: 16 }, 11);
+    w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
   }
 
   const qtyById = new Map(item.righe.map((r) => [r.prestazioneId, r.quantita]));
   for (const p of prestazioni) {
     const q = qtyById.get(p.id);
-    const y = QTY_Y[p.codice];
+    const y = SCHEDA_QTY.y[p.codice];
     if (!y || !q || q <= 0) continue;
-    write(String(q), QTY_X, y, 9);
+    w.writeInBox(String(q), { x: SCHEDA_QTY.x, y, w: SCHEDA_QTY.w, h: SCHEDA_QTY.h }, 10);
   }
 
   async function stamp(
     dataUrl: string | undefined,
-    box: { x: number; y: number; w: number; h: number },
+    box: Box,
     align: "center" | "bottom" = "center",
   ) {
     if (!dataUrl?.startsWith("data:image")) return;
@@ -203,13 +212,12 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  await stamp(item.firmaTerna, FIRMA_CONSEGNA_TERNA, "bottom");
-  await stamp(item.firmaOperatore, FIRMA_CONSEGNA_DITTA, "bottom");
-  await stamp(item.firmaTerna, FIRMA_DESIGNATO_TERNA);
-  await stamp(item.firmaOperatore, FIRMA_DESIGNATO_DITTA);
+  await stamp(item.firmaTerna, SCHEDA_FIRME.consegnaTerna, "bottom");
+  await stamp(item.firmaOperatore, SCHEDA_FIRME.consegnaDitta, "bottom");
+  await stamp(item.firmaTerna, SCHEDA_FIRME.designatoTerna);
+  await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta);
 
-  const bytes = await pdf.save();
-  return bytes;
+  return pdf.save();
 }
 
 export async function downloadOfficialScheda(opts: {
