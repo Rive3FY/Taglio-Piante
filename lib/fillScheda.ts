@@ -3,29 +3,47 @@ import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
 import { scaricaBlob } from "./download";
 
-const QTY_X = 562;
+/** Colonna quantità sul nuovo foglio ufficiale (716×1015 pt). */
+const QTY_X = 668;
 
 const QTY_Y: Record<string, number> = {
-  "1.1": 543.9,
-  "1.2": 526.4,
-  "1.3": 508.9,
-  "2.1": 491.4,
-  "2.2": 473.8,
-  "2.3": 456.3,
-  "2.4": 429,
-  "2.5": 391.2,
-  "3.1": 363.2,
-  "3.2": 345.7,
-  "3.3": 328.2,
-  "3.4": 308.6,
-  "3.5": 281.6,
-  "5.2": 256.6,
-  "5.3": 239.1,
-  "5.4": 221.6,
-  "6.1": 204.1,
-  "6.2": 186.6,
-  "6.3": 169,
+  "1.1": 717.9,
+  "1.2": 696.2,
+  "1.3": 674.5,
+  "1.4": 652.9,
+  "1.5": 631.2,
+  "2.1": 609.5,
+  "2.2": 587.8,
+  "2.3": 566.1,
+  "2.4": 536.2,
+  "2.5": 498,
+  "3.1": 468.2,
+  "3.2": 445.7,
+  "3.3": 424.6,
+  "3.4": 401.7,
+  "3.5": 368.9,
+  "4.1": 340.5,
+  "4.2": 321.7,
+  "4.3": 302.9,
+  "5.1": 284.1,
+  "5.2": 265.4,
+  "5.3": 246.6,
+  "5.4": 227.7,
+  "5.5": 208.9,
+  "5.6": 190.1,
+  "5.7": 171.3,
+  "6.1": 152.6,
+  "6.2": 133.8,
+  "6.3": 113.1,
 };
+
+/** Firme CONSEGNA: tra la nota legale (y≈794) e le didascalie (y≈773). */
+const FIRMA_CONSEGNA_TERNA = { x: 24, y: 786, w: 132, h: 20 };
+const FIRMA_CONSEGNA_DITTA = { x: 398, y: 786, w: 162, h: 20 };
+
+/** Firme in chiusura: tra «Data / N° operatori» (y≈81) e «Il Designato …» (y≈54). */
+const FIRMA_DESIGNATO_TERNA = { x: 96, y: 56, w: 132, h: 26 };
+const FIRMA_DESIGNATO_DITTA = { x: 560, y: 56, w: 158, h: 26 };
 
 let templateCache: ArrayBuffer | null = null;
 
@@ -140,17 +158,17 @@ export async function fillOfficialScheda(opts: {
     }
   };
 
-  write(linea?.codice ?? "", 40, 778, 10);
-  write(lineaDescrizione(linea), 268, 778, 9);
-  writeFit(item.campata, { x: 500, y: 770, w: 78, h: 18 }, 10);
-  write(formatDate(item.dataLavoro), 56, 747.2, 9);
-  write(item.dipendenteTerna, 252, 747.2, 9);
-  write(item.rappresentanteDitta, 58, 717.2, 9);
-  write(item.ditta, 298, 717.2, 9);
+  write(linea?.codice ?? "", 48, 942, 10);
+  write(lineaDescrizione(linea), 323, 942, 9);
+  writeFit(item.campata, { x: 618, y: 934, w: 88, h: 22 }, 10);
+  write(formatDate(item.dataLavoro), 68, 917.6, 9);
+  write(item.dipendenteTerna, 303, 917.6, 9);
+  write(item.rappresentanteDitta, 70, 881.5, 9);
+  write(item.ditta, 359, 881.5, 9);
 
-  writeInBox(formatDate(item.dataLavoro), { x: 23.3, y: 85.2, w: 72.2, h: 15.6 }, 10);
+  writeInBox(formatDate(item.dataLavoro), { x: 88, y: 62, w: 92, h: 16 }, 10);
   if (item.nOperatori > 0) {
-    writeInBox(String(item.nOperatori), { x: 494.2, y: 100.8, w: 41.6, h: 15.6 }, 11);
+    writeInBox(String(item.nOperatori), { x: 520, y: 62, w: 48, h: 16 }, 11);
   }
 
   const qtyById = new Map(item.righe.map((r) => [r.prestazioneId, r.quantita]));
@@ -185,13 +203,10 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  // Sopra: nello spazio vuoto tra il testo CONSEGNA (ultima riga y≈659)
-  // e le scritte «Il Rappresentante TERNA» / «Il Rappresentante della Ditta» (y=627).
-  await stamp(item.firmaTerna, { x: 18, y: 636, w: 110, h: 22 }, "bottom");
-  await stamp(item.firmaOperatore, { x: 305, y: 636, w: 135, h: 22 }, "bottom");
-  // In basso: «Il Designato TERNA» / «Il Designato Ditta» (sotto le scritte).
-  await stamp(item.firmaTerna, { x: 70, y: 40, w: 130, h: 32 });
-  await stamp(item.firmaOperatore, { x: 455, y: 40, w: 150, h: 34 });
+  await stamp(item.firmaTerna, FIRMA_CONSEGNA_TERNA, "bottom");
+  await stamp(item.firmaOperatore, FIRMA_CONSEGNA_DITTA, "bottom");
+  await stamp(item.firmaTerna, FIRMA_DESIGNATO_TERNA);
+  await stamp(item.firmaOperatore, FIRMA_DESIGNATO_DITTA);
 
   const bytes = await pdf.save();
   return bytes;
