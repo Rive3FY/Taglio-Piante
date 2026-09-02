@@ -16,6 +16,7 @@ export default function ImportaCampatePage() {
   const { session } = useSession();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const esistenti = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
+  const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
@@ -48,13 +49,22 @@ export default function ImportaCampatePage() {
 
   async function conferma() {
     if (!anteprima || !session) return;
+    const ok = window.confirm(
+      "Confermi? Verranno eliminati tutti i rapportini, le campate e le linee attuali " +
+        "(sul telefono e su Supabase). L’app ripartirà solo con le righe di questo file.",
+    );
+    if (!ok) return;
     setBusy(true);
     setErrore(null);
     try {
       await confermaImportCampate({ fileName, anteprima, session });
       router.push("/tecnico/campate");
     } catch (e) {
-      setErrore(e instanceof Error ? e.message : "Importazione non riuscita. I dati già presenti non sono stati cancellati.");
+      setErrore(
+        e instanceof Error
+          ? e.message
+          : "Importazione non riuscita. Se i dati sono spariti, ricarica il file e riprova.",
+      );
     } finally {
       setBusy(false);
     }
@@ -65,6 +75,11 @@ export default function ImportaCampatePage() {
       <h2>Carica file campate</h2>
 
       <section className="panel">
+        <p className="muted">
+          Caricando un nuovo file l’app viene <strong>azzerata</strong> sul piano operativo: spariscono
+          rapportini, campate, linee e storico. Restano solo ditte, prestazioni e account operatori.
+          Poi si riparte con le righe del file.
+        </p>
         <label className="file-btn btn btn-primary">
           Scegli file PDF o CSV
           <input
@@ -81,18 +96,22 @@ export default function ImportaCampatePage() {
       {anteprima ? (
         <section className="panel">
           <h2>Anteprima</h2>
+          <div className="panel" style={{ borderColor: "var(--danger, #c0392b)" }}>
+            <p>
+              <strong>Attenzione:</strong> confermando verranno eliminati{" "}
+              <strong>{rapportini.length} rapportini</strong>,{" "}
+              <strong>{esistenti.filter((c) => c.tipo !== "base").length} campate</strong> e{" "}
+              <strong>{linee.length} linee</strong> attuali. Al loro posto resteranno solo le{" "}
+              <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe</strong>{" "}
+              riconosciute in questo file.
+            </p>
+          </div>
           <ul className="storico-list">
             <li>{anteprima.voci.filter((v) => v.distInt != null).length} con distanza (Dist int)</li>
-            <li>{anteprima.voci.length} interventi distinti (linea + campata + priorità)</li>
-            <li>{anteprima.nuove} nuovi</li>
-            <li>{anteprima.esistenti} già presenti</li>
-            <li>{anteprima.doppiaPriorita} campate sia urgenti sia differibili: restano due voci</li>
-            <li>{anteprima.duplicati} duplicati nel file (stessa linea, campata e priorità)</li>
-            <li>{anteprima.giaLavorate} già lavorate: lo storico resta</li>
+            <li>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} interventi nel nuovo piano</li>
+            <li>{anteprima.duplicati} duplicati nel file (si importa una sola volta)</li>
+            <li>{anteprima.doppiaPriorita} campate sia urgenti sia differibili</li>
             <li>{anteprima.scartate.length} righe non riconosciute</li>
-            {anteprima.lineeNuove.length > 0 ? (
-              <li>Linee nuove da creare: {anteprima.lineeNuove.join(", ")}</li>
-            ) : null}
           </ul>
 
           {anteprima.scartate.length > 0 ? (
@@ -111,7 +130,6 @@ export default function ImportaCampatePage() {
                   <th>Normalizzata</th>
                   <th>Dist int</th>
                   <th>Priorità</th>
-                  <th>Azione</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +141,6 @@ export default function ImportaCampatePage() {
                     <td>{v.normalizzata}</td>
                     <td>{v.distInt != null ? formatDistInt(v.distInt) : "—"}</td>
                     <td>{CAMPATA_PRIORITA_LABEL[v.priorita]}</td>
-                    <td>{v.azione.replaceAll("_", " ")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -140,7 +157,7 @@ export default function ImportaCampatePage() {
               disabled={busy || anteprima.voci.length === 0}
               onClick={() => void conferma()}
             >
-              {busy ? "Importazione…" : "Conferma importazione"}
+              {busy ? "Importazione…" : "Azzera e importa file"}
             </button>
           </div>
         </section>

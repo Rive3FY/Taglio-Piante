@@ -16,6 +16,7 @@ import type {
 import { idCampataLavoro, chiaveCampata } from "./normalize";
 import { esitiClassificati, isBaseLavoro } from "./basi";
 import type { AnteprimaImport } from "./preview";
+import { resetOperativoPerImport } from "./reset";
 
 function richiediRete() {
   const supabase = getSupabase();
@@ -36,97 +37,56 @@ export async function confermaImportCampate(opts: {
   session: Session;
 }) {
   const supabase = richiediRete();
+  await resetOperativoPerImport();
+
   const now = new Date().toISOString();
   const importId = uid("imp");
-  const linee = await db.linee.toArray();
-  const perCodice = new Map(linee.map((l) => [l.codice.toUpperCase(), l]));
-  const esistenti = await db.campateLavoro.toArray();
-  const perChiave = new Map(
-    esistenti
-      .filter((c) => c.tipo !== "base")
-      .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
-  );
+  const voci = opts.anteprima.voci.filter((v) => v.azione !== "duplicato");
 
-  const nuoveLinee: Linea[] = [];
-  for (const codice of opts.anteprima.lineeNuove) {
-    const voce = opts.anteprima.voci.find((v) => v.codiceLinea === codice);
-    const linea: Linea = {
+  const lineeMap = new Map<string, Linea>();
+  for (const voce of voci) {
+    const codice = voce.codiceLinea.toUpperCase();
+    if (lineeMap.has(codice)) continue;
+    lineeMap.set(codice, {
       id: `lin_${codice.toLowerCase()}`,
       codice,
-      nome: voce?.nomeLinea?.trim() || codice,
+      nome: voce.nomeLinea?.trim() || codice,
       tensioneKv: tensioneDaCodice(codice),
-    };
-    perCodice.set(codice, linea);
-    nuoveLinee.push(linea);
+    });
   }
+  const linee = [...lineeMap.values()];
 
   const daScrivere: CampataLavoro[] = [];
   const storico: CampataStorico[] = [];
 
-  for (const voce of opts.anteprima.voci) {
-    const linea = perCodice.get(voce.codiceLinea);
+  for (const voce of voci) {
+    const linea = lineeMap.get(voce.codiceLinea.toUpperCase());
     if (!linea) continue;
-    const presente =
-      perChiave.get(voce.chiave) ??
-      esistenti.find(
-        (c) =>
-          c.codiceLinea.toUpperCase() === voce.codiceLinea.toUpperCase() &&
-          c.normalizzata === voce.normalizzata &&
-          (c.priorita ?? "_") === (voce.priorita ?? "_"),
-      );
-    if (!presente) {
-      const campata: CampataLavoro = {
-        id: idCampataLavoro(voce.codiceLinea, voce.normalizzata, voce.priorita),
-        lineaId: linea.id,
-        codiceLinea: voce.codiceLinea,
-        nomeLinea: voce.nomeLinea || linea.nome,
-        tensioneKv: linea.tensioneKv ?? tensioneDaCodice(voce.codiceLinea),
-        originale: voce.originale,
-        normalizzata: voce.normalizzata,
-        tipo: "campata",
-        priorita: voce.priorita,
-        distInt: voce.distInt,
-        stato: "da_tagliare",
-        origine: "prevista",
-        importId,
-        syncStatus: "synced",
-        createdAt: now,
-        updatedAt: now,
-      };
-      daScrivere.push(campata);
-      storico.push({
-        id: uid("sto"),
-        campataId: campata.id,
-        evento: "importata",
-        stato: "da_tagliare",
-        priorita: voce.priorita,
-        createdAt: now,
-      });
-      continue;
-    }
-
-    const changedNome = Boolean(voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea);
-    const changedDist =
-      presente.stato === "da_tagliare" &&
-      voce.distInt != null &&
-      voce.distInt !== presente.distInt;
-    if (!changedNome && !changedDist) continue;
-    const aggiornata: CampataLavoro = {
-      ...presente,
-      nomeLinea: voce.nomeLinea || presente.nomeLinea,
-      distInt: voce.distInt != null ? voce.distInt : presente.distInt,
-      updatedAt: now,
+    const campata: CampataLavoro = {
+      id: idCampataLavoro(voce.codiceLinea, voce.normalizzata, voce.priorita),
+      lineaId: linea.id,
+      codiceLinea: voce.codiceLinea,
+      nomeLinea: voce.nomeLinea || linea.nome,
+      tensioneKv: linea.tensioneKv ?? tensioneDaCodice(voce.codiceLinea),
+      originale: voce.originale,
+      normalizzata: voce.normalizzata,
+      tipo: "campata",
+      priorita: voce.priorita,
+      distInt: voce.distInt,
+      stato: "da_tagliare",
+      origine: "prevista",
       importId,
       syncStatus: "synced",
+      createdAt: now,
+      updatedAt: now,
     };
-    daScrivere.push(aggiornata);
+    daScrivere.push(campata);
     storico.push({
       id: uid("sto"),
-      campataId: presente.id,
-      evento: "reimportata",
-      stato: presente.stato,
-      priorita: presente.priorita,
-      note: `Import ${opts.fileName}`,
+      campataId: campata.id,
+      evento: "importata",
+      stato: "da_tagliare",
+      priorita: voce.priorita,
       createdAt: now,
     });
   }
@@ -136,17 +96,17 @@ export async function confermaImportCampate(opts: {
     fileName: opts.fileName,
     createdAt: now,
     createdBy: opts.session.nome,
-    riconosciute: opts.anteprima.voci.length,
-    nuove: opts.anteprima.nuove,
-    esistenti: opts.anteprima.esistenti,
+    riconosciute: voci.length,
+    nuove: voci.length,
+    esistenti: 0,
     duplicati: opts.anteprima.duplicati,
     scartate: opts.anteprima.scartate.length,
   };
 
-  if (nuoveLinee.length > 0) {
-    const { error } = await supabase.from("linee").upsert(nuoveLinee.map(lineaToRow));
+  if (linee.length > 0) {
+    const { error } = await supabase.from("linee").upsert(linee.map(lineaToRow));
     if (error) throw new Error(messaggioErroreSupabase(error.message));
-    await db.linee.bulkPut(nuoveLinee);
+    await db.linee.bulkPut(linee);
   }
 
   if (daScrivere.length > 0) {
