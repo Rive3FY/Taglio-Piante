@@ -44,6 +44,12 @@ function dataUrlToBytes(dataUrl: string) {
   return bytes;
 }
 
+function pngBlobFromBytes(bytes: Uint8Array) {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return new Blob([copy], { type: "image/png" });
+}
+
 /** Taglia il bianco intorno al tratto, così una firma piccola si ingrandisce
  * e una enorme si riduce fino a riempire lo stesso riquadro. */
 async function ritagliaInchiostroPng(bytes: Uint8Array): Promise<Uint8Array> {
@@ -51,7 +57,7 @@ async function ritagliaInchiostroPng(bytes: Uint8Array): Promise<Uint8Array> {
     return bytes;
   }
   try {
-    const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+    const bitmap = await createImageBitmap(pngBlobFromBytes(bytes));
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
