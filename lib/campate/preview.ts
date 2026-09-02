@@ -43,6 +43,7 @@ export function costruisciAnteprima(
       duplicati += 1;
       perChiave.set(chiave, {
         ...gia,
+        distInt: gia.distInt ?? r.distInt,
         azione: "duplicato",
         nota: "Stessa linea, campata e priorità ripetuta nel file: si importa una sola volta.",
       });
@@ -92,6 +93,9 @@ export function costruisciAnteprima(
     if (presente.stato !== "da_tagliare") {
       voce.azione = "gia_lavorata";
       voce.nota = `Già ${presente.stato.replace("_", " ")}: stato e storico restano.`;
+    } else if (voce.distInt != null && presente.distInt !== voce.distInt) {
+      voce.azione = "invariata";
+      voce.nota = presente.distInt == null ? "Aggiorna la distanza interna dal file." : "Aggiorna distanza e dati dal file.";
     } else {
       voce.azione = "invariata";
     }

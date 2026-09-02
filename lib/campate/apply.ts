@@ -107,14 +107,14 @@ export async function confermaImportCampate(opts: {
 
     const changedNome = Boolean(voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea);
     const changedDist =
-      voce.distInt != null &&
       presente.stato === "da_tagliare" &&
+      voce.distInt != null &&
       voce.distInt !== presente.distInt;
     if (!changedNome && !changedDist) continue;
     const aggiornata: CampataLavoro = {
       ...presente,
       nomeLinea: voce.nomeLinea || presente.nomeLinea,
-      distInt: changedDist ? voce.distInt : presente.distInt,
+      distInt: voce.distInt != null ? voce.distInt : presente.distInt,
       updatedAt: now,
       importId,
       syncStatus: "synced",

@@ -82,6 +82,7 @@ export default function ImportaCampatePage() {
         <section className="panel">
           <h2>Anteprima</h2>
           <ul className="storico-list">
+            <li>{anteprima.voci.filter((v) => v.distInt != null).length} con distanza (Dist int)</li>
             <li>{anteprima.voci.length} interventi distinti (linea + campata + priorità)</li>
             <li>{anteprima.nuove} nuovi</li>
             <li>{anteprima.esistenti} già presenti</li>

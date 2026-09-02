@@ -1,4 +1,9 @@
-import { parseCsvCampate, parseTestoCampate, type ParseCampateResult } from "./parse";
+import {
+  parseCsvCampate,
+  parseMiglioreCampate,
+  parseTestoCampate,
+  type ParseCampateResult,
+} from "./parse";
 
 async function testoDaPdf(data: ArrayBuffer) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -16,24 +21,27 @@ async function testoDaPdf(data: ArrayBuffer) {
   return pezzi.join(" ");
 }
 
+function parseTestoGenerico(testo: string): ParseCampateResult {
+  return (
+    parseMiglioreCampate(parseTestoCampate(testo), parseCsvCampate(testo)) ??
+    parseTestoCampate(testo)
+  );
+}
+
 export async function parseFileCampate(file: File): Promise<ParseCampateResult> {
   const nome = file.name.toLowerCase();
   const buffer = await file.arrayBuffer();
 
   if (nome.endsWith(".csv") || nome.endsWith(".txt") || file.type.includes("csv") || file.type.includes("text")) {
     const testo = new TextDecoder("utf-8").decode(buffer);
-    return parseCsvCampate(testo) ?? parseTestoCampate(testo);
+    return parseTestoGenerico(testo);
   }
 
   if (nome.endsWith(".pdf") || file.type === "application/pdf") {
     const testo = await testoDaPdf(buffer);
-    const daCsv = parseCsvCampate(testo);
-    if (daCsv && daCsv.riconosciute.length > 0) return daCsv;
-    return parseTestoCampate(testo);
+    return parseTestoGenerico(testo);
   }
 
   const testo = new TextDecoder("utf-8").decode(buffer);
-  const daCsv = parseCsvCampate(testo);
-  if (daCsv && daCsv.riconosciute.length > 0) return daCsv;
-  return parseTestoCampate(testo);
+  return parseTestoGenerico(testo);
 }

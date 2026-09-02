@@ -32,17 +32,29 @@ const HEADER =
   /campata\s+dist\s*int\s+priorit[aà]\s+c\.\s*est\s*int\s+c\.\s*nord\s*int\s+linea\s+nome\s+linea/i;
 
 /**
- * Riga operativa. Il primo token è `{codice}-{estremo}---` (a volte con un suffisso tipo 054-5 o 999-CAS).
- * Non dipende dai nomi delle linee né dai numeri del fac-simile: è il formato del file.
+ * Riga operativa LIDAR. Dopo codice-campata c’è la distanza interna, poi la priorità.
+ * I trattini dopo la campata possono essere assenti nel PDF (solo spazi).
  */
 const RIGA =
-  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)-+\s+([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+[\d.,]+\s+[\d.,]+\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*-+\s+[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
+  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)\s*-*\s*([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+[\d.,]+\s+[\d.,]+\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*\s*-*\s*[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
 
-function parseDistInt(raw: string) {
-  const t = raw.trim().replace(",", ".");
+export function parseDistInt(raw: string) {
+  let t = raw.trim();
   if (!t) return undefined;
+  if (/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) {
+    t = t.replace(/\./g, "").replace(",", ".");
+  } else {
+    t = t.replace(",", ".");
+  }
   const n = Number(t);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function indiceColonnaDist(header: string[]) {
+  return header.findIndex((h) => {
+    if (h === "dist int" || h === "dist_int" || h === "dist" || h === "distanza") return true;
+    return h.includes("dist") && h.includes("int");
+  });
 }
 
 function pulisciTesto(raw: string) {
@@ -98,7 +110,7 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
       testo: testo.slice(0, 120),
       motivo: haIntestazione
         ? "Intestazione trovata ma nessuna riga nel formato atteso (codice-campata, priorità, linea)."
-        : "Formato non riconosciuto. Serve un file come il fac-simile LIDAR (colonne Campata, Priorità, Linea, Nome linea).",
+        : "Formato non riconosciuto. Serve un file come il fac-simile LIDAR (colonne Campata, Dist int, Priorità, Linea, Nome linea).",
     });
   }
 
@@ -111,7 +123,7 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
   const sep = righe[0].includes(";") && !righe[0].includes(",") ? ";" : ",";
   const header = splitCsv(righe[0], sep).map((h) => h.trim().toLowerCase());
   const iCampata = header.findIndex((h) => h === "campata" || h.includes("campata"));
-  const iDist = header.findIndex((h) => h === "dist int" || h === "dist_int" || (h.includes("dist") && h.includes("int")));
+  const iDist = indiceColonnaDist(header);
   const iPrio = header.findIndex((h) => h.includes("prior"));
   const iLinea = header.findIndex((h) => h === "linea" || h === "codice linea" || h === "codice");
   const iNome = header.findIndex((h) => h.includes("nome") && h.includes("linea"));
@@ -148,6 +160,18 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
     });
   });
   return { riconosciute, scartate };
+}
+
+/** Sceglie il parser che restituisce più distanze (Dist int), poi più righe. */
+export function parseMiglioreCampate(...candidati: (ParseCampateResult | null | undefined)[]) {
+  const ok = candidati.filter((c): c is ParseCampateResult => Boolean(c && c.riconosciute.length > 0));
+  if (ok.length === 0) return null;
+  return ok.sort((a, b) => {
+    const distA = a.riconosciute.filter((r) => r.distInt != null).length;
+    const distB = b.riconosciute.filter((r) => r.distInt != null).length;
+    if (distB !== distA) return distB - distA;
+    return b.riconosciute.length - a.riconosciute.length;
+  })[0];
 }
 
 function estraiOriginaleDaCella(cella: string, codiceLinea: string) {
