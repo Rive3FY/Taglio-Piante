@@ -11,22 +11,22 @@ export const SCHEDA_HEADER = {
   campata: { x: 596.4, y: 944.8, w: 98.9, h: 20.7 } satisfies Box,
 } as const;
 
-/** «In data …» — sui puntini, non sopra la scritta. */
-export const SCHEDA_IN_DATA: LineText = { x: 66, y: 915.5, maxW: 72, size: 9 };
+/** «In data …» — sui puntini, data per esteso. */
+export const SCHEDA_IN_DATA: LineText = { x: 79, y: 919.3, maxW: 90, size: 9 };
 
 /** «Il sottoscritto …» Dipendente TERNA. */
-export const SCHEDA_IN_DATA_TERNA: LineText = { x: 211, y: 915.5, maxW: 116, size: 8.5 };
+export const SCHEDA_IN_DATA_TERNA: LineText = { x: 209, y: 920, maxW: 175, size: 9 };
 
 /** «Al Sig. …» */
-export const SCHEDA_AL_SIG_REP: LineText = { x: 64, y: 879.4, maxW: 94, size: 9 };
+export const SCHEDA_AL_SIG_REP: LineText = { x: 84, y: 885.5, maxW: 140, size: 9 };
 
 /** «… della Ditta …» */
-export const SCHEDA_AL_SIG_DITTA: LineText = { x: 351, y: 879.4, maxW: 50, size: 8 };
+export const SCHEDA_AL_SIG_DITTA: LineText = { x: 355, y: 884, maxW: 145, size: 9 };
 
 /** Data sotto l’etichetta; N° operatori nel riquadro piccolo a destra. */
 export const SCHEDA_FOOTER = {
-  date: { x: 28.1, y: 68, w: 87.9, h: 10.5 } satisfies Box,
-  nOperatori: { x: 596.4, y: 80.5, w: 50, h: 11 } satisfies Box,
+  date: { x: 28.1, y: 65.7, w: 87.9, h: 12 } satisfies Box,
+  nOperatori: { x: 596.4, y: 80.5, w: 50, h: 12 } satisfies Box,
 } as const;
 
 export const SCHEDA_QTY = {
@@ -84,8 +84,8 @@ export function schedaQtyBox(codice: string): Box | null {
   };
 }
 
-/** Firme in chiusura, nella fascia sotto Data / Personale. */
+/** Firme sotto le etichette «Il Designato …», non sopra Data. */
 export const SCHEDA_FIRME = {
-  designatoTerna: { x: 130, y: 50.3, w: 200, h: 18 },
-  designatoDitta: { x: 490, y: 50.3, w: 190, h: 18 },
+  designatoTerna: { x: 28, y: 16, w: 250, h: 34 },
+  designatoDitta: { x: 430, y: 16, w: 250, h: 34 },
 } as const satisfies Record<string, Box>;

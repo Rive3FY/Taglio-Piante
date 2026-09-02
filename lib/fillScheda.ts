@@ -2,7 +2,6 @@
 
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
-import { lineaDescrizione } from "./format";
 import { scaricaBlob } from "./download";
 import {
   SCHEDA_AL_SIG_DITTA,
@@ -49,17 +48,22 @@ function asArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** Data sul foglio ufficiale: 12/08/26, come sul cartaceo. */
+/** Data sul foglio ufficiale: 12/08/2026, come nel fac-simile compilato. */
 function formatSchedaDate(iso: string) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y.slice(-2)}`;
+  return `${d}/${m}/${y}`;
 }
 
 type Writer = {
-  writeInBox: (text: string | null | undefined, box: Box, size: number) => void;
-  writeFit: (text: string | null | undefined, box: Box, maxSize: number) => void;
+  writeInBox: (text: string | null | undefined, box: Box, size: number, align?: "center" | "left") => void;
+  writeFit: (
+    text: string | null | undefined,
+    box: Box,
+    maxSize: number,
+    align?: "center" | "left",
+  ) => void;
   writeOnLine: (
     text: string | null | undefined,
     line: LineText,
@@ -91,7 +95,7 @@ function createWriter(
     }
   };
 
-  const writeInBox = (text: string | null | undefined, box: Box, size: number) => {
+  const writeInBox = (text: string | null | undefined, box: Box, size: number, align: "center" | "left" = "center") => {
     const value = safeText(text).trim();
     if (!value) return;
     let drawn = value;
@@ -102,12 +106,17 @@ function createWriter(
       drawn = value.replace(/[^\x20-\x7E]/g, " ");
       width = font.widthOfTextAtSize(drawn, size);
     }
-    const x = box.x + Math.max(0, (box.w - width) / 2);
+    const x = align === "left" ? box.x : box.x + Math.max(0, (box.w - width) / 2);
     const y = box.y + (box.h - size) / 2 + size * 0.18;
     write(drawn, x, y, size);
   };
 
-  const writeFit = (text: string | null | undefined, box: Box, maxSize: number) => {
+  const writeFit = (
+    text: string | null | undefined,
+    box: Box,
+    maxSize: number,
+    align: "center" | "left" = "center",
+  ) => {
     const value = safeText(text).trim();
     if (!value) return;
     const minSize = 5.5;
@@ -145,7 +154,7 @@ function createWriter(
     for (let i = 0; i < righe.length; i += 1) {
       const riga = righe[i]!;
       const width = misura(riga, size);
-      const x = box.x + Math.max(0, (box.w - width) / 2);
+      const x = align === "left" ? box.x : box.x + Math.max(0, (box.w - width) / 2);
       write(riga, x, y, size);
       y += lineGap(size);
     }
@@ -189,7 +198,7 @@ export async function fillOfficialScheda(opts: {
     const w = createWriter(page, font);
 
     w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
-    w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
+    w.writeFit(linea?.nome ?? "", SCHEDA_HEADER.descr, 11);
     w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
 
     w.writeOnLine(formatSchedaDate(item.dataLavoro ?? ""), SCHEDA_IN_DATA);
