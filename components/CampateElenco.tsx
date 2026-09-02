@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -132,6 +132,7 @@ export function CampateElenco({
       void syncNow();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Modifica non consentita.");
+      throw e;
     }
   }
 
@@ -390,6 +391,31 @@ function eventoDaRapportino(evento: string) {
   );
 }
 
+function eEventoAttenzione(evento: string) {
+  return evento === "attenzionare" || evento === "attenzionare_off";
+}
+
+function collassaLog(storico: CampataStorico[]) {
+  const crono = [...storico].sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  );
+  const out: CampataStorico[] = [];
+  for (const s of crono) {
+    const prev = out[out.length - 1];
+    if (
+      eEventoAttenzione(s.evento) &&
+      prev &&
+      eEventoAttenzione(prev.evento) &&
+      (prev.operatore || "") === (s.operatore || "")
+    ) {
+      out[out.length - 1] = s;
+      continue;
+    }
+    out.push(s);
+  }
+  return out.reverse();
+}
+
 function etichettaEvento(evento: string) {
   if (evento === "da_non_tagliare" || evento === "nulla_da_tagliare" || evento === "tralasciata") {
     return "Da non tagliare";
@@ -419,9 +445,11 @@ function CampataRiga({
   storico: CampataStorico[];
   aperta: boolean;
   onToggle: () => void;
-  onPatch: (patch: { attenzionare?: boolean; note?: string; daNonTagliare?: boolean }) => void;
+  onPatch: (patch: { attenzionare?: boolean; note?: string; daNonTagliare?: boolean }) => Promise<void> | void;
 }) {
-  const [nota, setNota] = useState(c.note ?? "");
+  const [nota, setNota] = useState("");
+  const [attenzione, setAttenzione] = useState(Boolean(c.attenzionare));
+  const attenzioneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const session = sessionUserId
     ? { userId: sessionUserId, ruolo: sessionRuolo ?? ruolo, nome: "", email: "" }
     : null;
@@ -433,20 +461,49 @@ function CampataRiga({
   const mostraRapportino = Boolean(c.rapportinoId) || !nonTagliare;
 
   useEffect(() => {
-    setNota(c.note ?? "");
-  }, [c.id, c.note]);
+    setNota("");
+  }, [c.id]);
 
-  function salvaNota() {
-    if (nota.trim() === (c.note ?? "").trim()) return;
-    onPatch({ note: nota });
+  useEffect(() => {
+    setAttenzione(Boolean(c.attenzionare));
+  }, [c.id, c.attenzionare]);
+
+  useEffect(
+    () => () => {
+      if (attenzioneTimer.current) clearTimeout(attenzioneTimer.current);
+    },
+    [],
+  );
+
+  function cambiaAttenzione(valore: boolean) {
+    setAttenzione(valore);
+    if (attenzioneTimer.current) clearTimeout(attenzioneTimer.current);
+    attenzioneTimer.current = setTimeout(() => {
+      void Promise.resolve(onPatch({ attenzionare: valore })).catch(() => {
+        setAttenzione(!valore);
+      });
+    }, 500);
   }
 
-  const logUtile = storico.filter((s) => {
-    const label = etichettaEvento(s.evento);
-    if (!label) return false;
-    if (eventoDaRapportino(s.evento)) return Boolean(s.rapportinoId);
-    return true;
-  });
+  async function salvaNota() {
+    const testo = nota.trim();
+    if (!testo) return;
+    setNota("");
+    try {
+      await onPatch({ note: testo });
+    } catch {
+      setNota(testo);
+    }
+  }
+
+  const logUtile = collassaLog(
+    storico.filter((s) => {
+      const label = etichettaEvento(s.evento);
+      if (!label) return false;
+      if (eventoDaRapportino(s.evento)) return Boolean(s.rapportinoId);
+      return true;
+    }),
+  );
 
   return (
     <>
@@ -537,23 +594,29 @@ function CampataRiga({
               <label className="check-line">
                 <input
                   type="checkbox"
-                  checked={Boolean(c.attenzionare)}
+                  checked={attenzione}
                   disabled={lockAttenzione || !sessionUserId}
-                  onChange={(e) => onPatch({ attenzionare: e.target.checked })}
+                  onChange={(e) => cambiaAttenzione(e.target.checked)}
                 />
                 Da attenzionare
                 {lockAttenzione ? (
                   <span className="muted"> — già segnato, non modificabile</span>
                 ) : null}
               </label>
+              {c.note?.trim() ? (
+                <div className="campata-note-blocco">
+                  <span className="muted">Note già inserite — non si cancellano, si possono solo aggiungere</span>
+                  <p>{c.note.trim()}</p>
+                </div>
+              ) : null}
               <label>
-                Nota
+                Aggiungi una nota
                 <textarea
                   rows={3}
                   value={nota}
                   onChange={(e) => setNota(e.target.value)}
-                  onBlur={salvaNota}
-                  placeholder="Scrivi qui la nota della campata"
+                  onBlur={() => void salvaNota()}
+                  placeholder="La nota si aggiunge a quelle già presenti"
                 />
               </label>
               {logUtile.length > 0 ? (

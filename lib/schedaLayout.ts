@@ -87,5 +87,5 @@ export function schedaQtyBox(codice: string): Box | null {
 /** Firme sotto le etichette «Il Designato …», non sopra Data. */
 export const SCHEDA_FIRME = {
   designatoTerna: { x: 28, y: 16, w: 250, h: 34 },
-  designatoDitta: { x: 430, y: 16, w: 250, h: 34 },
+  designatoDitta: { x: 575, y: 16, w: 135, h: 34 },
 } as const satisfies Record<string, Box>;

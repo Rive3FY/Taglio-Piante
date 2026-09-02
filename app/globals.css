@@ -550,7 +550,18 @@ select.inline-field { width: auto; min-width: 160px; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.campata-esploso { display: grid; gap: 10px; }
+.campata-note-blocco {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f7faf8;
+}
+.campata-note-blocco p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  font-size: 15px;
+  line-height: 1.45;
+}
 .campata-nota {
   margin: 0;
   white-space: pre-wrap;
@@ -690,6 +701,25 @@ select.inline-field { width: auto; min-width: 160px; }
 .contab-giorno { display: grid; gap: 10px; }
 .contab-giorno h3 { margin: 0; font-size: 16px; }
 .contab-linee { display: grid; gap: 8px; }
+.contab-cerca-linea {
+  flex: 1 1 220px;
+  max-width: 320px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.mostra-altro {
+  width: 100%;
+  border: 1px dashed var(--line);
+  background: #f4faf6;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+.mostra-altro:hover { background: #e7f3ec; }
 .contab-torte {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

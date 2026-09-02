@@ -22,6 +22,9 @@ import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
 import { CalendarioMese } from "@/components/CalendarioMese";
+import { LineaPicker } from "@/components/LineaPicker";
+
+const LINEE_INIZIALI = 6;
 
 function TabellaVoci({
   voci,
@@ -91,6 +94,9 @@ export default function ContabilitaPage() {
   const [giorno, setGiorno] = useState<string | null>(oggi);
   const [lineaAperta, setLineaAperta] = useState<string | null>(null);
   const [lineaEstratta, setLineaEstratta] = useState("");
+  const [cercaLinea, setCercaLinea] = useState("");
+  const [lineaCercataId, setLineaCercataId] = useState("");
+  const [mostraAltreLinee, setMostraAltreLinee] = useState(false);
 
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
   const aggregato = useMemo(
@@ -128,6 +134,33 @@ export default function ContabilitaPage() {
     );
   }, [rapportini, prestazioni, linee, lineaEstrattaId, oggi]);
 
+  const opzioniLineaMese = useMemo(
+    () =>
+      aggregato.perLinea.map((l) => ({
+        id: l.lineaId,
+        codice: l.codiceLinea,
+        nome: l.nomeLinea,
+      })),
+    [aggregato.perLinea],
+  );
+  const lineeFiltrate = useMemo(() => {
+    if (lineaCercataId) {
+      return aggregato.perLinea.filter((l) => l.lineaId === lineaCercataId);
+    }
+    const term = cercaLinea.trim().toLowerCase();
+    if (!term) return aggregato.perLinea;
+    return aggregato.perLinea.filter(
+      (l) =>
+        l.codiceLinea.toLowerCase().includes(term) ||
+        l.nomeLinea.toLowerCase().includes(term),
+    );
+  }, [aggregato.perLinea, cercaLinea, lineaCercataId]);
+  const lineeVisibili =
+    mostraAltreLinee || lineaCercataId
+      ? lineeFiltrate
+      : lineeFiltrate.slice(0, LINEE_INIZIALI);
+  const altreLinee = Math.max(0, lineeFiltrate.length - lineeVisibili.length);
+
   return (
     <>
       <div className="elenco-head">
@@ -156,6 +189,9 @@ export default function ContabilitaPage() {
               setMese(m);
               setGiorno(m === oggi.slice(0, 7) ? oggi : null);
               setLineaAperta(null);
+              setCercaLinea("");
+              setLineaCercataId("");
+              setMostraAltreLinee(false);
             }}
           >
             {etichettaMese(m)}
@@ -226,12 +262,37 @@ export default function ContabilitaPage() {
       </section>
 
       <section className="panel">
-        <h2>Per linea</h2>
+        <div className="elenco-head">
+          <h2>Per linea</h2>
+          {aggregato.perLinea.length > 0 ? (
+            <label className="contab-cerca-linea">
+              Cerca linea
+              <LineaPicker
+                key={meseEffettivo}
+                linee={opzioniLineaMese}
+                value={lineaCercataId}
+                campo="completa"
+                placeholder="Codice o nome linea"
+                onQueryChange={(q) => {
+                  setCercaLinea(q);
+                  setMostraAltreLinee(false);
+                }}
+                onChange={(id) => {
+                  setLineaCercataId(id);
+                  setLineaAperta(id || null);
+                  if (!id) setMostraAltreLinee(false);
+                }}
+              />
+            </label>
+          ) : null}
+        </div>
         {aggregato.perLinea.length === 0 ? (
           <p className="muted">Nessuna linea con rapportini in questo mese.</p>
+        ) : lineeFiltrate.length === 0 ? (
+          <p className="muted">Nessuna linea trovata.</p>
         ) : (
           <div className="contab-linee">
-            {aggregato.perLinea.map((l) => {
+            {lineeVisibili.map((l) => {
               const aperta = lineaAperta === l.lineaId;
               return (
                 <div key={l.lineaId}>
@@ -276,6 +337,11 @@ export default function ContabilitaPage() {
                 </div>
               );
             })}
+            {altreLinee > 0 ? (
+              <button type="button" className="mostra-altro" onClick={() => setMostraAltreLinee(true)}>
+                Mostra altro ({altreLinee})
+              </button>
+            ) : null}
           </div>
         )}
       </section>
@@ -309,7 +375,7 @@ export default function ContabilitaPage() {
                 type="button"
                 className="btn btn-primary"
                 disabled={estratto.voci.length === 0}
-                onClick={() => scaricaPrestazioniLineaExcel(estratto, oggi)}
+                onClick={() => void scaricaPrestazioniLineaExcel(estratto, oggi)}
               >
                 Scarica Excel
               </button>

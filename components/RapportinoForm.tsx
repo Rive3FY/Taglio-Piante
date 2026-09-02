@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, enqueueSync, nextNumero } from "@/lib/db";
-import { formatDate, lineaDescrizione, todayIso, uid } from "@/lib/format";
+import { formatDate, todayIso, uid } from "@/lib/format";
 import { officialSchedaObjectUrl } from "@/lib/fillScheda";
 import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
@@ -455,11 +455,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         <div className="scheda-head">
           <label>
             Codice linea
-            <LineaPicker linee={linee} value={effectiveLineaId} onChange={setLineaId} />
+            <LineaPicker linee={linee} value={effectiveLineaId} onChange={setLineaId} campo="codice" />
           </label>
           <label>
             Descrizione linea
-            <input readOnly value={lineaDescrizione(linea)} />
+            <LineaPicker linee={linee} value={effectiveLineaId} onChange={setLineaId} campo="nome" />
           </label>
           <label>
             {qtyHaBase ? "Basi" : "Campata"}

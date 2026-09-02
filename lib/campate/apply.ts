@@ -26,6 +26,12 @@ import { campataGiaChiusaDaFoglio } from "./guard";
 import type { AnteprimaImport } from "./preview";
 import { resetOperativoPerImport } from "./reset";
 
+function eEventoAttenzione(evento: string) {
+  return evento === "attenzionare" || evento === "attenzionare_off";
+}
+
+const FINESTRA_ATTENZIONE_MS = 2 * 60 * 1000;
+
 function richiediRete() {
   const supabase = getSupabase();
   if (!supabase) throw new Error("Supabase non è configurato su questo dispositivo.");
@@ -761,6 +767,15 @@ export async function aggiornaDettagliCampata(
       aggiornata.attenzionare = patch.attenzionare;
       if (patch.attenzionare) aggiornata.attenzionareBy = session?.userId;
       else delete aggiornata.attenzionareBy;
+      const esistenti = await db.campateStorico.where("campataId").equals(riga.id).toArray();
+      const limite = Date.now() - FINESTRA_ATTENZIONE_MS;
+      const recenti = esistenti.filter(
+        (s) =>
+          eEventoAttenzione(s.evento) &&
+          s.operatore === nome &&
+          new Date(s.createdAt).getTime() >= limite,
+      );
+      if (recenti.length > 0) await db.campateStorico.bulkDelete(recenti.map((s) => s.id));
       storico.push({
         id: uid("sto"),
         campataId: riga.id,
@@ -773,19 +788,21 @@ export async function aggiornaDettagliCampata(
     }
 
     if (patch.note !== undefined && riga.id === presente.id) {
-      const nota = patch.note.trim();
-      if (nota) aggiornata.note = nota;
-      else delete aggiornata.note;
-      storico.push({
-        id: uid("sto"),
-        campataId: riga.id,
-        evento: "nota",
-        stato: presente.stato,
-        priorita: presente.priorita,
-        operatore: nome,
-        note: aggiornata.note,
-        createdAt: now,
-      });
+      const aggiunta = patch.note.trim();
+      if (aggiunta) {
+        const precedente = (riga.note ?? "").trim();
+        aggiornata.note = precedente ? `${precedente}\n${aggiunta}` : aggiunta;
+        storico.push({
+          id: uid("sto"),
+          campataId: riga.id,
+          evento: "nota",
+          stato: presente.stato,
+          priorita: presente.priorita,
+          operatore: nome,
+          note: aggiunta,
+          createdAt: now,
+        });
+      }
     }
 
     daScrivere.push(aggiornata);
