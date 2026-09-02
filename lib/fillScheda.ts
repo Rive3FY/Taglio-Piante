@@ -31,13 +31,13 @@ async function loadTemplate() {
   return templateCache.slice(0);
 }
 
-function safeText(value: string) {
-  return value
-    .replaceAll("—", "-")
-    .replaceAll("\u2019", "'")
-    .replaceAll("\u2018", "'")
-    .replaceAll("\u201c", '"')
-    .replaceAll("\u201d", '"');
+function safeText(value?: string | null) {
+  return (value ?? "")
+    .replace(/—/g, "-")
+    .replace(/\u2019/g, "'")
+    .replace(/\u2018/g, "'")
+    .replace(/\u201c/g, '"')
+    .replace(/\u201d/g, '"');
 }
 
 function dataUrlToBytes(dataUrl: string) {
@@ -141,12 +141,13 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
   };
 
   const writeComb = (
-    text: string,
-    cells: ReadonlyArray<{ x: number; w: number }>,
-    row: Pick<Box, "y" | "h">,
+    text: string | undefined | null,
+    cells: ReadonlyArray<{ x: number; w: number }> | undefined,
+    row: Pick<Box, "y" | "h"> | undefined,
     size = 8.5,
     uppercase = false,
   ) => {
+    if (!cells?.length || !row) return;
     const raw = safeText(text).trim();
     if (!raw) return;
     const chars = (uppercase ? raw.toUpperCase() : raw).replace(/\s+/g, " ");
@@ -164,7 +165,7 @@ export async function fillOfficialScheda(opts: {
   linea?: Linea;
   prestazioni: Prestazione[];
 }) {
-  const { item, linea, prestazioni } = opts;
+  const { item, linea, prestazioni = [] } = opts;
   const pdf = await PDFDocument.load(await loadTemplate());
   const page = pdf.getPages()[0];
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -172,7 +173,7 @@ export async function fillOfficialScheda(opts: {
 
   w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
   w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
-  w.writeInBox(item.campata, SCHEDA_HEADER.campata, 12);
+  w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
 
   w.writeComb(formatDate(item.dataLavoro), SCHEDA_IN_DATA.cells, SCHEDA_IN_DATA, 8);
   w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA.cells, SCHEDA_IN_DATA_TERNA, 7.5, true);
@@ -185,7 +186,7 @@ export async function fillOfficialScheda(opts: {
     w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
   }
 
-  const qtyById = new Map(item.righe.map((r) => [r.prestazioneId, r.quantita]));
+  const qtyById = new Map((item.righe ?? []).map((r) => [r.prestazioneId, r.quantita]));
   for (const p of prestazioni) {
     const q = qtyById.get(p.id);
     const y = SCHEDA_QTY.y[p.codice];
