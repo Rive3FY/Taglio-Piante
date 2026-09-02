@@ -3,11 +3,13 @@ import type { Linea, Prestazione, Rapportino } from "./types";
 import { formatDate, lineaDescrizione } from "./format";
 import { scaricaBlob } from "./download";
 import {
-  SCHEDA_AL_SIG,
+  SCHEDA_AL_SIG_DITTA,
+  SCHEDA_AL_SIG_REP,
   SCHEDA_FIRME,
   SCHEDA_FOOTER,
   SCHEDA_HEADER,
   SCHEDA_IN_DATA,
+  SCHEDA_IN_DATA_TERNA,
   SCHEDA_QTY,
   type Box,
 } from "./schedaLayout";
@@ -32,10 +34,10 @@ async function loadTemplate() {
 function safeText(value: string) {
   return value
     .replaceAll("—", "-")
-    .replaceAll("’", "'")
-    .replaceAll("‘", "'")
-    .replaceAll("“", '"')
-    .replaceAll("”", '"');
+    .replaceAll("\u2019", "'")
+    .replaceAll("\u2018", "'")
+    .replaceAll("\u201c", '"')
+    .replaceAll("\u201d", '"');
 }
 
 function dataUrlToBytes(dataUrl: string) {
@@ -71,6 +73,14 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     }
   };
 
+  const misura = (s: string, size: number) => {
+    try {
+      return font.widthOfTextAtSize(s, size);
+    } catch {
+      return font.widthOfTextAtSize(s.replace(/[^\x20-\x7E]/g, " "), size);
+    }
+  };
+
   const writeInBox = (text: string, box: Box, size: number) => {
     const value = safeText(text).trim();
     if (!value) return;
@@ -92,13 +102,6 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     if (!value) return;
     const minSize = 5.5;
     const lineGap = (size: number) => size * 1.12;
-    const misura = (s: string, size: number) => {
-      try {
-        return font.widthOfTextAtSize(s, size);
-      } catch {
-        return font.widthOfTextAtSize(s.replace(/[^\x20-\x7E]/g, " "), size);
-      }
-    };
     const spezza = (size: number) => {
       const parole = value.split(/,\s*/);
       const righe: string[] = [""];
@@ -130,7 +133,9 @@ function createWriter(page: ReturnType<PDFDocument["getPages"]>[number], font: A
     const totH = righe.length * lineGap(size);
     let y = box.y + Math.max(0, (box.h - totH) / 2) + size * 0.18;
     for (const riga of righe) {
-      write(riga, box.x, y, size);
+      const width = misura(riga, size);
+      const x = box.x + Math.max(0, (box.w - width) / 2);
+      write(riga, x, y, size);
       y += lineGap(size);
     }
   };
@@ -166,16 +171,16 @@ export async function fillOfficialScheda(opts: {
   const w = createWriter(page, font);
 
   w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
-  w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 9);
-  w.writeFit(item.campata, SCHEDA_HEADER.campata, 10);
+  w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
+  w.writeInBox(item.campata, SCHEDA_HEADER.campata, 12);
 
-  w.writeFit(formatDate(item.dataLavoro), SCHEDA_IN_DATA.data, 8);
-  w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA.terna.cells, SCHEDA_IN_DATA.terna, 7.5);
+  w.writeComb(formatDate(item.dataLavoro), SCHEDA_IN_DATA.cells, SCHEDA_IN_DATA, 8);
+  w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA.cells, SCHEDA_IN_DATA_TERNA, 7.5, true);
 
-  w.writeFit(item.rappresentanteDitta, SCHEDA_AL_SIG.rep, 8);
-  w.writeFit(item.ditta, SCHEDA_AL_SIG.ditta, 8);
+  w.writeComb(item.rappresentanteDitta, SCHEDA_AL_SIG_REP.cells, SCHEDA_AL_SIG_REP, 8, true);
+  w.writeComb(item.ditta, SCHEDA_AL_SIG_DITTA.cells, SCHEDA_AL_SIG_DITTA, 8, true);
 
-  w.writeFit(formatDate(item.dataLavoro), SCHEDA_FOOTER.date, 8);
+  w.writeComb(formatDate(item.dataLavoro), SCHEDA_FOOTER.date.cells, SCHEDA_FOOTER.date, 8);
   if (item.nOperatori > 0) {
     w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
   }
@@ -188,22 +193,16 @@ export async function fillOfficialScheda(opts: {
     w.writeInBox(String(q), { x: SCHEDA_QTY.x, y, w: SCHEDA_QTY.w, h: SCHEDA_QTY.h }, 10);
   }
 
-  async function stamp(
-    dataUrl: string | undefined,
-    box: Box,
-    align: "center" | "bottom" = "center",
-  ) {
+  async function stamp(dataUrl: string | undefined, box: Box) {
     if (!dataUrl?.startsWith("data:image")) return;
     try {
       const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
       const scale = Math.min(box.w / img.width, box.h / img.height);
       const width = img.width * scale;
       const height = img.height * scale;
-      const y =
-        align === "bottom" ? box.y : box.y + Math.max(0, (box.h - height) / 2);
       page.drawImage(img, {
         x: box.x + (box.w - width) / 2,
-        y,
+        y: box.y + Math.max(0, (box.h - height) / 2),
         width,
         height,
       });
@@ -212,8 +211,6 @@ export async function fillOfficialScheda(opts: {
     }
   }
 
-  await stamp(item.firmaTerna, SCHEDA_FIRME.consegnaTerna, "bottom");
-  await stamp(item.firmaOperatore, SCHEDA_FIRME.consegnaDitta, "bottom");
   await stamp(item.firmaTerna, SCHEDA_FIRME.designatoTerna);
   await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta);
 
