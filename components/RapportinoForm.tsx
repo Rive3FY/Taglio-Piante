@@ -545,8 +545,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           pianificate={pianificate}
           esiti={esiti}
           campateLinea={campateLinea}
-          onChange={setEsiti}
-          onBlocco={(msg) => setError(msg)}
         />
       ) : null}
 

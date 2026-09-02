@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/tecnico/campate", label: "Campate" },
   { href: "/tecnico/basi", label: "Basi" },
   { href: "/tecnico/contabilita", label: "Contabilità" },
+  { href: "/tecnico/backup", label: "Backup" },
   { href: "/tecnico/bozze", label: "Bozze" },
   { href: "/tecnico/archiviati", label: "Archiviati" },
   { href: "/tecnico/operatori", label: "Operatori" },

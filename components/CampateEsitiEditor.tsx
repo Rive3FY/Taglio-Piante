@@ -1,8 +1,6 @@
 "use client";
 
-import { uid } from "@/lib/format";
-import { normalizzaCampata } from "@/lib/campate/normalize";
-import { campateBloccateDaNonTagliare, campataGiaChiusaDaFoglio, messaggioCampateDaNonTagliare } from "@/lib/campate/guard";
+import { campataGiaChiusaDaFoglio } from "@/lib/campate/guard";
 import {
   CAMPATA_PRIORITA_LABEL,
   type CampataLavoro,
@@ -13,35 +11,11 @@ export function CampateEsitiEditor({
   pianificate,
   esiti,
   campateLinea = [],
-  onChange,
-  onBlocco,
 }: {
   pianificate: CampataLavoro[];
   esiti: RapportinoCampata[];
   campateLinea?: CampataLavoro[];
-  onChange: (esiti: RapportinoCampata[]) => void;
-  onBlocco?: (messaggio: string) => void;
 }) {
-  function addExtra(testo: string) {
-    const originale = testo.trim();
-    const normalizzata = normalizzaCampata(originale);
-    if (!normalizzata) return;
-    if (esiti.some((e) => e.normalizzata === normalizzata)) return;
-    const proposta: RapportinoCampata = {
-      id: uid("es"),
-      originale,
-      normalizzata,
-      esito: "tagliata",
-      aggiuntiva: true,
-    };
-    const bloccate = campateBloccateDaNonTagliare(campateLinea, [proposta]);
-    if (bloccate.length > 0) {
-      onBlocco?.(messaggioCampateDaNonTagliare(bloccate));
-      return;
-    }
-    onChange([...esiti, proposta]);
-  }
-
   return (
     <section className="panel">
       <h2>Campate del lavoro</h2>
@@ -73,38 +47,13 @@ export function CampateEsitiEditor({
                 {priorita ? (
                   <span className={`badge badge-${priorita}`}>{CAMPATA_PRIORITA_LABEL[priorita]}</span>
                 ) : null}
-                {e.aggiuntiva ? <span className="badge badge-aggiuntiva">Non prevista</span> : null}
                 {giaTagliata ? <span className="badge badge-tagliata">Già tagliata</span> : null}
               </div>
             </li>
           );
         })}
       </ul>
-      <AggiungiCampata onAdd={addExtra} />
     </section>
-  );
-}
-
-function AggiungiCampata({ onAdd }: { onAdd: (testo: string) => void }) {
-  return (
-    <label>
-      Campata aggiuntiva
-      <input
-        placeholder="Es. 30 oppure 30-31"
-        onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          const el = e.currentTarget;
-          onAdd(el.value);
-          el.value = "";
-        }}
-        onBlur={(e) => {
-          if (!e.currentTarget.value.trim()) return;
-          onAdd(e.currentTarget.value);
-          e.currentTarget.value = "";
-        }}
-      />
-    </label>
   );
 }
 

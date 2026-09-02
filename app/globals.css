@@ -702,6 +702,20 @@ select.inline-field { width: auto; min-width: 160px; }
   gap: 10px;
 }
 .contab-estrai .btn { white-space: nowrap; }
+.backup-azioni {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.backup-mesi {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 12px;
+}
+.backup-mesi .check-line { margin: 0; }
 .torta-card { align-content: start; }
 .torta-layout {
   display: flex;

@@ -33,10 +33,12 @@ export function costruisciAnteprima(
   esistenti: CampataLavoro[],
   codiciLineaNoti: Set<string>,
 ): AnteprimaImport {
+  const listaRighe = Array.isArray(righe) ? righe : [];
+  const listaEsistenti = Array.isArray(esistenti) ? esistenti : [];
   const perChiave = new Map<string, VoceAnteprimaImport>();
   let duplicati = 0;
 
-  for (const r of righe) {
+  for (const r of listaRighe) {
     const chiave = chiaveCampata(r.codiceLinea, r.normalizzata, r.priorita);
     const gia = perChiave.get(chiave);
     if (gia) {
@@ -80,7 +82,7 @@ export function costruisciAnteprima(
   }
 
   const indiceEsistenti = new Map(
-    esistenti
+    listaEsistenti
       .filter((c) => c.tipo !== "base")
       .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );

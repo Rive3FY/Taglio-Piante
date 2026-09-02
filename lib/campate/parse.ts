@@ -65,6 +65,19 @@ function pulisciTesto(raw: string) {
     .trim();
 }
 
+/** Evita String.matchAll: su WebKit `for...of` lì diventa «undefined is not a function». */
+function occorrenze(regex: RegExp, testo: string) {
+  const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+  const re = new RegExp(regex.source, flags);
+  const out: RegExpExecArray[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(testo)) !== null) {
+    out.push(m);
+    if (m[0].length === 0) re.lastIndex += 1;
+  }
+  return out;
+}
+
 export function parseTestoCampate(raw: string): ParseCampateResult {
   const testo = pulisciTesto(raw);
   const riconosciute: RigaImportBruta[] = [];
@@ -76,8 +89,7 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
 
   const haIntestazione = HEADER.test(testo);
   let n = 0;
-  RIGA.lastIndex = 0;
-  for (const m of testo.matchAll(RIGA)) {
+  for (const m of occorrenze(RIGA, testo)) {
     n += 1;
     const codiceLinea = m[1].toUpperCase();
     const originale = m[2];

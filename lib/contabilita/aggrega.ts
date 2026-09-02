@@ -49,6 +49,16 @@ export function mesiDisponibili(rapportini: Rapportino[], oggi = new Date()) {
   return [...set].sort().reverse();
 }
 
+/** Solo i mesi in cui esiste almeno un rapportino chiuso (per il backup). */
+export function mesiConRapportiniChiusi(rapportini: Rapportino[]) {
+  const set = new Set<string>();
+  for (const r of rapportini) {
+    if (!rapportinoEChiuso(r.stato) || !r.dataLavoro) continue;
+    set.add(meseDaIso(r.dataLavoro));
+  }
+  return [...set].sort().reverse();
+}
+
 export function etichettaMese(mese: string) {
   const [y, m] = mese.split("-").map(Number);
   if (!y || !m) return mese;

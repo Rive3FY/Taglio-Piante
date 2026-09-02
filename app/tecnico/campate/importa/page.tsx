@@ -35,8 +35,8 @@ export default function ImportaCampatePage() {
       const preview = costruisciAnteprima(
         parsed.riconosciute,
         parsed.scartate,
-        esistenti,
-        new Set(linee.map((l) => l.codice.toUpperCase())),
+        Array.isArray(esistenti) ? esistenti : [],
+        new Set((Array.isArray(linee) ? linee : []).map((l) => l.codice.toUpperCase())),
       );
       if (preview.voci.length === 0 && preview.scartate.length > 0) {
         setErrore(preview.scartate[0]?.motivo ?? "Nessuna campata riconosciuta.");
