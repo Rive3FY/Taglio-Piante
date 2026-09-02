@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { formatDate, TENSIONI, tensioneLabel } from "@/lib/format";
+import { formatDate, formatDistInt, TENSIONI, tensioneLabel } from "@/lib/format";
 import { aggiornaDettagliCampata } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { useSession } from "@/lib/SessionContext";
@@ -93,8 +93,8 @@ export function CampateElenco({
         if (c.dataTaglio && !nelPeriodo(c.dataTaglio, periodo)) return false;
         if (periodo.da && !c.dataTaglio) return false;
         if (!term) return true;
-        return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note]
-          .filter(Boolean)
+        return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note, c.distInt]
+          .filter((v) => v != null && v !== "")
           .some((v) => String(v).toLowerCase().includes(term));
       });
   }, [campate, q, kv, priorita, stato, origine, linea, operatore, periodo, soloAttenzione]);
@@ -296,6 +296,7 @@ export function CampateElenco({
                 <th>Nome linea</th>
                 <th>kV</th>
                 <th>Campata</th>
+                <th>Dist int</th>
                 <th>Priorità</th>
                 <th>Stato</th>
                 <th>Data</th>
@@ -385,6 +386,7 @@ function CampataRiga({
           <strong>{c.normalizzata}</strong>
           {c.origine === "aggiuntiva" ? <span className="badge badge-aggiuntiva">Aggiuntiva</span> : null}
         </td>
+        <td>{c.distInt != null ? formatDistInt(c.distInt) : "—"}</td>
         <td>
           {c.priorita ? (
             <span className={`badge badge-${c.priorita}`}>{CAMPATA_PRIORITA_LABEL[c.priorita]}</span>
@@ -412,7 +414,7 @@ function CampataRiga({
       </tr>
       {aperta ? (
         <tr className="campata-storico">
-          <td colSpan={10}>
+          <td colSpan={11}>
             <div className="campata-esploso" onClick={(e) => e.stopPropagation()}>
               <label className="check-line">
                 <input

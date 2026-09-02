@@ -218,6 +218,7 @@ create index if not exists campate_lavoro_linea_idx on campate_lavoro(linea_id);
 create index if not exists campate_lavoro_stato_idx on campate_lavoro(stato);
 
 alter table campate_lavoro add column if not exists attenzionare boolean not null default false;
+alter table campate_lavoro add column if not exists dist_int numeric;
 
 create table if not exists campate_storico (
   id text primary key,

@@ -9,6 +9,7 @@ import { costruisciAnteprima, type AnteprimaImport } from "@/lib/campate/preview
 import { confermaImportCampate } from "@/lib/campate/apply";
 import { useSession } from "@/lib/SessionContext";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
+import { formatDistInt } from "@/lib/format";
 
 export default function ImportaCampatePage() {
   const router = useRouter();
@@ -107,6 +108,7 @@ export default function ImportaCampatePage() {
                   <th>Nome</th>
                   <th>Originale</th>
                   <th>Normalizzata</th>
+                  <th>Dist int</th>
                   <th>Priorità</th>
                   <th>Azione</th>
                 </tr>
@@ -118,6 +120,7 @@ export default function ImportaCampatePage() {
                     <td>{v.nomeLinea}</td>
                     <td>{v.originale}</td>
                     <td>{v.normalizzata}</td>
+                    <td>{v.distInt != null ? formatDistInt(v.distInt) : "—"}</td>
                     <td>{CAMPATA_PRIORITA_LABEL[v.priorita]}</td>
                     <td>{v.azione.replaceAll("_", " ")}</td>
                   </tr>

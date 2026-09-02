@@ -11,6 +11,7 @@ export type VoceAnteprimaImport = {
   codiceLinea: string;
   nomeLinea: string;
   priorita: CampataPriorita;
+  distInt?: number;
   azione: AzioneImport;
   nota?: string;
 };
@@ -54,6 +55,7 @@ export function costruisciAnteprima(
       codiceLinea: r.codiceLinea,
       nomeLinea: r.nomeLinea,
       priorita: r.priorita,
+      distInt: r.distInt,
       azione: "nuova",
     });
   }

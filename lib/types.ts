@@ -57,6 +57,8 @@ export type CampataLavoro = {
   operatore?: string;
   note?: string;
   attenzionare?: boolean;
+  /** Distanza interna dal file LIDAR (colonna «Dist int»). */
+  distInt?: number;
   rapportinoId?: string;
   importId?: string;
   syncStatus: SyncStatus;

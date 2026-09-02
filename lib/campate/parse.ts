@@ -7,6 +7,7 @@ export type RigaImportBruta = {
   priorita: CampataPriorita;
   codiceLinea: string;
   nomeLinea: string;
+  distInt?: number;
   riga: number;
 };
 
@@ -35,7 +36,14 @@ const HEADER =
  * Non dipende dai nomi delle linee né dai numeri del fac-simile: è il formato del file.
  */
 const RIGA =
-  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)-+\s+[\d.,]+\s+(URGENTE|DIFFERIBILE)\s+[\d.,]+\s+[\d.,]+\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*-+\s+[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
+  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)-+\s+([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+[\d.,]+\s+[\d.,]+\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*-+\s+[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
+
+function parseDistInt(raw: string) {
+  const t = raw.trim().replace(",", ".");
+  if (!t) return undefined;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 function pulisciTesto(raw: string) {
   return raw
@@ -61,8 +69,9 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
     n += 1;
     const codiceLinea = m[1].toUpperCase();
     const originale = m[2];
-    const priorita = PRIORITA[m[3].toUpperCase()];
-    const nomeLinea = m[4].replace(HEADER, "").trim().replace(/\s+/g, " ");
+    const distInt = parseDistInt(m[3]);
+    const priorita = PRIORITA[m[4].toUpperCase()];
+    const nomeLinea = m[5].replace(HEADER, "").trim().replace(/\s+/g, " ");
     const normalizzata = normalizzaCampata(originale);
     if (!priorita) {
       scartate.push({ riga: n, testo: m[0].slice(0, 80), motivo: "Priorità non riconosciuta." });
@@ -78,6 +87,7 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
       priorita,
       codiceLinea,
       nomeLinea,
+      distInt,
       riga: n,
     });
   }
@@ -101,6 +111,7 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
   const sep = righe[0].includes(";") && !righe[0].includes(",") ? ";" : ",";
   const header = splitCsv(righe[0], sep).map((h) => h.trim().toLowerCase());
   const iCampata = header.findIndex((h) => h === "campata" || h.includes("campata"));
+  const iDist = header.findIndex((h) => h === "dist int" || h === "dist_int" || (h.includes("dist") && h.includes("int")));
   const iPrio = header.findIndex((h) => h.includes("prior"));
   const iLinea = header.findIndex((h) => h === "linea" || h === "codice linea" || h === "codice");
   const iNome = header.findIndex((h) => h.includes("nome") && h.includes("linea"));
@@ -111,6 +122,7 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
   righe.slice(1).forEach((line, idx) => {
     const cols = splitCsv(line, sep);
     const campataCell = cols[iCampata] ?? "";
+    const distInt = iDist >= 0 ? parseDistInt(cols[iDist] ?? "") : undefined;
     const prioCell = (cols[iPrio] ?? "").trim().toUpperCase();
     const codiceCell = (cols[iLinea] ?? "").trim().toUpperCase();
     const nome = (iNome >= 0 ? cols[iNome] : "").trim();
@@ -131,6 +143,7 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
       priorita,
       codiceLinea: codiceCell,
       nomeLinea: nome,
+      distInt,
       riga: idx + 2,
     });
   });

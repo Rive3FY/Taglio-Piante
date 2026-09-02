@@ -8,6 +8,12 @@ export function formatDate(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
+export function formatDistInt(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export function formatDateTime(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";

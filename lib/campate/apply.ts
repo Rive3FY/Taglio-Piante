@@ -85,6 +85,7 @@ export async function confermaImportCampate(opts: {
         normalizzata: voce.normalizzata,
         tipo: "campata",
         priorita: voce.priorita,
+        distInt: voce.distInt,
         stato: "da_tagliare",
         origine: "prevista",
         importId,
@@ -104,11 +105,16 @@ export async function confermaImportCampate(opts: {
       continue;
     }
 
-    const changed = voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea;
-    if (!changed) continue;
+    const changedNome = Boolean(voce.nomeLinea && voce.nomeLinea !== presente.nomeLinea);
+    const changedDist =
+      voce.distInt != null &&
+      presente.stato === "da_tagliare" &&
+      voce.distInt !== presente.distInt;
+    if (!changedNome && !changedDist) continue;
     const aggiornata: CampataLavoro = {
       ...presente,
       nomeLinea: voce.nomeLinea || presente.nomeLinea,
+      distInt: changedDist ? voce.distInt : presente.distInt,
       updatedAt: now,
       importId,
       syncStatus: "synced",

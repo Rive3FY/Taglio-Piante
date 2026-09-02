@@ -1,4 +1,4 @@
-import { formatDate, todayIso } from "@/lib/format";
+import { formatDate, formatDistInt, todayIso } from "@/lib/format";
 import {
   CAMPATA_ORIGINE_LABEL,
   CAMPATA_PRIORITA_LABEL,
@@ -43,6 +43,7 @@ export function scaricaVistaCampate(
     "Nome linea",
     "kV",
     "Campata",
+    "Dist int",
     "Originale",
     "Priorità",
     "Stato",
@@ -58,6 +59,7 @@ export function scaricaVistaCampate(
       c.nomeLinea,
       c.tensioneKv ?? "",
       c.normalizzata,
+      c.distInt != null ? formatDistInt(c.distInt) : "",
       c.originale,
       c.priorita ? CAMPATA_PRIORITA_LABEL[c.priorita] : "",
       CAMPATA_STATO_LABEL[c.stato],
