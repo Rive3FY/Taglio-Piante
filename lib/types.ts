@@ -8,7 +8,7 @@ export type CampataStatoLavoro = "da_tagliare" | "tagliata" | "tralasciata";
 
 export type CampataOrigine = "prevista" | "aggiuntiva";
 
-export type CampataEsito = "tagliata" | "tralasciata";
+export type CampataEsito = "tagliata" | "tralasciata" | "nulla_da_tagliare";
 
 export type RapportinoStato = "bozza" | "da_prendere" | "in_attesa" | "archiviato";
 
@@ -215,3 +215,18 @@ export const CAMPATA_TIPO_LABEL: Record<CampataTipo, string> = {
   campata: "Campata",
   base: "Base",
 };
+
+export const CAMPATA_ESITO_LABEL: Record<CampataEsito, string> = {
+  tagliata: "Tagliata",
+  tralasciata: "Tralasciata",
+  nulla_da_tagliare: "Nulla da tagliare",
+};
+
+/** Nel piano operativo «nulla da tagliare» chiude la campata come tagliata (avanzamento verde). */
+export function esitoRapportinoToStato(esito: CampataEsito): CampataStatoLavoro {
+  return esito === "tralasciata" ? "tralasciata" : "tagliata";
+}
+
+export function eventoStoricoDaEsito(esito: CampataEsito): string {
+  return esito === "nulla_da_tagliare" ? "nulla_da_tagliare" : esito;
+}

@@ -369,6 +369,7 @@ function CampataRiga({
     (s) =>
       s.evento === "nota" ||
       s.evento === "tagliata" ||
+      s.evento === "nulla_da_tagliare" ||
       s.evento.startsWith("tagliata") ||
       (s.evento === "aggiuntiva_da_rapportino" && s.stato === "tagliata"),
   );

@@ -13,6 +13,7 @@ import type {
   RapportinoCampata,
   Session,
 } from "@/lib/types";
+import { esitoRapportinoToStato, eventoStoricoDaEsito } from "@/lib/types";
 import { idCampataLavoro, chiaveCampata } from "./normalize";
 import { esitiClassificati, isBaseLavoro } from "./basi";
 import type { AnteprimaImport } from "./preview";
@@ -165,6 +166,22 @@ function bersagliPerEsito(
   });
 }
 
+/** Stessa campata fisica con priorità urgente e differibile: chiudiamo entrambe insieme. */
+function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro[]): CampataLavoro[] {
+  const out = new Map<string, CampataLavoro>();
+  for (const b of bersagli) {
+    out.set(b.id, b);
+    if (isBaseLavoro(b)) continue;
+    for (const c of tutte) {
+      if (c.lineaId !== b.lineaId) continue;
+      if (c.normalizzata !== b.normalizzata) continue;
+      if (isBaseLavoro(c)) continue;
+      out.set(c.id, c);
+    }
+  }
+  return [...out.values()];
+}
+
 /**
  * Aggiorna il database operativo a partire da un rapportino inviato o archiviato.
  * Le bozze non toccano le campate.
@@ -192,10 +209,14 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
   const daScrivere: CampataLavoro[] = [];
   const storico: CampataStorico[] = [];
+  const giaChiuse = new Set<string>();
 
   for (const esito of esiti) {
-    const stato = esito.esito === "tagliata" ? "tagliata" : "tralasciata";
-    const bersagli = bersagliPerEsito(tutte, esito, linea?.codice ?? "");
+    const stato = esitoRapportinoToStato(esito.esito);
+    const bersagli = espandiFratelliPriorita(
+      tutte,
+      bersagliPerEsito(tutte, esito, linea?.codice ?? ""),
+    );
 
     if (bersagli.length === 0) {
       if (!linea) continue;
@@ -252,10 +273,12 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
       daScrivere.push(aggiornata);
       const idx = tutte.findIndex((c) => c.id === presente.id);
       if (idx >= 0) tutte[idx] = aggiornata;
+      if (giaChiuse.has(presente.id)) continue;
+      giaChiuse.add(presente.id);
       storico.push({
         id: uid("sto"),
         campataId: presente.id,
-        evento: stato,
+        evento: eventoStoricoDaEsito(esito.esito),
         stato,
         priorita: presente.priorita,
         operatore,

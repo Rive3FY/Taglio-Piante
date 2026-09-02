@@ -557,8 +557,14 @@ select.inline-field { width: auto; min-width: 160px; }
 .esiti-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .esito-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
 .esito-card.esito-tagliata { border-color: #86efac; background: #f0fdf4; }
+.esito-card.esito-nulla_da_tagliare { border-color: #86efac; background: #f0fdf4; }
 .esito-card.esito-tralasciata { border-color: #f87171; background: #fef2f2; }
 .esito-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.esito-scelta { display: grid; gap: 4px; }
+.esito-scelta-hint { margin: 0; font-size: 13px; }
+.esito-gemella { margin: 0; font-size: 13px; }
+.esito-tralascia-btn { justify-self: start; padding-left: 0; color: var(--muted); }
+.chip-muted { opacity: 0.85; }
 .check-line {
   display: flex;
   align-items: center;
