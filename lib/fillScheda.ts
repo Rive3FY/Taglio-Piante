@@ -44,6 +44,67 @@ function dataUrlToBytes(dataUrl: string) {
   return bytes;
 }
 
+/** Taglia il bianco intorno al tratto, così una firma piccola si ingrandisce
+ * e una enorme si riduce fino a riempire lo stesso riquadro. */
+async function ritagliaInchiostroPng(bytes: Uint8Array): Promise<Uint8Array> {
+  if (typeof document === "undefined" || typeof createImageBitmap !== "function") {
+    return bytes;
+  }
+  try {
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      if (typeof bitmap.close === "function") bitmap.close();
+      return bytes;
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    if (typeof bitmap.close === "function") bitmap.close();
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3]!;
+      if (a < 12) continue;
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+      if (r > 245 && g > 245 && b > 245) continue;
+      const px = (i / 4) % width;
+      const py = Math.floor(i / 4 / width);
+      if (px < minX) minX = px;
+      if (py < minY) minY = py;
+      if (px > maxX) maxX = px;
+      if (py > maxY) maxY = py;
+    }
+    if (maxX < 0) return bytes;
+    const pad = Math.max(4, Math.round(Math.max(width, height) * 0.015));
+    minX = Math.max(0, minX - pad);
+    minY = Math.max(0, minY - pad);
+    maxX = Math.min(width - 1, maxX + pad);
+    maxY = Math.min(height - 1, maxY + pad);
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const octx = out.getContext("2d");
+    if (!octx) return bytes;
+    octx.drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
+    const cropped = await new Promise<Blob | null>((resolve) => {
+      out.toBlob(resolve, "image/png");
+    });
+    if (!cropped) return bytes;
+    return new Uint8Array(await cropped.arrayBuffer());
+  } catch {
+    return bytes;
+  }
+}
+
 function asArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
@@ -219,15 +280,22 @@ export async function fillOfficialScheda(opts: {
       w.writeInBox(String(q), box, 10);
     }
 
-    async function stamp(dataUrl: string | undefined, box: Box) {
+    async function stamp(
+      dataUrl: string | undefined,
+      box: Box,
+      align: "center" | "right" = "center",
+    ) {
       if (!dataUrl?.startsWith("data:image")) return;
       try {
-        const img = await pdf.embedPng(dataUrlToBytes(dataUrl));
+        const png = await ritagliaInchiostroPng(dataUrlToBytes(dataUrl));
+        const img = await pdf.embedPng(png);
         const scale = Math.min(box.w / img.width, box.h / img.height);
         const width = img.width * scale;
         const height = img.height * scale;
+        const x =
+          align === "right" ? box.x + box.w - width : box.x + (box.w - width) / 2;
         page.drawImage(img, {
-          x: box.x + (box.w - width) / 2,
+          x,
           y: box.y + Math.max(0, (box.h - height) / 2),
           width,
           height,
@@ -238,7 +306,7 @@ export async function fillOfficialScheda(opts: {
     }
 
     await stamp(item.firmaTerna, SCHEDA_FIRME.designatoTerna);
-    await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta);
+    await stamp(item.firmaOperatore, SCHEDA_FIRME.designatoDitta, "right");
 
     return pdf.save();
   } catch (e) {
