@@ -22,6 +22,20 @@ import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 
 const LAST_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
+const PULL_OVERLAP_MS = 5 * 60 * 1000;
+
+export function clearPullCursor() {
+  if (typeof window !== "undefined") localStorage.removeItem(LAST_PULL_KEY);
+}
+
+function pullCursorWithOverlap(iso: string) {
+  return new Date(new Date(iso).getTime() - PULL_OVERLAP_MS).toISOString();
+}
+
+function maxIso(a: string | null, b: string) {
+  if (!a) return b;
+  return new Date(b) > new Date(a) ? b : a;
+}
 
 function colonnaDaErrore(message: string) {
   const m =
@@ -145,9 +159,11 @@ export async function pushRapportino(item: Rapportino) {
     );
   }
 
+  const now = new Date().toISOString();
   await upsertOmettendoColonneMancanti("rapportini", [
-    { ...row, owner_id, deleted_at: null } as Record<string, unknown>,
+    { ...row, owner_id, deleted_at: null, updated_at: now } as Record<string, unknown>,
   ]);
+  await db.rapportini.update(item.id, { updatedAt: now });
 }
 
 export async function deleteRemoteRapportino(id: string) {
@@ -235,7 +251,7 @@ export async function pullRapportini() {
     .order("updated_at", { ascending: true });
 
   if (lastPull) {
-    query = query.gte("updated_at", lastPull);
+    query = query.gte("updated_at", pullCursorWithOverlap(lastPull));
   }
 
   const { data, error } = await query;
@@ -243,6 +259,7 @@ export async function pullRapportini() {
 
   const rows = (data ?? []) as RapportinoRow[];
   let merged = 0;
+  let newest = lastPull;
 
   for (const row of rows) {
     const local = await db.rapportini.get(row.id);
@@ -256,10 +273,15 @@ export async function pullRapportini() {
       await db.rapportini.put(remote);
       merged += 1;
     }
+    newest = maxIso(newest, row.updated_at);
   }
 
   if (typeof window !== "undefined") {
-    localStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
+    if (newest) {
+      localStorage.setItem(LAST_PULL_KEY, newest);
+    } else if (!lastPull) {
+      localStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
+    }
   }
 
   return merged;
@@ -277,7 +299,7 @@ export async function pullDeletedRapportini() {
     .from("rapportini")
     .select("id, updated_at")
     .not("deleted_at", "is", null)
-    .gte("updated_at", lastPull);
+    .gte("updated_at", pullCursorWithOverlap(lastPull));
 
   if (error) throw new Error(error.message);
 

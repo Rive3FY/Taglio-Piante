@@ -34,7 +34,16 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
 
   const autenticato = await supabaseAutenticato();
   if (isSupabaseConfigured() && !autenticato) {
-    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0, pullError: null };
+    const pending = await db.syncQueue.count();
+    return {
+      processed: 0,
+      pending,
+      pulled: 0,
+      pullError:
+        pending > 0
+          ? "Sessione scaduta: esci e accedi di nuovo per inviare i rapportini sul server."
+          : null,
+    };
   }
 
   const falliti = new Set<string>();
@@ -86,14 +95,6 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
           await db.rapportini.update(item.rapportinoId, { syncStatus: "error" });
         }
       }
-    }
-  }
-
-  const ancoraInCoda = new Set((await db.syncQueue.toArray()).map((i) => i.rapportinoId));
-  const inErrore = await db.rapportini.filter((r) => r.syncStatus === "error").toArray();
-  for (const r of inErrore) {
-    if (!ancoraInCoda.has(r.id)) {
-      await db.rapportini.update(r.id, { syncStatus: "synced" });
     }
   }
 

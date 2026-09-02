@@ -3,7 +3,8 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { db, enqueueSync } from "@/lib/db";
+import { useSync } from "@/lib/SyncContext";
 import { RapportinoForm } from "@/components/RapportinoForm";
 import { RapportinoSheet } from "@/components/RapportinoSheet";
 import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
@@ -18,6 +19,7 @@ export default function OperatoreRapportinoPage({
   const { id } = use(params);
   const router = useRouter();
   const { session } = useSession();
+  const { syncNow } = useSync();
   const item = useLiveQuery(() => db.rapportini.get(id), [id]);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
@@ -31,8 +33,8 @@ export default function OperatoreRapportinoPage({
       dipendenteTerna: item.dipendenteTerna || session.nome,
       updatedAt: now,
       syncStatus: "pending",
-    });
-  }, [item, session]);
+    }).then(() => enqueueSync(item.id, "take")).then(() => syncNow());
+  }, [item, session, syncNow]);
 
   if (item === undefined) return <p className="muted">Caricamento…</p>;
   if (!item) return <p className="muted">Rapportino non trovato sul dispositivo.</p>;

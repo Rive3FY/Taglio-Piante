@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { processSyncQueue, purgaRapportiniAltrui, subscribeOnline } from "@/lib/sync";
+import { clearPullCursor } from "@/lib/supabase/remote";
 import { useSession } from "@/lib/SessionContext";
 
 type SyncContextValue = {
@@ -69,6 +70,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!userId) return;
     void (async () => {
+      clearPullCursor();
       await purgaRapportiniAltrui(session);
       await syncNow();
     })();

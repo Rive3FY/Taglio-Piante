@@ -5,6 +5,7 @@ import type { Session as SupabaseSession } from "@supabase/supabase-js";
 import type { Ruolo, Session } from "@/lib/types";
 import { clearSession, readSession, writeSession } from "@/lib/session";
 import { ensureSeeded } from "@/lib/db";
+import { clearPullCursor } from "@/lib/supabase/remote";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type SessionContextValue = {
@@ -81,10 +82,28 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else if (cache) {
-        // Niente sessione fresca (offline, segnale a tratti, token non rinnovato):
-        // si resta dentro con l’ultimo accesso, altrimenti in cantiere si finisce al login.
-        setSessionState(cache);
-        setOffline(true);
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          if (refreshed.session) {
+            try {
+              const profilo = await profiloDaSupabase(refreshed.session);
+              if (annullato) return;
+              writeSession(profilo);
+              setSessionState(profilo);
+              setOffline(false);
+            } catch {
+              if (annullato) return;
+              setSessionState(cache);
+              setOffline(true);
+            }
+          } else {
+            setSessionState(cache);
+            setOffline(true);
+          }
+        } else {
+          setSessionState(cache);
+          setOffline(true);
+        }
       } else {
         clearSession();
       }
@@ -95,16 +114,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const { data: listener } = supabase
       ? supabase.auth.onAuthStateChange((event) => {
           if (event !== "SIGNED_OUT") return;
-          // Esci pulisce già la copia locale. Se il token scade senza rete, la copia resta
-          // e si continua a lavorare.
-          const cache = readSession();
-          if (cache) {
-            setSessionState(cache);
-            setOffline(true);
-            return;
-          }
-          setSessionState(null);
-          setOffline(false);
+          void (async () => {
+            if (typeof navigator !== "undefined" && navigator.onLine) {
+              const { data: refreshed } = await supabase.auth.refreshSession();
+              if (refreshed.session) {
+                try {
+                  const profilo = await profiloDaSupabase(refreshed.session);
+                  writeSession(profilo);
+                  setSessionState(profilo);
+                  setOffline(false);
+                  return;
+                } catch {
+                  // token non rinnovabile: si prosegue con la copia locale
+                }
+              }
+            }
+            const cache = readSession();
+            if (cache) {
+              setSessionState(cache);
+              setOffline(true);
+              return;
+            }
+            setSessionState(null);
+            setOffline(false);
+          })();
         })
       : { data: { subscription: null } };
 
@@ -144,6 +177,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const supabase = getSupabase();
     clearSession();
+    clearPullCursor();
     setSessionState(null);
     setOffline(false);
     if (supabase) await supabase.auth.signOut();
