@@ -1,10 +1,9 @@
 "use client";
 
-import { use } from "react";
-import { notFound } from "next/navigation";
+import { use, useEffect } from "react";
+import { notFound, useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { RapportiniPerTensione } from "@/components/RapportiniPerTensione";
 import { RapportiniCalendario } from "@/components/RapportiniCalendario";
 import { confermaECancellaRapportino } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
@@ -16,10 +15,17 @@ export default function ElencoSezionePage({
   params: Promise<{ sezione: string }>;
 }) {
   const { sezione } = use(params);
+  const router = useRouter();
   const { session } = useSession();
+
+  useEffect(() => {
+    if (sezione === "in-attesa") router.replace("/operatore/elenco/archiviati");
+  }, [sezione, router]);
 
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
+
+  if (sezione === "in-attesa") return <p className="muted">Reindirizzamento…</p>;
 
   const config = sezioneDa(sezione);
   if (!config) notFound();
@@ -34,23 +40,13 @@ export default function ElencoSezionePage({
         <p className="muted">{config.descrizione}</p>
       </div>
 
-      {config.key === "bozze" || config.key === "archiviati" ? (
-        <RapportiniCalendario
-          items={items}
-          linee={linee}
-          hrefFor={(item) => `/operatore/${item.id}`}
-          vuoto={config.vuoto}
-          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
-        />
-      ) : (
-        <RapportiniPerTensione
-          items={items}
-          linee={linee}
-          hrefFor={(item) => `/operatore/${item.id}`}
-          vuoto={config.vuoto}
-          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
-        />
-      )}
+      <RapportiniCalendario
+        items={items}
+        linee={linee}
+        hrefFor={(item) => `/operatore/${item.id}`}
+        vuoto={config.vuoto}
+        onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
+      />
     </>
   );
 }

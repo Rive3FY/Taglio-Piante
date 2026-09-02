@@ -5,16 +5,19 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import {
   aggregaMese,
+  aggregaPrestazioniLinea,
   avanzamentoPriorita,
   conteggioBasiTagliate,
   etichettaMese,
   formatEuro,
   formatQuantita,
   giorniAllaChiusura,
+  lineeConPrestazioni,
   mesiDisponibili,
   type VoceContabile,
 } from "@/lib/contabilita/aggrega";
-import { etichettaUnita } from "@/lib/contabilita/listino";
+import { arrotondaEuro, etichettaUnita } from "@/lib/contabilita/listino";
+import { scaricaPrestazioniLineaExcel } from "@/lib/contabilita/export";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
@@ -31,14 +34,14 @@ function TabellaVoci({
 }) {
   if (voci.length === 0) return <p className="muted">{vuoto}</p>;
   const totale = voci.every((v) => v.importo != null)
-    ? voci.reduce((s, v) => s + (v.importo ?? 0), 0)
+    ? arrotondaEuro(voci.reduce((s, v) => s + (v.importo ?? 0), 0))
     : null;
   return (
     <div className="campate-table-wrap">
       <table className="campate-table">
         <thead>
           <tr>
-            <th>Chiamata</th>
+            <th>Prestazione</th>
             <th>Descrizione</th>
             <th>U.M.</th>
             <th>Quantità</th>
@@ -87,6 +90,7 @@ export default function ContabilitaPage() {
   const [mese, setMese] = useState(() => mesi[0] ?? oggi.slice(0, 7));
   const [giorno, setGiorno] = useState<string | null>(oggi);
   const [lineaAperta, setLineaAperta] = useState<string | null>(null);
+  const [lineaEstratta, setLineaEstratta] = useState("");
 
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
   const aggregato = useMemo(
@@ -106,6 +110,23 @@ export default function ContabilitaPage() {
     return m;
   }, [aggregato.perGiorno]);
   const giornoVoci = aggregato.perGiorno.find((g) => g.data === giorno);
+  const lineeEstraibili = useMemo(
+    () => lineeConPrestazioni(rapportini, linee, oggi),
+    [rapportini, linee, oggi],
+  );
+  const lineaEstrattaId = lineeEstraibili.some((l) => l.lineaId === lineaEstratta)
+    ? lineaEstratta
+    : (lineeEstraibili[0]?.lineaId ?? "");
+  const estratto = useMemo(() => {
+    if (!lineaEstrattaId) return null;
+    return aggregaPrestazioniLinea(
+      rapportini,
+      prestazioni,
+      linee.find((l) => l.id === lineaEstrattaId),
+      lineaEstrattaId,
+      oggi,
+    );
+  }, [rapportini, prestazioni, linee, lineaEstrattaId, oggi]);
 
   return (
     <>
@@ -148,7 +169,7 @@ export default function ContabilitaPage() {
           <strong>{aggregato.rapportini}</strong>
         </div>
         <div className="panel">
-          <span className="muted">Chiamate con quantità</span>
+          <span className="muted">Prestazioni con quantità</span>
           <strong>{aggregato.voci.length}</strong>
         </div>
         <div className="panel">
@@ -200,7 +221,7 @@ export default function ContabilitaPage() {
       </section>
 
       <section className="panel">
-        <h2>Chiamate del mese</h2>
+        <h2>Prestazioni del mese</h2>
         <TabellaVoci voci={aggregato.voci} vuoto="Nessuna quantità in questo mese." totaleLabel="Totale mese" />
       </section>
 
@@ -256,6 +277,55 @@ export default function ContabilitaPage() {
               );
             })}
           </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Estrazione prestazioni per linea</h2>
+        <p className="muted">
+          Totale delle prestazioni confermate sulla linea scelta, dai rapportini archiviati
+          fino a oggi (i bozza restano fuori). Il file Excel ha una riga per
+          prestazione, ad esempio il totale dei 2.1 segnati su quella linea.
+        </p>
+        {lineeEstraibili.length === 0 || !estratto ? (
+          <p className="muted">Nessun rapportino confermato da cui estrarre prestazioni.</p>
+        ) : (
+          <>
+            <div className="contab-estrai">
+              <label>
+                Linea
+                <select
+                  value={lineaEstrattaId}
+                  onChange={(e) => setLineaEstratta(e.target.value)}
+                >
+                  {lineeEstraibili.map((l) => (
+                    <option key={l.lineaId} value={l.lineaId}>
+                      {l.codiceLinea} · {l.nomeLinea}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={estratto.voci.length === 0}
+                onClick={() => scaricaPrestazioniLineaExcel(estratto, oggi)}
+              >
+                Scarica Excel
+              </button>
+            </div>
+            <p className="muted">
+              {estratto.rapportini}{" "}
+              {estratto.rapportini === 1 ? "rapportino" : "rapportini"}
+              {estratto.ultimaData ? ` · ultimo ${formatDate(estratto.ultimaData)}` : ""}
+              {` · fino al ${formatDate(oggi)}`}
+            </p>
+            <TabellaVoci
+              voci={estratto.voci}
+              vuoto="Nessuna quantità confermata su questa linea."
+              totaleLabel="Totale linea"
+            />
+          </>
         )}
       </section>
     </>

@@ -504,7 +504,7 @@ select.inline-field { width: auto; min-width: 160px; }
 .badge-differibile { background: #dbeafe; color: var(--blue); }
 .badge-da_tagliare { background: #e8ecea; }
 .badge-tagliata { background: #dcfce7; color: var(--accent-2); }
-.badge-tralasciata { background: #fee2e2; color: #991b1b; }
+.badge-da_non_tagliare { background: #e7f3ec; color: #166534; }
 .badge-aggiuntiva { background: #ede9fe; color: #5b21b6; }
 .badge-attenzionare { background: #fef08a; color: #854d0e; }
 
@@ -531,6 +531,11 @@ select.inline-field { width: auto; min-width: 160px; }
 .campata-rap-cell {
   width: 1%;
   white-space: nowrap;
+}
+.campata-rap-btns {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 .campata-att { width: 44px; }
 .campata-att input[type="checkbox"] {
@@ -690,6 +695,13 @@ select.inline-field { width: auto; min-width: 160px; }
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
 }
+.contab-estrai {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.contab-estrai .btn { white-space: nowrap; }
 .torta-card { align-content: start; }
 .torta-layout {
   display: flex;
@@ -874,4 +886,5 @@ select.inline-field { width: auto; min-width: 160px; }
   .sheet-grid .span-2 { grid-column: auto; }
   .hero h1 { font-size: 26px; }
   .inline-field, select.inline-field { min-width: 0; width: 100%; margin: 6px 0; display: block; }
+  .contab-estrai { grid-template-columns: 1fr; }
 }

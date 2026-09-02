@@ -119,3 +119,21 @@ export function costruisciAnteprima(
     lineeNuove: [...lineeNuove].sort(),
   };
 }
+
+/** Campate già in elenco a cui il file può attaccare Dist int, senza reimportare. */
+export function conteggioDistanzeDaFile(voci: VoceAnteprimaImport[], esistenti: CampataLavoro[]) {
+  const indice = new Map(
+    esistenti
+      .filter((c) => c.tipo !== "base")
+      .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+  );
+  let nelFile = 0;
+  let aggiornabili = 0;
+  for (const voce of voci) {
+    if (voce.azione === "duplicato" || voce.distInt == null) continue;
+    nelFile += 1;
+    const presente = indice.get(voce.chiave);
+    if (presente && presente.distInt !== voce.distInt) aggiornabili += 1;
+  }
+  return { nelFile, aggiornabili };
+}

@@ -11,7 +11,7 @@ export function AppHeader({
   title: string;
   backHref?: string;
 }) {
-  const { online, pending, lastError, syncing, syncNow } = useSync();
+  const { online, pending, lastError, lastSyncAt, syncing, syncNow } = useSync();
   const { session, offline, logout } = useSession();
 
   const pillClass = [
@@ -22,13 +22,22 @@ export function AppHeader({
     .filter(Boolean)
     .join(" ");
 
-  const pillTitle = !online
+  const ultimoGiro = lastSyncAt
+    ? ` Ultimo scambio col server: ${new Date(lastSyncAt).toLocaleString("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })}.`
+    : " Nessuno scambio col server da quando l’app è aperta.";
+
+  const pillTitle = (!online
     ? "Nessuna rete: le modifiche restano sul telefono."
     : lastError
       ? `${pending} modifiche da mandare al server. Ultimo errore: ${lastError}. Tocca per riprovare.`
       : pending > 0
         ? `${pending} modifiche salvate sul telefono, ancora da mandare al server. Tocca per inviare.`
-        : "Tutto allineato con il server. Tocca per sincronizzare di nuovo.";
+        : "Tutto allineato con il server. Tocca per sincronizzare di nuovo.") + ultimoGiro;
 
   const pillLabel = !online
     ? "Offline"

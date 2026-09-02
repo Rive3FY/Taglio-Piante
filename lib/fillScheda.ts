@@ -2,7 +2,7 @@
 
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
-import { formatDate, lineaDescrizione } from "./format";
+import { lineaDescrizione } from "./format";
 import { scaricaBlob } from "./download";
 import {
   SCHEDA_AL_SIG_DITTA,
@@ -12,8 +12,9 @@ import {
   SCHEDA_HEADER,
   SCHEDA_IN_DATA,
   SCHEDA_IN_DATA_TERNA,
-  SCHEDA_QTY,
+  schedaQtyBox,
   type Box,
+  type LineText,
 } from "./schedaLayout";
 
 let templateCache: Uint8Array | null = null;
@@ -48,14 +49,20 @@ function asArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+/** Data sul foglio ufficiale: 12/08/26, come sul cartaceo. */
+function formatSchedaDate(iso: string) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y.slice(-2)}`;
+}
+
 type Writer = {
   writeInBox: (text: string | null | undefined, box: Box, size: number) => void;
   writeFit: (text: string | null | undefined, box: Box, maxSize: number) => void;
-  writeComb: (
+  writeOnLine: (
     text: string | null | undefined,
-    cells: ReadonlyArray<{ x: number; w: number }> | undefined,
-    row: Pick<Box, "y" | "h"> | undefined,
-    size?: number,
+    line: LineText,
     uppercase?: boolean,
   ) => void;
 };
@@ -144,24 +151,26 @@ function createWriter(
     }
   };
 
-  const writeComb = (
+  const writeOnLine = (
     text: string | null | undefined,
-    cells: ReadonlyArray<{ x: number; w: number }> | undefined,
-    row: Pick<Box, "y" | "h"> | undefined,
-    size = 8.5,
+    line: LineText,
     uppercase = false,
   ) => {
-    if (!cells?.length || !row) return;
     const raw = safeText(text).trim();
     if (!raw) return;
-    const chars = (uppercase ? raw.toUpperCase() : raw).replace(/\s+/g, " ");
-    const max = Math.min(chars.length, cells.length);
-    for (let i = 0; i < max; i += 1) {
-      writeInBox(chars[i]!, { x: cells[i]!.x, y: row.y, w: cells[i]!.w, h: row.h }, size);
+    let value = (uppercase ? raw.toUpperCase() : raw).replace(/\s+/g, " ");
+    let size = line.size;
+    while (size > 6 && misura(value, size) > line.maxW) size -= 0.3;
+    if (misura(value, size) > line.maxW) {
+      while (value.length > 1 && misura(`${value.slice(0, -1)}.`, size) > line.maxW) {
+        value = value.slice(0, -1);
+      }
+      value = `${value}.`;
     }
+    write(value, line.x, line.y, size);
   };
 
-  return { writeInBox, writeFit, writeComb };
+  return { writeInBox, writeFit, writeOnLine };
 }
 
 export async function fillOfficialScheda(opts: {
@@ -183,11 +192,11 @@ export async function fillOfficialScheda(opts: {
     w.writeFit(lineaDescrizione(linea), SCHEDA_HEADER.descr, 12);
     w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
 
-    w.writeComb(formatDate(item.dataLavoro ?? ""), SCHEDA_IN_DATA.cells, SCHEDA_IN_DATA, 8);
-    w.writeComb(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA.cells, SCHEDA_IN_DATA_TERNA, 7.5, true);
-    w.writeComb(item.rappresentanteDitta, SCHEDA_AL_SIG_REP.cells, SCHEDA_AL_SIG_REP, 8, true);
-    w.writeComb(item.ditta, SCHEDA_AL_SIG_DITTA.cells, SCHEDA_AL_SIG_DITTA, 8, true);
-    w.writeComb(formatDate(item.dataLavoro ?? ""), SCHEDA_FOOTER.date.cells, SCHEDA_FOOTER.date, 8);
+    w.writeOnLine(formatSchedaDate(item.dataLavoro ?? ""), SCHEDA_IN_DATA);
+    w.writeOnLine(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA, true);
+    w.writeOnLine(item.rappresentanteDitta, SCHEDA_AL_SIG_REP, true);
+    w.writeOnLine(item.ditta, SCHEDA_AL_SIG_DITTA, true);
+    w.writeInBox(formatSchedaDate(item.dataLavoro ?? ""), SCHEDA_FOOTER.date, 9);
     if (item.nOperatori > 0) {
       w.writeInBox(String(item.nOperatori), SCHEDA_FOOTER.nOperatori, 11);
     }
@@ -196,9 +205,9 @@ export async function fillOfficialScheda(opts: {
     for (let i = 0; i < prestazioni.length; i += 1) {
       const p = prestazioni[i]!;
       const q = qtyById.get(p.id);
-      const y = SCHEDA_QTY.y[p.codice];
-      if (!y || !q || q <= 0) continue;
-      w.writeInBox(String(q), { x: SCHEDA_QTY.x, y, w: SCHEDA_QTY.w, h: SCHEDA_QTY.h }, 10);
+      const box = schedaQtyBox(p.codice);
+      if (!box || !q || q <= 0) continue;
+      w.writeInBox(String(q), box, 10);
     }
 
     async function stamp(dataUrl: string | undefined, box: Box) {

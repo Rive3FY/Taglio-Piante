@@ -10,6 +10,7 @@ import { RapportinoSheet } from "@/components/RapportinoSheet";
 import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
 import { rapportinoVisibile } from "@/lib/sezioni";
+import { rapportinoEChiuso } from "@/lib/types";
 
 export default function OperatoreRapportinoPage({
   params,
@@ -42,7 +43,7 @@ export default function OperatoreRapportinoPage({
     return <p className="muted">Questo rapportino è di un altro operatore.</p>;
   }
 
-  const readOnly = item.stato === "archiviato";
+  const readOnly = rapportinoEChiuso(item.stato);
 
   return (
     <>

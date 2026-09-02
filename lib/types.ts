@@ -57,6 +57,11 @@ export type CampataLavoro = {
   operatore?: string;
   note?: string;
   attenzionare?: boolean;
+  /** Chi ha messo «da attenzionare» (userId): gli altri operatori non la tolgono. */
+  attenzionareBy?: string;
+  /** Niente da tagliare: in elenco resta Tagliata (verde), senza rapportino. */
+  daNonTagliare?: boolean;
+  daNonTagliareBy?: string;
   /** Distanza interna dal file LIDAR (colonna «Dist int»). */
   distInt?: number;
   rapportinoId?: string;
@@ -184,13 +189,22 @@ export type CampataDeleteQueueItem = {
 export const STATO_LABEL: Record<RapportinoStato, string> = {
   bozza: "Bozza",
   da_prendere: "Da prendere",
-  in_attesa: "In attesa",
+  in_attesa: "Archiviato",
   archiviato: "Archiviato",
 };
 
+/** Completato: vale per contabilità, campate e archivio. `in_attesa` è un residuo. */
+export function rapportinoEChiuso(stato: RapportinoStato | undefined | null) {
+  return stato === "archiviato" || stato === "in_attesa";
+}
+
+export function statoRapportinoNormalizzato(stato: RapportinoStato): RapportinoStato {
+  return stato === "in_attesa" ? "archiviato" : stato;
+}
+
 export const SYNC_LABEL: Record<SyncStatus, string> = {
   local: "Solo locale",
-  pending: "In coda",
+  pending: "Da inviare",
   synced: "Sincronizzato",
   error: "Invio non riuscito",
 };
@@ -222,9 +236,25 @@ export const CAMPATA_ESITO_LABEL: Record<CampataEsito, string> = {
   nulla_da_tagliare: "Nulla da tagliare",
 };
 
-/** Nel piano operativo «nulla da tagliare» chiude la campata come tagliata (avanzamento verde). */
-export function esitoRapportinoToStato(esito: CampataEsito): CampataStatoLavoro {
-  return esito === "tralasciata" ? "tralasciata" : "tagliata";
+/** Il rapportino chiude sempre come tagliata: il «da non tagliare» si segna in elenco. */
+export function esitoRapportinoToStato(_esito: CampataEsito): CampataStatoLavoro {
+  return "tagliata";
+}
+
+export function campataETagliata(c: Pick<CampataLavoro, "stato" | "daNonTagliare">) {
+  return c.stato === "tagliata" || c.stato === "tralasciata" || Boolean(c.daNonTagliare);
+}
+
+export function campataDaNonTagliare(c: Pick<CampataLavoro, "stato" | "daNonTagliare">) {
+  return Boolean(c.daNonTagliare) || c.stato === "tralasciata";
+}
+
+/** Tecnico sempre; operatore solo se l’ha segnata lui o se nessuno l’ha ancora segnata. */
+export function puoModificareSceltaCampata(session: Session | null | undefined, byUserId?: string | null) {
+  if (!session) return false;
+  if (session.ruolo === "tecnico") return true;
+  if (!byUserId) return true;
+  return byUserId === session.userId;
 }
 
 export function eventoStoricoDaEsito(esito: CampataEsito): string {

@@ -1,191 +1,91 @@
-/** Coordinate calibrate sul foglio `public/scheda-taglio.pdf` (716×1015 pt). */
+/** Coordinate calibrate sul foglio `public/scheda-taglio.pdf` (716.82 × 1014.51 pt). */
 
 export type Box = { x: number; y: number; w: number; h: number };
 
-export type CombRow = Box & { cells: ReadonlyArray<{ x: number; w: number }> };
+/** Testo sulla riga stampata: `y` è la baseline, come nel PDF. */
+export type LineText = { x: number; y: number; maxW: number; size: number };
 
 export const SCHEDA_HEADER = {
-  codice: { x: 27.8, y: 942, w: 88, h: 22 } satisfies Box,
-  descr: { x: 115.8, y: 942, w: 480.4, h: 22 } satisfies Box,
-  campata: { x: 596.1, y: 942, w: 98.9, h: 22 } satisfies Box,
+  codice: { x: 28.1, y: 944.8, w: 87.9, h: 20.7 } satisfies Box,
+  descr: { x: 116.0, y: 944.8, w: 480.4, h: 20.7 } satisfies Box,
+  campata: { x: 596.4, y: 944.8, w: 98.9, h: 20.7 } satisfies Box,
 } as const;
 
-/** Riga «In data … / Dipendente TERNA» — caratteri sui puntini. */
-export const SCHEDA_IN_DATA: CombRow = {
-  x: 31.1,
-  y: 908,
-  w: 170,
-  h: 14,
-  cells: [
-    { x: 31.1, w: 2.4 },
-    { x: 33.5, w: 3.4 },
-    { x: 36.9, w: 4.9 },
-    { x: 41.8, w: 3.4 },
-    { x: 45.1, w: 2.4 },
-    { x: 47.5, w: 3.1 },
-    { x: 50.6, w: 2.3 },
-    { x: 52.9, w: 2.9 },
-    { x: 55.8, w: 3.1 },
-    { x: 59, w: 3.1 },
-  ],
-};
+/** «In data …» — sui puntini, non sopra la scritta. */
+export const SCHEDA_IN_DATA: LineText = { x: 66, y: 915.5, maxW: 72, size: 9 };
 
-export const SCHEDA_IN_DATA_TERNA: CombRow = {
-  x: 149.6,
-  y: 908,
-  w: 52,
-  h: 14,
-  cells: [
-    { x: 149.6, w: 2.4 },
-    { x: 152, w: 5.4 },
-    { x: 157.4, w: 2.4 },
-    { x: 159.7, w: 2.1 },
-    { x: 161.9, w: 3.6 },
-    { x: 165.5, w: 2.1 },
-    { x: 167.6, w: 2.8 },
-    { x: 170.4, w: 2.5 },
-    { x: 172.9, w: 3.6 },
-    { x: 176.5, w: 2.2 },
-    { x: 179.6, w: 1.7 },
-    { x: 181.3, w: 2.3 },
-    { x: 183.5, w: 3 },
-    { x: 186.5, w: 2 },
-    { x: 188.5, w: 3.4 },
-    { x: 191.9, w: 2.3 },
-    { x: 194.1, w: 2.9 },
-    { x: 197, w: 2.5 },
-    { x: 199.5, w: 3.3 },
-  ],
-};
+/** «Il sottoscritto …» Dipendente TERNA. */
+export const SCHEDA_IN_DATA_TERNA: LineText = { x: 211, y: 915.5, maxW: 116, size: 8.5 };
 
-/** Riga «Al Sig. … / Ditta …» — caratteri sui puntini. */
-export const SCHEDA_AL_SIG_REP: CombRow = {
-  x: 57.1,
-  y: 869,
-  w: 125,
-  h: 14,
-  cells: [
-    { x: 57.1, w: 8.5 },
-    { x: 65.7, w: 3.6 },
-    { x: 69.3, w: 2.8 },
-    { x: 72.1, w: 10.1 },
-    { x: 82.2, w: 3.6 },
-    { x: 85.8, w: 3.3 },
-    { x: 89, w: 6.9 },
-    { x: 95.9, w: 3.5 },
-    { x: 99.4, w: 9.7 },
-    { x: 109.1, w: 3.5 },
-    { x: 112.7, w: 6.3 },
-    { x: 118.9, w: 3.6 },
-    { x: 122.5, w: 10.1 },
-    { x: 132.7, w: 3.5 },
-    { x: 136.2, w: 9.6 },
-    { x: 145.8, w: 3.6 },
-    { x: 149.4, w: 2.8 },
-    { x: 152.2, w: 10.1 },
-    { x: 162.3, w: 3.6 },
-    { x: 165.9, w: 6.3 },
-    { x: 172.1, w: 5.9 },
-    { x: 178, w: 2.4 },
-  ],
-};
+/** «Al Sig. …» */
+export const SCHEDA_AL_SIG_REP: LineText = { x: 64, y: 879.4, maxW: 94, size: 9 };
 
-export const SCHEDA_AL_SIG_DITTA: CombRow = {
-  x: 360.5,
-  y: 869,
-  w: 140,
-  h: 14,
-  cells: [
-    { x: 360.5, w: 3.5 },
-    { x: 364, w: 6.9 },
-    { x: 370.9, w: 9.3 },
-    { x: 380.2, w: 4 },
-    { x: 384.2, w: 3.4 },
-    { x: 387.6, w: 5.8 },
-    { x: 393.4, w: 3.5 },
-    { x: 396.9, w: 6.9 },
-    { x: 403.8, w: 3.5 },
-    { x: 407.3, w: 6.9 },
-    { x: 414.2, w: 3.5 },
-    { x: 417.7, w: 6.9 },
-    { x: 424.6, w: 3.5 },
-    { x: 428.1, w: 6.9 },
-    { x: 435, w: 3.5 },
-    { x: 438.5, w: 6.9 },
-    { x: 445.4, w: 3.5 },
-    { x: 448.9, w: 6.9 },
-    { x: 455.8, w: 3.5 },
-    { x: 459.3, w: 6.9 },
-    { x: 466.2, w: 3.5 },
-    { x: 469.7, w: 6.9 },
-    { x: 476.6, w: 3.5 },
-    { x: 480.1, w: 6.9 },
-    { x: 487, w: 3.5 },
-    { x: 490.5, w: 6.9 },
-  ],
-};
+/** «… della Ditta …» */
+export const SCHEDA_AL_SIG_DITTA: LineText = { x: 351, y: 879.4, maxW: 50, size: 8 };
 
-/** Riga sotto l’intestazione «Data» / «N° Operatori» (non sulla riga delle etichette). */
+/** Data sotto l’etichetta; N° operatori nel riquadro piccolo a destra. */
 export const SCHEDA_FOOTER = {
-  date: {
-    x: 28,
-    y: 58,
-    w: 88,
-    h: 14,
-    cells: [
-      { x: 31.1, w: 5.5 },
-      { x: 36.6, w: 5.5 },
-      { x: 42.1, w: 5.5 },
-      { x: 47.6, w: 5.5 },
-      { x: 53.1, w: 5.5 },
-      { x: 58.6, w: 5.5 },
-      { x: 64.1, w: 5.5 },
-      { x: 69.6, w: 5.5 },
-      { x: 75.1, w: 5.5 },
-      { x: 80.6, w: 5.5 },
-    ],
-  } satisfies CombRow,
-  nOperatori: { x: 596.1, y: 58, w: 50.1, h: 14 } satisfies Box,
+  date: { x: 28.1, y: 68, w: 87.9, h: 10.5 } satisfies Box,
+  nOperatori: { x: 596.4, y: 80.5, w: 50, h: 11 } satisfies Box,
 } as const;
 
 export const SCHEDA_QTY = {
-  x: 646.3,
-  w: 49.1,
-  h: 16,
+  x: 646.5,
+  w: 48.8,
+  h: 20.8,
   y: {
-    "1.1": 695.4,
-    "1.2": 673.7,
-    "1.3": 652,
-    "1.4": 630.4,
-    "1.5": 608.7,
-    "2.1": 587,
-    "2.2": 565.3,
-    "2.3": 543.6,
-    "2.4": 511.2,
-    "2.5": 473,
-    "3.1": 446.2,
-    "3.2": 422.2,
-    "3.3": 404.1,
-    "3.4": 376.7,
-    "3.5": 343.9,
-    "4.1": 319.5,
-    "4.2": 296.7,
-    "4.3": 277.9,
-    "5.1": 259.1,
-    "5.2": 240.4,
-    "5.3": 225.6,
-    "5.4": 202.7,
-    "5.5": 183.9,
-    "5.6": 165.1,
-    "5.7": 146.4,
-    "6.1": 127.6,
-    "6.2": 112.8,
-    "6.3": 104.6,
+    "1.1": 711.4,
+    "1.2": 689.7,
+    "1.3": 668.0,
+    "1.4": 646.4,
+    "1.5": 624.7,
+    "2.1": 603.0,
+    "2.2": 581.3,
+    "2.3": 559.6,
+    "2.4": 521.6,
+    "2.5": 482.2,
+    "3.1": 462.0,
+    "3.2": 438.0,
+    "3.3": 419.8,
+    "3.4": 390.0,
+    "3.5": 353.4,
+    "4.1": 335.5,
+    "4.2": 316.7,
+    "4.3": 297.9,
+    "5.1": 279.1,
+    "5.2": 260.3,
+    "5.3": 241.5,
+    "5.4": 222.7,
+    "5.5": 203.9,
+    "5.6": 185.1,
+    "5.7": 166.3,
+    "6.1": 147.5,
+    "6.2": 128.7,
+    "6.3": 106.1,
+  } as Record<string, number>,
+  hByCode: {
+    "2.4": 38,
+    "2.5": 39.4,
+    "3.2": 24,
+    "3.4": 29.8,
+    "3.5": 36.6,
+    "6.3": 22.6,
   } as Record<string, number>,
 } as const;
 
-/** Solo firme in chiusura (Designato TERNA / Ditta). */
+export function schedaQtyBox(codice: string): Box | null {
+  const y = SCHEDA_QTY.y[codice];
+  if (y == null) return null;
+  return {
+    x: SCHEDA_QTY.x,
+    y,
+    w: SCHEDA_QTY.w,
+    h: SCHEDA_QTY.hByCode[codice] ?? SCHEDA_QTY.h,
+  };
+}
+
+/** Firme in chiusura, nella fascia sotto Data / Personale. */
 export const SCHEDA_FIRME = {
-  designatoTerna: { x: 90, y: 44, w: 140, h: 28 },
-  designatoDitta: { x: 548, y: 44, w: 165, h: 28 },
+  designatoTerna: { x: 130, y: 50.3, w: 200, h: 18 },
+  designatoDitta: { x: 490, y: 50.3, w: 190, h: 18 },
 } as const satisfies Record<string, Box>;

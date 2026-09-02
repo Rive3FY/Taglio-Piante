@@ -1,6 +1,6 @@
 import { db, enqueueSync } from "@/lib/db";
 import { rapportinoVisibile } from "@/lib/sezioni";
-import type { Session } from "@/lib/types";
+import { rapportinoEChiuso, type Session } from "@/lib/types";
 
 export type PrefsSquadra = {
   rappresentanteDitta: string;
@@ -48,7 +48,7 @@ export async function applicaSquadraAiRapportini(session: Session, prefs: PrefsS
     });
     await enqueueSync(
       r.id,
-      r.stato === "archiviato" ? "archive" : r.stato === "in_attesa" ? "submit" : "upsert",
+      rapportinoEChiuso(r.stato) ? "archive" : "upsert",
     );
   }
 }

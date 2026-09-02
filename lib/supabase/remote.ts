@@ -52,7 +52,7 @@ export function messaggioErroreSupabase(message: string) {
     return "Permesso negato sul database (policy RLS). In Supabase → SQL esegui tutto supabase/schema.sql, poi verifica che il tuo account abbia un profilo con ruolo corretto.";
   }
   if (/schema cache|does not exist|could not find the/i.test(message)) {
-    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (serve anche la colonna dist_int sulle campate).";
+    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int e da_non_tagliare sulle campate).";
   }
   if (/foreign key constraint|violates foreign key/i.test(message)) {
     return "Dati non allineati: manca la linea collegata sul database. Sincronizza le anagrafiche o riesegui supabase/schema.sql.";
@@ -87,11 +87,31 @@ async function upsertOmettendoColonneMancanti(
 }
 
 /** Scrive le campate su Supabase. Se manca una colonna (es. attenzionare), ritenta senza. */
-export async function upsertCampateLavoro(rows: ReturnType<typeof campataLavoroToRow>[]) {
-  await upsertOmettendoColonneMancanti(
-    "campate_lavoro",
-    rows as unknown as Record<string, unknown>[],
-  );
+export async function upsertCampateLavoro(
+  rows: ReturnType<typeof campataLavoroToRow>[],
+  opts?: { vietatoOmettere?: string[] },
+) {
+  const supabase = getSupabase();
+  if (!supabase || rows.length === 0) return;
+
+  let payload = rows as unknown as Record<string, unknown>[];
+  for (let i = 0; i < 8; i += 1) {
+    const { error } = await supabase.from("campate_lavoro").upsert(payload);
+    if (!error) return;
+    const col = colonnaDaErrore(error.message);
+    if (!col || payload.every((row) => !(col in row))) {
+      throw new Error(messaggioErroreSupabase(error.message));
+    }
+    if (opts?.vietatoOmettere?.includes(col)) {
+      throw new Error(messaggioErroreSupabase(error.message));
+    }
+    payload = payload.map((row) => {
+      const copia = { ...row };
+      delete copia[col];
+      return copia;
+    });
+  }
+  throw new Error("Invio non riuscito: il database non è allineato con l’app.");
 }
 
 function dataUrlToBlob(dataUrl: string) {
@@ -198,16 +218,25 @@ async function pushCampateEliminate() {
   await db.campateDeleteQueue.bulkDelete(ids);
 }
 
-export async function pushCampatePending(_rapportinoId?: string) {
+export async function pushCampatePending(rapportinoId?: string) {
   const supabase = getSupabase();
   if (!supabase) return;
+
+  if (rapportinoId) {
+    const { error } = await supabase.from("campate_storico").delete().eq("rapportino_id", rapportinoId);
+    if (error && !/column|rapportino_id/i.test(error.message)) throw new Error(error.message);
+  }
 
   const rows = await db.campateLavoro
     .filter((c) => c.syncStatus === "pending" || c.syncStatus === "error")
     .toArray();
 
   if (rows.length > 0) {
-    await upsertCampateLavoro(rows.map(campataLavoroToRow));
+    // Senza da_non_tagliare il tecnico vedrebbe la campata come normale: meglio
+    // fallire con un messaggio chiaro che perdere il segno in silenzio.
+    await upsertCampateLavoro(rows.map(campataLavoroToRow), {
+      vietatoOmettere: ["da_non_tagliare"],
+    });
 
     const ids = new Set(rows.map((c) => c.id));
     const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
@@ -474,6 +503,15 @@ export async function fetchNextNumero() {
   const seq = last ? Number(last.slice(prefix.length)) : 0;
   if (Number.isNaN(seq)) return `${prefix}0001`;
   return `${prefix}${String(seq + 1).padStart(4, "0")}`;
+}
+
+/** Serve a scoprire due fogli creati offline con lo stesso numero su telefoni diversi. */
+export async function idsConNumero(numero: string) {
+  const supabase = getSupabase();
+  if (!supabase || !numero) return [];
+  const { data, error } = await supabase.from("rapportini").select("id").eq("numero", numero);
+  if (error) throw new Error(messaggioErroreSupabase(error.message));
+  return (data ?? []).map((row) => String((row as { id: string }).id));
 }
 
 export function supabaseReady() {

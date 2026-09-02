@@ -1,6 +1,6 @@
 import type { Rapportino, RapportinoStato, Session } from "./types";
 
-export type SezioneKey = "bozze" | "in-attesa" | "archiviati";
+export type SezioneKey = "bozze" | "archiviati";
 
 export type Sezione = {
   key: SezioneKey;
@@ -21,20 +21,12 @@ export const SEZIONI: Sezione[] = [
     stati: ["bozza", "da_prendere"],
   },
   {
-    key: "in-attesa",
-    kicker: "Inviati",
-    titolo: "In attesa",
-    descrizione: "Già inviati al tecnico, in attesa di verifica.",
-    vuoto: "Nessun rapportino in attesa.",
-    stati: ["in_attesa"],
-  },
-  {
     key: "archiviati",
     kicker: "Chiusi",
     titolo: "Archiviati",
-    descrizione: "Chiusi dal tecnico e conservati sulla linea.",
+    descrizione: "Completati e conservati sulla linea.",
     vuoto: "Nessun rapportino archiviato.",
-    stati: ["archiviato"],
+    stati: ["archiviato", "in_attesa"],
   },
 ];
 

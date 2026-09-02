@@ -1,7 +1,6 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
-import { prezzoChiamata } from "./listino";
-
-const STATI_CONTABILI: Rapportino["stato"][] = ["in_attesa", "archiviato"];
+import { rapportinoEChiuso } from "@/lib/types";
+import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
 export type VoceContabile = {
   prestazioneId: string;
@@ -81,7 +80,7 @@ export function giorniAllaChiusura(mese: string, oggiIso: string) {
 
 export function rapportiniDelMese(rapportini: Rapportino[], mese: string) {
   return rapportini.filter(
-    (r) => STATI_CONTABILI.includes(r.stato) && r.dataLavoro && meseDaIso(r.dataLavoro) === mese,
+    (r) => rapportinoEChiuso(r.stato) && r.dataLavoro && meseDaIso(r.dataLavoro) === mese,
   );
 }
 
@@ -109,7 +108,7 @@ function vociDaRapportini(
       unitaMisura: p.unitaMisura,
       quantita,
       prezzoUnitario: prezzo,
-      importo: prezzo == null ? null : Math.round(quantita * prezzo * 100) / 100,
+      importo: importoVoce(quantita, p.codice, p.unitaMisura),
     });
   }
   for (const [id, quantita] of qty) {
@@ -117,7 +116,7 @@ function vociDaRapportini(
     voci.push({
       prestazioneId: id,
       codice: "?",
-      descrizione: "Chiamata non in anagrafica",
+      descrizione: "Prestazione non in anagrafica",
       unitaMisura: "",
       quantita,
       prezzoUnitario: null,
@@ -129,7 +128,7 @@ function vociDaRapportini(
 
 function sommaImporti(voci: VoceContabile[]) {
   if (voci.some((v) => v.importo == null)) return null;
-  return voci.reduce((s, v) => s + (v.importo ?? 0), 0);
+  return arrotondaEuro(voci.reduce((s, v) => s + (v.importo ?? 0), 0));
 }
 
 export function aggregaMese(
@@ -189,12 +188,13 @@ export function avanzamentoPriorita(
   priorita: CampataPriorita,
 ): AvanzamentoPriorita {
   const set = campate.filter((c) => c.tipo !== "base" && c.priorita === priorita);
+  const tagliate = set.filter((c) => c.stato === "tagliata" || c.stato === "tralasciata" || c.daNonTagliare).length;
   return {
     priorita,
     totale: set.length,
-    tagliate: set.filter((c) => c.stato === "tagliata").length,
-    daTagliare: set.filter((c) => c.stato === "da_tagliare").length,
-    tralasciate: set.filter((c) => c.stato === "tralasciata").length,
+    tagliate,
+    daTagliare: set.length - tagliate,
+    tralasciate: 0,
   };
 }
 
@@ -236,4 +236,61 @@ export function formatQuantita(n: number) {
   return Number.isInteger(n)
     ? String(n)
     : n.toLocaleString("it-IT", { maximumFractionDigits: 2 });
+}
+
+export function rapportiniContabiliFinoA(rapportini: Rapportino[], finoA: string) {
+  return rapportini.filter(
+    (r) => rapportinoEChiuso(r.stato) && r.dataLavoro && r.dataLavoro <= finoA,
+  );
+}
+
+export function lineeConPrestazioni(
+  rapportini: Rapportino[],
+  linee: Linea[],
+  finoA: string,
+) {
+  const usati = rapportiniContabiliFinoA(rapportini, finoA);
+  const lineeById = new Map(linee.map((l) => [l.id, l]));
+  const ids = [...new Set(usati.map((r) => r.lineaId))];
+  return ids
+    .map((id) => {
+      const linea = lineeById.get(id);
+      const dellaLinea = usati.filter((r) => r.lineaId === id);
+      const ultima = dellaLinea.reduce(
+        (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
+        dellaLinea[0]?.dataLavoro ?? "",
+      );
+      return {
+        lineaId: id,
+        codiceLinea: linea?.codice ?? id,
+        nomeLinea: linea?.nome ?? "Linea",
+        rapportini: dellaLinea.length,
+        ultimaData: ultima,
+      };
+    })
+    .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
+}
+
+export function aggregaPrestazioniLinea(
+  rapportini: Rapportino[],
+  prestazioni: Prestazione[],
+  linea: Linea | undefined,
+  lineaId: string,
+  finoA: string,
+): LineaContabile & { ultimaData: string } {
+  const items = rapportiniContabiliFinoA(rapportini, finoA).filter((r) => r.lineaId === lineaId);
+  const voci = vociDaRapportini(items, prestazioni);
+  const ultimaData = items.reduce(
+    (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
+    items[0]?.dataLavoro ?? "",
+  );
+  return {
+    lineaId,
+    codiceLinea: linea?.codice ?? lineaId,
+    nomeLinea: linea?.nome ?? "Linea",
+    rapportini: items.length,
+    voci,
+    importo: sommaImporti(voci),
+    ultimaData,
+  };
 }

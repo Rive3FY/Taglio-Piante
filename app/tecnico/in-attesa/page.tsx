@@ -1,13 +1,5 @@
-"use client";
-
-import { RapportinoList } from "@/components/RapportinoList";
+import { redirect } from "next/navigation";
 
 export default function InAttesaPage() {
-  return (
-    <RapportinoList
-      stato="in_attesa"
-      title="Rapportini in attesa"
-      empty="Nessun rapportino in attesa di verifica."
-    />
-  );
+  redirect("/tecnico/archiviati");
 }

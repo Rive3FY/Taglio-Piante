@@ -21,7 +21,7 @@ export default function OperatoreHome() {
         <Link href="/operatore/campate" className="home-card">
           <div className="kicker">Elenco</div>
           <h2>Campate</h2>
-          <p className="muted">Pianificate, tagliate, tralasciate. Da qui parti col rapportino precompilato.</p>
+          <p className="muted">Pianificate e tagliate. Da qui parti col rapportino precompilato.</p>
         </Link>
 
         {SEZIONI.map((sezione) => {

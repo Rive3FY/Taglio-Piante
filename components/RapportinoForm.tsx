@@ -11,12 +11,19 @@ import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import type { CampataLavoro, Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoCampata, RapportinoRiga } from "@/lib/types";
+import { rapportinoEChiuso } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
 import { eLavoroBasi, esitiClassificati } from "@/lib/campate/basi";
+import {
+  campateGiaTagliateDaFoglio,
+  esitiCheToccanoDaNonTagliare,
+  messaggioCampateDaNonTagliare,
+  messaggioCampateGiaTagliate,
+} from "@/lib/campate/guard";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 
 const EMPTY_LINEE: Linea[] = [];
@@ -35,7 +42,7 @@ type Props = {
 export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCampataId }: Props) {
   const router = useRouter();
   const { session } = useSession();
-  const { online, syncNow } = useSync();
+  const { syncNow } = useSync();
   const [squadraTick, setSquadraTick] = useState(0);
   const [squadra, setSquadra] = useState<PrefsSquadra | null>(null);
   useEffect(() => {
@@ -178,6 +185,35 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     [prestazioni, qty, testoBox],
   );
 
+  const campateBloccate = useMemo(() => {
+    if (qtyHaBase) return [];
+    const righe = prestazioni
+      .filter((p) => (qty[p.id] ?? 0) > 0)
+      .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] }));
+    return esitiCheToccanoDaNonTagliare(
+      campateLinea,
+      testoBox,
+      { righe },
+      prestazioni,
+      esiti.length > 0 ? esiti : undefined,
+    );
+  }, [campateLinea, testoBox, prestazioni, qty, esiti, qtyHaBase]);
+  const erroreDaNonTagliare = messaggioCampateDaNonTagliare(campateBloccate);
+  const campateGiaTagliate = useMemo(() => {
+    if (qtyHaBase) return [];
+    const righe = prestazioni
+      .filter((p) => (qty[p.id] ?? 0) > 0)
+      .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] }));
+    const classificati = esitiClassificati(
+      testoBox,
+      { righe },
+      prestazioni,
+      esiti.length > 0 ? esiti : undefined,
+    );
+    return campateGiaTagliateDaFoglio(campateLinea, classificati, existing?.id);
+  }, [campateLinea, testoBox, prestazioni, qty, esiti, qtyHaBase, existing?.id]);
+  const avvisoGiaTagliata = messaggioCampateGiaTagliate(campateGiaTagliate);
+
   const modoPrecompilato = Boolean(
     precompilatoLineaId ||
       precompilatoCampataId ||
@@ -199,7 +235,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           originale: scelta.originale,
           normalizzata: scelta.normalizzata,
           priorita: scelta.priorita,
-          esito: scelta.stato === "tralasciata" ? "tralasciata" : "tagliata",
+          esito: "tagliata",
         },
       ]);
       return;
@@ -251,6 +287,20 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         }));
       const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
       const esitiSalvati = esitiClassificati(testoSorgente, { righe }, prestazioni, esiti);
+      const campateSulDb = await db.campateLavoro.where("lineaId").equals(effectiveLineaId).toArray();
+      const bloccate = qtyHaBase
+        ? []
+        : esitiCheToccanoDaNonTagliare(
+            campateSulDb,
+            testoSorgente,
+            { righe },
+            prestazioni,
+            esitiSalvati,
+          );
+      if (bloccate.length > 0) {
+        setError(messaggioCampateDaNonTagliare(bloccate));
+        return null;
+      }
       const campataTesto = testoSorgente;
       const sigDitta = (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim();
       const nSquadra = nOperatori || squadra?.nOperatori || 0;
@@ -283,7 +333,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         id,
         extra.archiviatoAt ? "archive" : extra.inviatoAt ? "submit" : extra.presoAt ? "take" : "upsert",
       );
-      if (session && (stato === "in_attesa" || stato === "archiviato")) {
+      if (session && rapportinoEChiuso(stato)) {
         await applicaEsitiDaRapportino(record, session);
       }
       void syncNow();
@@ -296,8 +346,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
   }
 
-  function homeDopoInvio(inAttesa: boolean) {
-    if (session?.ruolo === "tecnico") return inAttesa ? "/tecnico/in-attesa" : "/tecnico";
+  function homeDopoInvio() {
+    if (session?.ruolo === "tecnico") return "/tecnico";
     return "/operatore";
   }
 
@@ -318,10 +368,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       prestazioni.some((p) => (qty[p.id] ?? 0) > 0);
 
     if (!completo) {
-      const stato =
-        existing?.stato === "in_attesa" || existing?.stato === "archiviato"
-          ? existing.stato
-          : "bozza";
+      const stato = rapportinoEChiuso(existing?.stato) ? "archiviato" : "bozza";
       const saved = await persist(stato);
       if (!saved) return;
       if (!existing) {
@@ -334,12 +381,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
 
     const now = new Date().toISOString();
-    const inAttesa = !firmaOperatore || !online;
-    const saved = await persist(inAttesa ? "in_attesa" : "archiviato", {
-      inviatoAt: now,
-      archiviatoAt: inAttesa ? existing?.archiviatoAt : now,
+    const saved = await persist("archiviato", {
+      inviatoAt: existing?.inviatoAt ?? now,
+      archiviatoAt: now,
     });
-    if (saved) router.push(homeDopoInvio(inAttesa));
+    if (saved) router.push(homeDopoInvio());
   }
 
   async function previewSheet() {
@@ -406,12 +452,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       }}
     >
       <section className="panel scheda-panel">
-        {existing?.stato === "in_attesa" ? (
-          <p className="muted">
-            Questo rapportino è in attesa. Salva con la firma della ditta per chiuderlo, oppure senza
-            firma per lasciarlo in attesa.
-          </p>
-        ) : null}
         <div className="scheda-head">
           <label>
             Codice linea
@@ -436,6 +476,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               <span className="muted">
                 I numeri coincidono con 5.1–5.4: sono basi, la tabella campate non si tocca.
               </span>
+            ) : erroreDaNonTagliare ? (
+              <span className="form-error">{erroreDaNonTagliare}</span>
+            ) : avvisoGiaTagliata ? (
+              <span className="muted">{avvisoGiaTagliata}</span>
             ) : null}
           </label>
         </div>
@@ -497,7 +541,13 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       </section>
 
       {modoPrecompilato ? (
-        <CampateEsitiEditor pianificate={pianificate} esiti={esiti} onChange={setEsiti} />
+        <CampateEsitiEditor
+          pianificate={pianificate}
+          esiti={esiti}
+          campateLinea={campateLinea}
+          onChange={setEsiti}
+          onBlocco={(msg) => setError(msg)}
+        />
       ) : null}
 
       <section className="panel">
@@ -578,11 +628,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
             )}
             <SignaturePad
               label="Il Designato Ditta"
-              hint={
-                online
-                  ? "Se manca, il rapportino va in attesa."
-                  : "Sei offline: anche con firma il rapportino resta in attesa finché non c’è rete."
-              }
+              hint="Compare sul foglio ufficiale."
               value={firmaOperatore}
               onChange={setFirmaOperatore}
             />
@@ -601,7 +647,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           <DeleteRapportinoButton
             id={existing.id}
             numero={existing.numero}
-            href={session?.ruolo === "tecnico" ? "/tecnico/in-attesa" : "/operatore"}
+            href={session?.ruolo === "tecnico" ? "/tecnico/archiviati" : "/operatore"}
           />
         </div>
       ) : null}
@@ -612,7 +658,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       {dockReady
         ? createPortal(
             <div className="form-actions-dock">
-              <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving}>
+              <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving || Boolean(erroreDaNonTagliare)}>
                 {saving ? "Salvataggio…" : "Salva"}
               </button>
             </div>,

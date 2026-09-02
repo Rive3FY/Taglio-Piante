@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { parseFileCampate } from "@/lib/campate/file";
-import { costruisciAnteprima, type AnteprimaImport } from "@/lib/campate/preview";
-import { confermaImportCampate } from "@/lib/campate/apply";
+import { costruisciAnteprima, conteggioDistanzeDaFile, type AnteprimaImport } from "@/lib/campate/preview";
+import { aggiornaDistanzeDaFile, confermaImportCampate } from "@/lib/campate/apply";
 import { useSession } from "@/lib/SessionContext";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 import { formatDistInt } from "@/lib/format";
@@ -21,6 +21,8 @@ export default function ImportaCampatePage() {
   const [errore, setErrore] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [anteprima, setAnteprima] = useState<AnteprimaImport | null>(null);
+  const haPiano = esistenti.length > 0;
+  const distanze = anteprima ? conteggioDistanzeDaFile(anteprima.voci, esistenti) : null;
 
   async function onFile(file: File | null) {
     if (!file) return;
@@ -42,6 +44,24 @@ export default function ImportaCampatePage() {
       setAnteprima(preview);
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Impossibile leggere il file.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function aggiornaDistanze() {
+    if (!anteprima || !session) return;
+    setBusy(true);
+    setErrore(null);
+    try {
+      const { aggiornate } = await aggiornaDistanzeDaFile({ anteprima });
+      if (aggiornate === 0) {
+        setErrore("Nessuna distanza da attaccare: nel file non c’è Dist int oppure le campate non coincidono.");
+        return;
+      }
+      router.push("/tecnico/campate");
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Aggiornamento distanze non riuscito.");
     } finally {
       setBusy(false);
     }
@@ -75,11 +95,19 @@ export default function ImportaCampatePage() {
       <h2>Carica file campate</h2>
 
       <section className="panel">
-        <p className="muted">
-          Caricando un nuovo file l’app viene <strong>azzerata</strong> sul piano operativo: spariscono
-          rapportini, campate, linee e storico. Restano solo ditte, prestazioni e account operatori.
-          Poi si riparte con le righe del file.
-        </p>
+        {haPiano ? (
+          <p className="muted">
+            Le distanze <strong>non sono già nei dati importati</strong>: serve di nuovo lo stesso file LIDAR.
+            Usa <strong>Aggiorna solo le distanze</strong>: restano rapportini, stati e storico.
+            «Azzera e importa» cancella tutto il piano operativo.
+          </p>
+        ) : (
+          <p className="muted">
+            Caricando un nuovo file l’app viene <strong>azzerata</strong> sul piano operativo: spariscono
+            rapportini, campate, linee e storico. Restano solo ditte, prestazioni e account operatori.
+            Poi si riparte con le righe del file.
+          </p>
+        )}
         <label className="file-btn btn btn-primary">
           Scegli file PDF o CSV
           <input
@@ -96,19 +124,29 @@ export default function ImportaCampatePage() {
       {anteprima ? (
         <section className="panel">
           <h2>Anteprima</h2>
-          <div className="panel" style={{ borderColor: "var(--danger, #c0392b)" }}>
-            <p>
-              <strong>Attenzione:</strong> confermando verranno eliminati{" "}
-              <strong>{rapportini.length} rapportini</strong>,{" "}
-              <strong>{esistenti.filter((c) => c.tipo !== "base").length} campate</strong> e{" "}
-              <strong>{linee.length} linee</strong> attuali. Al loro posto resteranno solo le{" "}
-              <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe</strong>{" "}
-              riconosciute in questo file.
-            </p>
-          </div>
+          {haPiano ? (
+            <div className="panel">
+              <p>
+                Trovate <strong>{distanze?.nelFile ?? 0} distanze</strong> nel file, di cui{" "}
+                <strong>{distanze?.aggiornabili ?? 0}</strong> si possono attaccare alle campate già in elenco.
+                Rapportini e tagli già fatti non vengono toccati.
+              </p>
+            </div>
+          ) : (
+            <div className="panel" style={{ borderColor: "var(--danger, #c0392b)" }}>
+              <p>
+                <strong>Attenzione:</strong> confermando verranno eliminati{" "}
+                <strong>{rapportini.length} rapportini</strong>,{" "}
+                <strong>{esistenti.filter((c) => c.tipo !== "base").length} campate</strong> e{" "}
+                <strong>{linee.length} linee</strong> attuali. Al loro posto resteranno solo le{" "}
+                <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe</strong>{" "}
+                riconosciute in questo file.
+              </p>
+            </div>
+          )}
           <ul className="storico-list">
             <li>{anteprima.voci.filter((v) => v.distInt != null).length} con distanza (Dist int)</li>
-            <li>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} interventi nel nuovo piano</li>
+            <li>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} interventi nel file</li>
             <li>{anteprima.duplicati} duplicati nel file (si importa una sola volta)</li>
             <li>{anteprima.doppiaPriorita} campate sia urgenti sia differibili</li>
             <li>{anteprima.scartate.length} righe non riconosciute</li>
@@ -147,13 +185,23 @@ export default function ImportaCampatePage() {
             </table>
           </div>
           {anteprima.voci.length > 80 ? (
-            <p className="muted">Mostrate le prime 80. In importazione partono tutte.</p>
+            <p className="muted">Mostrate le prime 80. L’operazione usa tutte le righe.</p>
           ) : null}
 
           <div className="elenco-azioni">
+            {haPiano ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy || (distanze?.aggiornabili ?? 0) === 0}
+                onClick={() => void aggiornaDistanze()}
+              >
+                {busy ? "Aggiornamento…" : "Aggiorna solo le distanze"}
+              </button>
+            ) : null}
             <button
               type="button"
-              className="btn btn-primary"
+              className={haPiano ? "btn" : "btn btn-primary"}
               disabled={busy || anteprima.voci.length === 0}
               onClick={() => void conferma()}
             >

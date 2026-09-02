@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
 import { FiltroGruppo } from "@/components/FiltroGruppo";
-import type { Linea } from "@/lib/types";
+import { rapportinoEChiuso, type Linea } from "@/lib/types";
 
 type Filtro = number | "tutte";
 
@@ -18,12 +18,10 @@ export default function TecnicoLineePage() {
   const [aperti, setAperti] = useState<number[]>([]);
 
   const conteggi = useMemo(() => {
-    const mappa = new Map<string, { inAttesa: number; archiviati: number }>();
+    const mappa = new Map<string, number>();
     for (const r of rapportini) {
-      const voce = mappa.get(r.lineaId) ?? { inAttesa: 0, archiviati: 0 };
-      if (r.stato === "in_attesa") voce.inAttesa += 1;
-      if (r.stato === "archiviato") voce.archiviati += 1;
-      mappa.set(r.lineaId, voce);
+      if (!rapportinoEChiuso(r.stato)) continue;
+      mappa.set(r.lineaId, (mappa.get(r.lineaId) ?? 0) + 1);
     }
     return mappa;
   }, [rapportini]);
@@ -134,11 +132,10 @@ export default function TecnicoLineePage() {
                         <span className="linea-codice">{linea.codice}</span>
                         <span className="linea-nome">{linea.nome}</span>
                         <span className="linea-conteggi">
-                          {c?.inAttesa ? (
-                            <span className="badge badge-in_attesa">{c.inAttesa} in attesa</span>
-                          ) : null}
-                          {c?.archiviati ? (
-                            <span className="badge badge-archiviato">{c.archiviati} archiviati</span>
+                          {c ? (
+                            <span className="badge badge-archiviato">
+                              {c} {c === 1 ? "archiviato" : "archiviati"}
+                            </span>
                           ) : null}
                         </span>
                       </Link>

@@ -10,6 +10,7 @@ import type {
   RapportinoCampata,
   RapportinoRiga,
 } from "@/lib/types";
+import { statoRapportinoNormalizzato } from "@/lib/types";
 
 type RapportinoRow = {
   id: string;
@@ -110,7 +111,7 @@ export function rowToRapportino(
     rappresentanteDitta: row.rappresentante_ditta,
     dipendenteTerna: row.dipendente_terna,
     nOperatori: row.n_operatori,
-    stato: row.stato,
+    stato: statoRapportinoNormalizzato(row.stato),
     syncStatus: "synced",
     righe: row.righe ?? [],
     esitiCampate: row.esiti_campate ?? undefined,
@@ -120,7 +121,7 @@ export function rowToRapportino(
     presoDa: row.preso_da ?? undefined,
     presoAt: row.preso_at ?? undefined,
     inviatoAt: row.inviato_at ?? undefined,
-    archiviatoAt: row.archiviato_at ?? undefined,
+    archiviatoAt: row.archiviato_at ?? (row.stato === "in_attesa" ? row.inviato_at ?? row.updated_at : undefined),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -205,12 +206,15 @@ export function campataLavoroToRow(c: CampataLavoro) {
     normalizzata: c.normalizzata,
     tipo: c.tipo ?? "campata",
     priorita: c.priorita ?? null,
-    stato: c.stato,
+    stato: c.stato === "tralasciata" ? "tagliata" : c.stato,
     origine: c.origine,
     data_taglio: c.dataTaglio ?? null,
     operatore: c.operatore ?? null,
     note: c.note ?? null,
     attenzionare: Boolean(c.attenzionare),
+    attenzionare_by: c.attenzionareBy ?? null,
+    da_non_tagliare: Boolean(c.daNonTagliare),
+    da_non_tagliare_by: c.daNonTagliareBy ?? null,
     dist_int: c.distInt ?? null,
     rapportino_id: c.rapportinoId ?? null,
     import_id: c.importId ?? null,
@@ -219,7 +223,13 @@ export function campataLavoroToRow(c: CampataLavoro) {
   };
 }
 
-export function rowToCampataLavoro(row: ReturnType<typeof campataLavoroToRow> & { tensione_kv?: number | null }): CampataLavoro {
+/** Sul server possono esserci ancora righe con lo stato vecchio «tralasciata». */
+export function rowToCampataLavoro(
+  row: Omit<ReturnType<typeof campataLavoroToRow>, "stato"> & {
+    stato: string;
+    tensione_kv?: number | null;
+  },
+): CampataLavoro {
   return {
     id: row.id,
     lineaId: row.linea_id,
@@ -230,12 +240,15 @@ export function rowToCampataLavoro(row: ReturnType<typeof campataLavoroToRow> & 
     normalizzata: row.normalizzata,
     tipo: row.tipo ?? "campata",
     priorita: (row.priorita as CampataLavoro["priorita"]) ?? undefined,
-    stato: row.stato as CampataLavoro["stato"],
+    stato: (row.stato === "tralasciata" ? "tagliata" : row.stato) as CampataLavoro["stato"],
     origine: row.origine as CampataLavoro["origine"],
     dataTaglio: row.data_taglio ?? undefined,
     operatore: row.operatore ?? undefined,
     note: row.note ?? undefined,
     attenzionare: Boolean(row.attenzionare),
+    attenzionareBy: row.attenzionare_by ?? undefined,
+    daNonTagliare: Boolean(row.da_non_tagliare) || row.stato === "tralasciata",
+    daNonTagliareBy: row.da_non_tagliare_by ?? undefined,
     distInt: row.dist_int ?? undefined,
     rapportinoId: row.rapportino_id ?? undefined,
     importId: row.import_id ?? undefined,

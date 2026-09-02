@@ -12,8 +12,7 @@ import { scaricaBlob } from "@/lib/download";
 
 function cella(valore: unknown) {
   const testo = valore == null ? "" : String(valore);
-  if (/[;"\n]/.test(testo)) return `"${testo.replace(/"/g, '""')}"`;
-  return testo;
+  return `"${testo.replace(/"/g, '""')}"`;
 }
 
 export function nomeFileVistaCampate(filtri: {
@@ -41,9 +40,9 @@ export function scaricaVistaCampate(
   const header = [
     "Codice linea",
     "Nome linea",
-    "kV",
     "Campata",
-    "Dist int",
+    "Distanza",
+    "kV",
     "Originale",
     "Priorità",
     "Stato",
@@ -51,15 +50,16 @@ export function scaricaVistaCampate(
     "Data taglio",
     "Operatore",
     "Da attenzionare",
+    "Da non tagliare",
     "Note",
   ];
   const righe = campate.map((c) =>
     [
       c.codiceLinea,
       c.nomeLinea,
-      c.tensioneKv ?? "",
       c.normalizzata,
       c.distInt != null ? formatDistInt(c.distInt) : "",
+      c.tensioneKv ?? "",
       c.originale,
       c.priorita ? CAMPATA_PRIORITA_LABEL[c.priorita] : "",
       CAMPATA_STATO_LABEL[c.stato],
@@ -67,11 +67,12 @@ export function scaricaVistaCampate(
       c.dataTaglio ? formatDate(c.dataTaglio) : "",
       c.operatore ?? "",
       c.attenzionare ? "sì" : "",
+      c.daNonTagliare || c.stato === "tralasciata" ? "sì" : "",
       c.note ?? "",
     ]
       .map(cella)
       .join(";"),
   );
-  const csv = `\uFEFF${[header.join(";"), ...righe].join("\n")}`;
+  const csv = `\uFEFFsep=;\n${[header.map(cella).join(";"), ...righe].join("\n")}`;
   scaricaBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), nomeFileVistaCampate(filtri));
 }

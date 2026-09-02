@@ -15,6 +15,9 @@ import {
   CAMPATA_ORIGINE_LABEL,
   CAMPATA_PRIORITA_LABEL,
   CAMPATA_STATO_LABEL,
+  campataDaNonTagliare,
+  campataETagliata,
+  puoModificareSceltaCampata,
   type CampataLavoro,
   type CampataOrigine,
   type CampataPriorita,
@@ -40,6 +43,7 @@ export function CampateElenco({
   const [priorita, setPriorita] = useState<PrioritaFiltro>("tutte");
   const [stato, setStato] = useState<StatoFiltro>("tutte");
   const [soloAttenzione, setSoloAttenzione] = useState(false);
+  const [soloDaNonTagliare, setSoloDaNonTagliare] = useState(false);
   const [origine, setOrigine] = useState<OrigineFiltro>("tutte");
   const [linea, setLinea] = useState("");
   const [operatore, setOperatore] = useState("");
@@ -85,8 +89,13 @@ export function CampateElenco({
       .filter((c) => {
         if (kv !== "tutte" && (c.tensioneKv ?? 0) !== kv) return false;
         if (priorita !== "tutte" && c.priorita !== priorita) return false;
-        if (stato !== "tutte" && c.stato !== stato) return false;
+        if (stato === "da_tagliare" && campataETagliata(c)) return false;
+        if (stato === "tagliata" && !campataETagliata(c)) return false;
+        if (stato !== "tutte" && stato !== "da_tagliare" && stato !== "tagliata" && c.stato !== stato) {
+          return false;
+        }
         if (soloAttenzione && !c.attenzionare) return false;
+        if (soloDaNonTagliare && !campataDaNonTagliare(c)) return false;
         if (origine !== "tutte" && c.origine !== origine) return false;
         if (linea && c.codiceLinea !== linea) return false;
         if (operatore && c.operatore !== operatore) return false;
@@ -97,7 +106,7 @@ export function CampateElenco({
           .filter((v) => v != null && v !== "")
           .some((v) => String(v).toLowerCase().includes(term));
       });
-  }, [campate, q, kv, priorita, stato, origine, linea, operatore, periodo, soloAttenzione]);
+  }, [campate, q, kv, priorita, stato, origine, linea, operatore, periodo, soloAttenzione, soloDaNonTagliare]);
 
   const mostrate = filtrate.slice(0, visibili);
   const restanti = filtrate.length - mostrate.length;
@@ -106,17 +115,24 @@ export function CampateElenco({
     const set = campate.filter((c) => c.tipo !== "base");
     return {
       totale: set.length,
-      daTagliare: set.filter((c) => c.stato === "da_tagliare").length,
-      tagliate: set.filter((c) => c.stato === "tagliata").length,
-      tralasciate: set.filter((c) => c.stato === "tralasciata").length,
+      daTagliare: set.filter((c) => !campataETagliata(c)).length,
+      tagliate: set.filter((c) => campataETagliata(c)).length,
+      daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
       aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
       attenzione: set.filter((c) => c.attenzionare).length,
     };
   }, [campate]);
 
-  async function patchCampata(id: string, patch: { attenzionare?: boolean; note?: string }) {
-    await aggiornaDettagliCampata(id, patch, session?.nome);
-    void syncNow();
+  async function patchCampata(
+    id: string,
+    patch: { attenzionare?: boolean; note?: string; daNonTagliare?: boolean },
+  ) {
+    try {
+      await aggiornaDettagliCampata(id, patch, session);
+      void syncNow();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Modifica non consentita.");
+    }
   }
 
   return (
@@ -125,7 +141,7 @@ export function CampateElenco({
         <span className="muted">{conteggi.totale} campate</span>
         <span className="badge">{conteggi.daTagliare} da tagliare</span>
         <span className="badge badge-tagliata">{conteggi.tagliate} tagliate</span>
-        <span className="badge badge-tralasciata">{conteggi.tralasciate} tralasciate</span>
+        <span className="badge badge-da_non_tagliare">{conteggi.daNonTagliare} da non tagliare</span>
         <span className="badge badge-aggiuntiva">{conteggi.aggiuntive} aggiuntive</span>
         <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
       </div>
@@ -182,7 +198,7 @@ export function CampateElenco({
           titolo={stato === "tutte" ? "Tutti gli stati" : CAMPATA_STATO_LABEL[stato]}
           attivo={stato !== "tutte"}
         >
-          {(["tutte", "da_tagliare", "tagliata", "tralasciata"] as const).map((s) => (
+          {(["tutte", "da_tagliare", "tagliata"] as const).map((s) => (
             <button key={s} type="button" className={`chip ${stato === s ? "on" : ""}`} onClick={() => setStato(s)}>
               {s === "tutte" ? "Tutti" : CAMPATA_STATO_LABEL[s]}
             </button>
@@ -206,6 +222,26 @@ export function CampateElenco({
             onClick={() => setSoloAttenzione(true)}
           >
             Da attenzionare
+          </button>
+        </FiltroGruppo>
+
+        <FiltroGruppo
+          titolo={soloDaNonTagliare ? "Da non tagliare" : "Non tagliare"}
+          attivo={soloDaNonTagliare}
+        >
+          <button
+            type="button"
+            className={`chip ${!soloDaNonTagliare ? "on" : ""}`}
+            onClick={() => setSoloDaNonTagliare(false)}
+          >
+            Tutte
+          </button>
+          <button
+            type="button"
+            className={`chip ${soloDaNonTagliare ? "on" : ""}`}
+            onClick={() => setSoloDaNonTagliare(true)}
+          >
+            Da non tagliare
           </button>
         </FiltroGruppo>
 
@@ -311,6 +347,8 @@ export function CampateElenco({
                   key={c.id}
                   c={c}
                   ruolo={ruolo}
+                  sessionUserId={session?.userId}
+                  sessionRuolo={session?.ruolo}
                   storico={storicoPer.get(c.id) ?? []}
                   aperta={aperta === c.id}
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
@@ -335,13 +373,40 @@ function hrefRapportino(ruolo: "tecnico" | "operatore", c: CampataLavoro) {
   if (c.rapportinoId) {
     return ruolo === "tecnico" ? `/tecnico/rapportini/${c.rapportinoId}` : `/operatore/${c.rapportinoId}`;
   }
+  return hrefNuovoRapportino(ruolo, c);
+}
+
+function hrefNuovoRapportino(ruolo: "tecnico" | "operatore", c: CampataLavoro) {
   const q = `linea=${encodeURIComponent(c.lineaId)}&campata=${encodeURIComponent(c.id)}`;
   return ruolo === "tecnico" ? `/tecnico/nuovo?${q}` : `/operatore/nuovo?${q}`;
+}
+
+function eventoDaRapportino(evento: string) {
+  return (
+    evento === "tagliata" ||
+    evento.startsWith("tagliata") ||
+    evento === "aggiuntiva_da_rapportino" ||
+    evento === "ripristinata_da_cancellazione"
+  );
+}
+
+function etichettaEvento(evento: string) {
+  if (evento === "da_non_tagliare" || evento === "nulla_da_tagliare" || evento === "tralasciata") {
+    return "Da non tagliare";
+  }
+  if (evento === "da_non_tagliare_off") return "Tolto da non tagliare";
+  if (evento === "attenzionare") return "Da attenzionare";
+  if (evento === "attenzionare_off") return "Tolto da attenzionare";
+  if (evento === "nota") return "Nota";
+  if (eventoDaRapportino(evento)) return "Tagliata";
+  return null;
 }
 
 function CampataRiga({
   c,
   ruolo,
+  sessionUserId,
+  sessionRuolo,
   storico,
   aperta,
   onToggle,
@@ -349,12 +414,23 @@ function CampataRiga({
 }: {
   c: CampataLavoro;
   ruolo: "tecnico" | "operatore";
+  sessionUserId?: string;
+  sessionRuolo?: "tecnico" | "operatore";
   storico: CampataStorico[];
   aperta: boolean;
   onToggle: () => void;
-  onPatch: (patch: { attenzionare?: boolean; note?: string }) => void;
+  onPatch: (patch: { attenzionare?: boolean; note?: string; daNonTagliare?: boolean }) => void;
 }) {
   const [nota, setNota] = useState(c.note ?? "");
+  const session = sessionUserId
+    ? { userId: sessionUserId, ruolo: sessionRuolo ?? ruolo, nome: "", email: "" }
+    : null;
+  const nonTagliare = campataDaNonTagliare(c);
+  const tagliata = campataETagliata(c);
+  const lockNonTagliare = nonTagliare && !puoModificareSceltaCampata(session, c.daNonTagliareBy);
+  const lockAttenzione = Boolean(c.attenzionare) && !puoModificareSceltaCampata(session, c.attenzionareBy);
+  const daRapportino = Boolean(c.rapportinoId) && !nonTagliare;
+  const mostraRapportino = Boolean(c.rapportinoId) || !nonTagliare;
 
   useEffect(() => {
     setNota(c.note ?? "");
@@ -365,19 +441,17 @@ function CampataRiga({
     onPatch({ note: nota });
   }
 
-  const logUtile = storico.filter(
-    (s) =>
-      s.evento === "nota" ||
-      s.evento === "tagliata" ||
-      s.evento === "nulla_da_tagliare" ||
-      s.evento.startsWith("tagliata") ||
-      (s.evento === "aggiuntiva_da_rapportino" && s.stato === "tagliata"),
-  );
+  const logUtile = storico.filter((s) => {
+    const label = etichettaEvento(s.evento);
+    if (!label) return false;
+    if (eventoDaRapportino(s.evento)) return Boolean(s.rapportinoId);
+    return true;
+  });
 
   return (
     <>
       <tr
-        className={`campata-row campata-${c.stato}${c.attenzionare ? " campata-attenzionare" : ""}`}
+        className={`campata-row campata-${tagliata ? "tagliata" : c.stato}${c.attenzionare ? " campata-attenzionare" : ""}`}
         onClick={onToggle}
       >
         <td className="linea-codice">{c.codiceLinea}</td>
@@ -396,7 +470,10 @@ function CampataRiga({
           )}
         </td>
         <td>
-          <span className={`badge badge-${c.stato}`}>{CAMPATA_STATO_LABEL[c.stato]}</span>
+          <span className={`badge badge-${tagliata ? "tagliata" : c.stato}`}>
+            {tagliata ? CAMPATA_STATO_LABEL.tagliata : CAMPATA_STATO_LABEL[c.stato]}
+          </span>
+          {nonTagliare ? <span className="badge badge-da_non_tagliare">Da non tagliare</span> : null}
         </td>
         <td>{c.dataTaglio ? formatDate(c.dataTaglio) : "—"}</td>
         <td>{c.operatore ?? "—"}</td>
@@ -404,26 +481,70 @@ function CampataRiga({
           {c.note?.trim() ? <span className="campata-note-preview">{c.note.trim()}</span> : "—"}
         </td>
         <td className="campata-rap-cell">
-          <Link
-            href={hrefRapportino(ruolo, c)}
-            className="btn btn-sm btn-secondary"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {c.rapportinoId ? "Apri" : "Rapportino"}
-          </Link>
+          {mostraRapportino ? (
+            c.rapportinoId ? (
+              <span className="campata-rap-btns">
+                <Link
+                  href={hrefRapportino(ruolo, c)}
+                  className="btn btn-sm btn-secondary"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Apri
+                </Link>
+                {!nonTagliare ? (
+                  <Link
+                    href={hrefNuovoRapportino(ruolo, c)}
+                    className="btn btn-sm btn-ghost"
+                    title="Altra giornata sulla stessa campata"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Altro foglio
+                  </Link>
+                ) : null}
+              </span>
+            ) : (
+              <Link
+                href={hrefRapportino(ruolo, c)}
+                className="btn btn-sm btn-secondary"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Rapportino
+              </Link>
+            )
+          ) : null}
         </td>
       </tr>
       {aperta ? (
         <tr className="campata-storico">
           <td colSpan={11}>
             <div className="campata-esploso" onClick={(e) => e.stopPropagation()}>
+              {!daRapportino ? (
+                <label className="check-line">
+                  <input
+                    type="checkbox"
+                    checked={nonTagliare}
+                    disabled={lockNonTagliare || !sessionUserId}
+                    onChange={(e) => onPatch({ daNonTagliare: e.target.checked })}
+                  />
+                  Da non tagliare
+                  {lockNonTagliare ? (
+                    <span className="muted"> — già segnato, non modificabile</span>
+                  ) : null}
+                </label>
+              ) : (
+                <p className="muted">Tagliata con rapportino.</p>
+              )}
               <label className="check-line">
                 <input
                   type="checkbox"
                   checked={Boolean(c.attenzionare)}
+                  disabled={lockAttenzione || !sessionUserId}
                   onChange={(e) => onPatch({ attenzionare: e.target.checked })}
                 />
                 Da attenzionare
+                {lockAttenzione ? (
+                  <span className="muted"> — già segnato, non modificabile</span>
+                ) : null}
               </label>
               <label>
                 Nota
@@ -439,23 +560,16 @@ function CampataRiga({
                 <ul className="storico-list">
                   {logUtile.map((s) => (
                     <li key={s.id}>
-                      {s.evento === "nota" ? (
-                        <>
-                          <strong>Nota</strong>
-                          {s.note ? ` · ${s.note}` : ""}
-                        </>
-                      ) : (
-                        <>
-                          <strong>Tagliata</strong>
-                          {s.operatore ? ` · ${s.operatore}` : ""}
-                          {s.note ? ` · ${s.note}` : ""}
-                        </>
-                      )}
+                      <strong>{etichettaEvento(s.evento)}</strong>
+                      {s.operatore ? ` · ${s.operatore}` : ""}
+                      {s.note ? ` · ${s.note}` : ""}
                       <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
                     </li>
                   ))}
                 </ul>
-              ) : null}
+              ) : (
+                <p className="muted">Nessun log su questa campata.</p>
+              )}
             </div>
           </td>
         </tr>

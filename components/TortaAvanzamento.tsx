@@ -6,7 +6,6 @@ import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 const FETTE = [
   { key: "tagliate" as const, label: "Tagliate", color: "#15803d" },
   { key: "daTagliare" as const, label: "Da tagliare", color: "#b45309" },
-  { key: "tralasciate" as const, label: "Tralasciate", color: "#64748b" },
 ];
 
 export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
