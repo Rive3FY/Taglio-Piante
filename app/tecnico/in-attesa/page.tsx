@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function InAttesaPage() {
-  redirect("/tecnico/archiviati");
+  redirect("/tecnico/fogli?s=archiviati");
 }

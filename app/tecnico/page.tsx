@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
 import { FiltroGruppo } from "@/components/FiltroGruppo";
-import { rapportinoEChiuso, type Linea } from "@/lib/types";
+import type { Linea } from "@/lib/types";
 
 type Filtro = number | "tutte";
 
@@ -20,7 +20,6 @@ export default function TecnicoLineePage() {
   const conteggi = useMemo(() => {
     const mappa = new Map<string, number>();
     for (const r of rapportini) {
-      if (!rapportinoEChiuso(r.stato)) continue;
       mappa.set(r.lineaId, (mappa.get(r.lineaId) ?? 0) + 1);
     }
     return mappa;
@@ -128,13 +127,13 @@ export default function TecnicoLineePage() {
                   const c = conteggi.get(linea.id);
                   return (
                     <li key={linea.id}>
-                      <Link href={`/tecnico/linee/${linea.id}`}>
+                      <Link href={`/tecnico/per-linea?linea=${linea.id}`}>
                         <span className="linea-codice">{linea.codice}</span>
                         <span className="linea-nome">{linea.nome}</span>
                         <span className="linea-conteggi">
                           {c ? (
                             <span className="badge badge-archiviato">
-                              {c} {c === 1 ? "archiviato" : "archiviati"}
+                              {c} {c === 1 ? "foglio" : "fogli"}
                             </span>
                           ) : null}
                         </span>

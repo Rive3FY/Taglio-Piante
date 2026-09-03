@@ -1,5 +1,6 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
 import { rapportinoEChiuso } from "@/lib/types";
+import { CODICI_PULIZIA_BASE, eLavoroBasi } from "@/lib/campate/basi";
 import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
 export type VoceContabile = {
@@ -94,15 +95,25 @@ export function rapportiniDelMese(rapportini: Rapportino[], mese: string) {
   );
 }
 
+function rapportinoELavoroBasi(r: Rapportino, prestazioni: Prestazione[]) {
+  if (r.esitiCampate?.length) return r.esitiCampate.every((e) => e.tipo === "base");
+  return eLavoroBasi(r.campata ?? "", r, prestazioni);
+}
+
 function vociDaRapportini(
   rapportini: Rapportino[],
   prestazioni: Prestazione[],
+  opts?: { escludiBasi?: boolean },
 ): VoceContabile[] {
   const byId = new Map(prestazioni.map((p) => [p.id, p]));
   const qty = new Map<string, number>();
   for (const r of rapportini) {
     for (const riga of r.righe ?? []) {
       if (!riga.quantita || riga.quantita <= 0) continue;
+      if (opts?.escludiBasi) {
+        const p = byId.get(riga.prestazioneId);
+        if (p && CODICI_PULIZIA_BASE.has(p.codice)) continue;
+      }
       qty.set(riga.prestazioneId, (qty.get(riga.prestazioneId) ?? 0) + riga.quantita);
     }
   }
@@ -158,17 +169,20 @@ export function aggregaMese(
 
   const perLinea: LineaContabile[] = [...perLineaMap.entries()]
     .map(([lineaId, items]) => {
+      const dellaLinea = items.filter((r) => !rapportinoELavoroBasi(r, prestazioni));
+      if (dellaLinea.length === 0) return null;
       const linea = lineeById.get(lineaId);
-      const voci = vociDaRapportini(items, prestazioni);
+      const voci = vociDaRapportini(dellaLinea, prestazioni, { escludiBasi: true });
       return {
         lineaId,
         codiceLinea: linea?.codice ?? lineaId,
         nomeLinea: linea?.nome ?? "Linea",
-        rapportini: items.length,
+        rapportini: dellaLinea.length,
         voci,
         importo: sommaImporti(voci),
       };
     })
+    .filter((l): l is LineaContabile => l != null)
     .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
 
   const perGiorno: GiornoContabile[] = giorniDelMese(mese).map((data) => {
@@ -258,6 +272,7 @@ export function lineeConPrestazioni(
   rapportini: Rapportino[],
   linee: Linea[],
   finoA: string,
+  prestazioni: Prestazione[] = [],
 ) {
   const usati = rapportiniContabiliFinoA(rapportini, finoA);
   const lineeById = new Map(linee.map((l) => [l.id, l]));
@@ -265,7 +280,10 @@ export function lineeConPrestazioni(
   return ids
     .map((id) => {
       const linea = lineeById.get(id);
-      const dellaLinea = usati.filter((r) => r.lineaId === id);
+      const dellaLinea = usati.filter(
+        (r) => r.lineaId === id && !rapportinoELavoroBasi(r, prestazioni),
+      );
+      if (dellaLinea.length === 0) return null;
       const ultima = dellaLinea.reduce(
         (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
         dellaLinea[0]?.dataLavoro ?? "",
@@ -278,6 +296,7 @@ export function lineeConPrestazioni(
         ultimaData: ultima,
       };
     })
+    .filter((l): l is NonNullable<typeof l> => l != null)
     .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
 }
 
@@ -288,8 +307,10 @@ export function aggregaPrestazioniLinea(
   lineaId: string,
   finoA: string,
 ): LineaContabile & { ultimaData: string } {
-  const items = rapportiniContabiliFinoA(rapportini, finoA).filter((r) => r.lineaId === lineaId);
-  const voci = vociDaRapportini(items, prestazioni);
+  const items = rapportiniContabiliFinoA(rapportini, finoA).filter(
+    (r) => r.lineaId === lineaId && !rapportinoELavoroBasi(r, prestazioni),
+  );
+  const voci = vociDaRapportini(items, prestazioni, { escludiBasi: true });
   const ultimaData = items.reduce(
     (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
     items[0]?.dataLavoro ?? "",

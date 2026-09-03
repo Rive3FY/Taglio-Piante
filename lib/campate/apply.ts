@@ -94,6 +94,8 @@ export async function confermaImportCampate(opts: {
       tipo: "campata",
       priorita: voce.priorita,
       distInt: voce.distInt,
+      estInt: voce.estInt,
+      nordInt: voce.nordInt,
       stato: "da_tagliare",
       origine: "prevista",
       importId,
@@ -133,7 +135,7 @@ export async function confermaImportCampate(opts: {
   }
 
   if (daScrivere.length > 0) {
-    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), { vietatoOmettere: ["anno"] });
+    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), { vietatoOmettere: ["anno", "est_int"] });
     await db.campateLavoro.bulkPut(daScrivere);
   }
 
@@ -165,13 +167,18 @@ export async function aggiornaDistanzeDaFile(opts: { anteprima: AnteprimaImport;
 
   for (const voce of opts.anteprima.voci) {
     if (voce.azione === "duplicato") continue;
-    if (voce.distInt == null) continue;
+    if (voce.distInt == null && voce.estInt == null) continue;
     const presente = indice.get(voce.chiave);
     if (!presente) continue;
-    if (presente.distInt === voce.distInt) continue;
+    const stessaDist = voce.distInt == null || presente.distInt === voce.distInt;
+    const stessoEst = voce.estInt == null || presente.estInt === voce.estInt;
+    const stessoNord = voce.nordInt == null || presente.nordInt === voce.nordInt;
+    if (stessaDist && stessoEst && stessoNord) continue;
     daScrivere.push({
       ...presente,
-      distInt: voce.distInt,
+      distInt: voce.distInt ?? presente.distInt,
+      estInt: voce.estInt ?? presente.estInt,
+      nordInt: voce.nordInt ?? presente.nordInt,
       syncStatus: "synced",
       updatedAt: now,
     });
@@ -181,7 +188,7 @@ export async function aggiornaDistanzeDaFile(opts: { anteprima: AnteprimaImport;
 
   await upsertCampateLavoro(
     daScrivere.map(campataLavoroToRow),
-    { vietatoOmettere: ["dist_int"] },
+    { vietatoOmettere: ["dist_int", "est_int", "nord_int"] },
   );
   await db.campateLavoro.bulkPut(daScrivere);
   return { aggiornate: daScrivere.length };

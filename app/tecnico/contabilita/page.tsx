@@ -23,9 +23,8 @@ import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
 import { CalendarioMese } from "@/components/CalendarioMese";
 import { LineaPicker } from "@/components/LineaPicker";
+import { ANTEPRIMA_ELENCO, MostraAltro } from "@/components/MostraAltro";
 import { annoPianoPiuRecente, anniPiani, campateDellAnno } from "@/lib/campate/anno";
-
-const LINEE_INIZIALI = 6;
 
 function TabellaVoci({
   voci,
@@ -36,51 +35,56 @@ function TabellaVoci({
   vuoto: string;
   totaleLabel?: string;
 }) {
+  const [aperto, setAperto] = useState(false);
   if (voci.length === 0) return <p className="muted">{vuoto}</p>;
   const totale = voci.every((v) => v.importo != null)
     ? arrotondaEuro(voci.reduce((s, v) => s + (v.importo ?? 0), 0))
     : null;
+  const visibili = aperto ? voci : voci.slice(0, ANTEPRIMA_ELENCO);
   return (
-    <div className="campate-table-wrap">
-      <table className="campate-table">
-        <thead>
-          <tr>
-            <th>Prestazione</th>
-            <th>Descrizione</th>
-            <th>U.M.</th>
-            <th>Quantità</th>
-            <th>Prezzo</th>
-            <th>Importo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {voci.map((v) => (
-            <tr key={v.prestazioneId}>
-              <td>
-                <strong>{v.codice}</strong>
-              </td>
-              <td>{v.descrizione}</td>
-              <td>{etichettaUnita(v.unitaMisura)}</td>
-              <td>{formatQuantita(v.quantita)}</td>
-              <td>
-                {v.prezzoUnitario == null
-                  ? "—"
-                  : `${formatEuro(v.prezzoUnitario)} / ${etichettaUnita(v.unitaMisura)}`}
-              </td>
-              <td>{formatEuro(v.importo)}</td>
+    <>
+      <div className="campate-table-wrap">
+        <table className="campate-table">
+          <thead>
+            <tr>
+              <th>Prestazione</th>
+              <th>Descrizione</th>
+              <th>U.M.</th>
+              <th>Quantità</th>
+              <th>Prezzo</th>
+              <th>Importo</th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={5}>{totaleLabel}</td>
-            <td>
-              <strong>{formatEuro(totale)}</strong>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {visibili.map((v) => (
+              <tr key={v.prestazioneId}>
+                <td>
+                  <strong>{v.codice}</strong>
+                </td>
+                <td>{v.descrizione}</td>
+                <td>{etichettaUnita(v.unitaMisura)}</td>
+                <td>{formatQuantita(v.quantita)}</td>
+                <td>
+                  {v.prezzoUnitario == null
+                    ? "—"
+                    : `${formatEuro(v.prezzoUnitario)} / ${etichettaUnita(v.unitaMisura)}`}
+                </td>
+                <td>{formatEuro(v.importo)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={5}>{totaleLabel}</td>
+              <td>
+                <strong>{formatEuro(totale)}</strong>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <MostraAltro aperto={aperto} totale={voci.length} onToggle={() => setAperto((v) => !v)} />
+    </>
   );
 }
 
@@ -125,8 +129,8 @@ export default function ContabilitaPage() {
   }, [aggregato.perGiorno]);
   const giornoVoci = aggregato.perGiorno.find((g) => g.data === giorno);
   const lineeEstraibili = useMemo(
-    () => lineeConPrestazioni(rapportini, linee, oggi),
-    [rapportini, linee, oggi],
+    () => lineeConPrestazioni(rapportini, linee, oggi, prestazioni),
+    [rapportini, linee, oggi, prestazioni],
   );
   const lineaEstrattaId = lineeEstraibili.some((l) => l.lineaId === lineaEstratta)
     ? lineaEstratta
@@ -166,8 +170,7 @@ export default function ContabilitaPage() {
   const lineeVisibili =
     mostraAltreLinee || lineaCercataId
       ? lineeFiltrate
-      : lineeFiltrate.slice(0, LINEE_INIZIALI);
-  const altreLinee = Math.max(0, lineeFiltrate.length - lineeVisibili.length);
+      : lineeFiltrate.slice(0, ANTEPRIMA_ELENCO);
 
   return (
     <>
@@ -253,7 +256,11 @@ export default function ContabilitaPage() {
         />
       </div>
 
-      <GraficoBasi totale={basiMese.totale} perLinea={basiMese.perLinea} />
+      <GraficoBasi
+        key={meseEffettivo}
+        totale={basiMese.totale}
+        perLinea={basiMese.perLinea}
+      />
 
       <section className="panel">
         <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>
@@ -271,6 +278,7 @@ export default function ContabilitaPage() {
               <p className="muted">Nessun rapportino in questa data.</p>
             ) : (
               <TabellaVoci
+                key={giornoVoci.data}
                 voci={giornoVoci.voci}
                 vuoto="Rapportini senza quantità su questa data."
               />
@@ -281,7 +289,12 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <h2>Prestazioni del mese</h2>
-        <TabellaVoci voci={aggregato.voci} vuoto="Nessuna quantità in questo mese." totaleLabel="Totale mese" />
+        <TabellaVoci
+          key={`${meseEffettivo}-mese`}
+          voci={aggregato.voci}
+          vuoto="Nessuna quantità in questo mese."
+          totaleLabel="Totale mese"
+        />
       </section>
 
       <section className="panel">
@@ -309,6 +322,7 @@ export default function ContabilitaPage() {
             </label>
           ) : null}
         </div>
+        <p className="muted">Le pulizie basi 5.1–5.4 stanno nel grafico Basi, non qui.</p>
         {aggregato.perLinea.length === 0 ? (
           <p className="muted">Nessuna linea con rapportini in questo mese.</p>
         ) : lineeFiltrate.length === 0 ? (
@@ -354,16 +368,22 @@ export default function ContabilitaPage() {
                           )}
                         />
                       </div>
-                      <TabellaVoci voci={l.voci} vuoto="Nessuna quantità su questa linea." />
+                      <TabellaVoci
+                        key={`${l.lineaId}-voci`}
+                        voci={l.voci}
+                        vuoto="Nessuna quantità su questa linea."
+                      />
                     </>
                   ) : null}
                 </div>
               );
             })}
-            {altreLinee > 0 ? (
-              <button type="button" className="mostra-altro" onClick={() => setMostraAltreLinee(true)}>
-                Mostra altro ({altreLinee})
-              </button>
+            {!lineaCercataId ? (
+              <MostraAltro
+                aperto={mostraAltreLinee}
+                totale={lineeFiltrate.length}
+                onToggle={() => setMostraAltreLinee((v) => !v)}
+              />
             ) : null}
           </div>
         )}
@@ -373,8 +393,9 @@ export default function ContabilitaPage() {
         <h2>Estrazione prestazioni per linea</h2>
         <p className="muted">
           Totale delle prestazioni confermate sulla linea scelta, dai rapportini archiviati
-          fino a oggi (i bozza restano fuori). Il file Excel ha una riga per
-          prestazione, ad esempio il totale dei 2.1 segnati su quella linea.
+          fino a oggi (i bozza restano fuori). Le pulizie basi 5.1–5.4 restano nel grafico
+          Basi, non in questo file. Il file Excel ha una riga per prestazione, ad esempio il
+          totale dei 2.1 segnati su quella linea.
         </p>
         {lineeEstraibili.length === 0 || !estratto ? (
           <p className="muted">Nessun rapportino confermato da cui estrarre prestazioni.</p>
@@ -410,6 +431,7 @@ export default function ContabilitaPage() {
               {` · fino al ${formatDate(oggi)}`}
             </p>
             <TabellaVoci
+              key={`${lineaEstrattaId}-estratto`}
               voci={estratto.voci}
               vuoto="Nessuna quantità confermata su questa linea."
               totaleLabel="Totale linea"

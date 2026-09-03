@@ -28,7 +28,7 @@ export default function TecnicoRapportinoPage({
           <DeleteRapportinoButton
             id={item.id}
             numero={item.numero}
-            href="/tecnico/archiviati"
+            href="/tecnico/fogli?s=archiviati"
           />
         </div>
       </>

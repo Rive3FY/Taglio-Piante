@@ -14,6 +14,7 @@ import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
 import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, type Periodo } from "./FiltroPeriodo";
 import { PopupRinvio } from "./PopupRinvio";
+import { LinkMaps } from "./LinkMaps";
 import {
   CAMPATA_ORIGINE_LABEL,
   CAMPATA_PRIORITA_LABEL,
@@ -558,6 +559,7 @@ export function CampateElenco({
                 <th>kV</th>
                 <th>Campata</th>
                 <th>Dist int</th>
+                <th>Maps</th>
                 <th>Priorità</th>
                 <th>Stato</th>
                 <th>Data</th>
@@ -597,7 +599,6 @@ export function CampateElenco({
       {campataPopup ? (
         <PopupRinvio
           campata={campataPopup}
-          annoPiano={annoEffettivo}
           puoTogliere={soloRinvii}
           onSalva={(patch) => scriviCampata(campataPopup.id, { rinvio: patch })}
           onTogli={() => scriviCampata(campataPopup.id, { rinvio: null })}
@@ -776,6 +777,9 @@ function CampataRiga({
           ) : null}
         </td>
         <td>{c.distInt != null ? formatDistInt(c.distInt) : "—"}</td>
+        <td className="campata-maps">
+          <LinkMaps estInt={c.estInt} nordInt={c.nordInt} nomeLinea={c.nomeLinea} />
+        </td>
         <td>
           {c.priorita ? (
             <span className={`badge badge-${c.priorita}`}>{CAMPATA_PRIORITA_LABEL[c.priorita]}</span>
@@ -835,7 +839,7 @@ function CampataRiga({
       </tr>
       {aperta ? (
         <tr className="campata-storico">
-          <td colSpan={11}>
+          <td colSpan={12}>
             <div className="campata-esploso" onClick={(e) => e.stopPropagation()}>
               {daRiprendere ? (
                 <p className="muted">

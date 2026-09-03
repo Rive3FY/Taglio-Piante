@@ -72,6 +72,10 @@ export type CampataLavoro = {
   rinvioFattaBy?: string;
   /** Distanza interna dal file LIDAR (colonna «Dist int»). */
   distInt?: number;
+  /** Easting / C. est int dal LIDAR, metri. */
+  estInt?: number;
+  /** Northing / C. nord int dal LIDAR, metri. */
+  nordInt?: number;
   rapportinoId?: string;
   importId?: string;
   /** Anno del piano LIDAR (2026, 2027, …). Assente = 2026. */

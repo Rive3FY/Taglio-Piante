@@ -13,6 +13,8 @@ export type VoceAnteprimaImport = {
   nomeLinea: string;
   priorita: CampataPriorita;
   distInt?: number;
+  estInt?: number;
+  nordInt?: number;
   azione: AzioneImport;
   nota?: string;
   anniTaglioPrecedenti?: number[];
@@ -50,6 +52,8 @@ export function costruisciAnteprima(
       perChiave.set(chiave, {
         ...gia,
         distInt: gia.distInt ?? r.distInt,
+        estInt: gia.estInt ?? r.estInt,
+        nordInt: gia.nordInt ?? r.nordInt,
         azione: "duplicato",
         nota: "Stessa linea, campata e priorità ripetuta nel file: si importa una sola volta.",
       });
@@ -63,6 +67,8 @@ export function costruisciAnteprima(
       nomeLinea: r.nomeLinea,
       priorita: r.priorita,
       distInt: r.distInt,
+      estInt: r.estInt,
+      nordInt: r.nordInt,
       azione: "nuova",
     });
   }
@@ -98,9 +104,16 @@ export function costruisciAnteprima(
       if (presente.stato !== "da_tagliare") {
         voce.azione = "gia_lavorata";
         voce.nota = `Già ${presente.stato.replace("_", " ")} in questo piano: stato e storico restano se aggiorni solo le distanze.`;
-      } else if (voce.distInt != null && presente.distInt !== voce.distInt) {
+      } else if (
+        (voce.distInt != null && presente.distInt !== voce.distInt) ||
+        (voce.estInt != null && presente.estInt !== voce.estInt) ||
+        (voce.nordInt != null && presente.nordInt !== voce.nordInt)
+      ) {
         voce.azione = "invariata";
-        voce.nota = presente.distInt == null ? "Aggiorna la distanza interna dal file." : "Aggiorna distanza e dati dal file.";
+        voce.nota =
+          presente.distInt == null && presente.estInt == null
+            ? "Aggiorna distanza e coordinate dal file."
+            : "Aggiorna distanza e dati dal file.";
       } else {
         voce.azione = "invariata";
       }
@@ -146,10 +159,18 @@ export function conteggioDistanzeDaFile(
   let nelFile = 0;
   let aggiornabili = 0;
   for (const voce of voci) {
-    if (voce.azione === "duplicato" || voce.distInt == null) continue;
+    if (voce.azione === "duplicato") continue;
+    if (voce.distInt == null && voce.estInt == null) continue;
     nelFile += 1;
     const presente = indice.get(voce.chiave);
-    if (presente && presente.distInt !== voce.distInt) aggiornabili += 1;
+    if (!presente) continue;
+    if (
+      (voce.distInt != null && presente.distInt !== voce.distInt) ||
+      (voce.estInt != null && presente.estInt !== voce.estInt) ||
+      (voce.nordInt != null && presente.nordInt !== voce.nordInt)
+    ) {
+      aggiornabili += 1;
+    }
   }
   return { nelFile, aggiornabili };
 }

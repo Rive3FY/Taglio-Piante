@@ -223,6 +223,8 @@ create index if not exists campate_lavoro_anno_idx on campate_lavoro(anno);
 
 alter table campate_lavoro add column if not exists attenzionare boolean not null default false;
 alter table campate_lavoro add column if not exists dist_int numeric;
+alter table campate_lavoro add column if not exists est_int numeric;
+alter table campate_lavoro add column if not exists nord_int numeric;
 alter table campate_lavoro add column if not exists da_non_tagliare boolean not null default false;
 alter table campate_lavoro add column if not exists da_non_tagliare_by text;
 alter table campate_lavoro add column if not exists attenzionare_by text;

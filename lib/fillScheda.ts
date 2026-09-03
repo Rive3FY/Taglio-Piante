@@ -358,9 +358,8 @@ export async function downloadOfficialSchede(
       const bytes = await fillOfficialScheda({ ...foglio, prestazioni: prest });
       const src = await PDFDocument.load(bytes);
       const count = src.getPageCount();
-      const indices = count > 0 ? Array.from({ length: count }, (_, idx) => idx) : [0];
-      const pagine = merged.copyPages(src, indices);
-      if (!Array.isArray(pagine)) throw new Error("Unione PDF non riuscita.");
+      const indices = Array.from({ length: Math.max(count, 1) }, (_, idx) => idx);
+      const pagine = await merged.copyPages(src, indices);
       for (let j = 0; j < pagine.length; j += 1) merged.addPage(pagine[j]!);
       ok += 1;
     } catch (e) {

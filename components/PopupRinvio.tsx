@@ -3,17 +3,16 @@
 import { useState } from "react";
 import { MESI_LABEL, campataDaRiprendere, type CampataLavoro } from "@/lib/types";
 import type { PatchRinvio } from "@/lib/campate/apply";
+import { useDialogBack } from "@/lib/useDialogBack";
 
 export function PopupRinvio({
   campata,
-  annoPiano,
   puoTogliere,
   onSalva,
   onTogli,
   onChiudi,
 }: {
   campata: CampataLavoro;
-  annoPiano: number;
   puoTogliere: boolean;
   onSalva: (patch: PatchRinvio) => Promise<void> | void;
   onTogli: () => Promise<void> | void;
@@ -25,6 +24,7 @@ export function PopupRinvio({
   const [note, setNote] = useState(campata.rinvioNote ?? "");
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
+  useDialogBack(true, onChiudi);
 
   async function salva() {
     const m = Number(mese);
@@ -72,12 +72,8 @@ export function PopupRinvio({
         }}
       >
         <h2 id="rinvio-titolo">Da riprendere</h2>
-        <p className="muted">
-          {campata.codiceLinea} · campata <strong>{campata.normalizzata}</strong>. Finisce nell’elenco
-          «Da riprendere» come promemoria: lo stato in elenco campate e le torte non si toccano.
-        </p>
         <label>
-          Mese in cui tornarci
+          Mese
           <select value={mese} onChange={(e) => setMese(e.target.value)}>
             <option value="">Scegli il mese</option>
             {MESI_LABEL.map((nome, i) => (
@@ -88,7 +84,7 @@ export function PopupRinvio({
           </select>
         </label>
         <label>
-          Anno (facoltativo)
+          Anno
           <input
             type="text"
             inputMode="numeric"
@@ -98,17 +94,12 @@ export function PopupRinvio({
               const v = e.target.value;
               if (v === "" || /^\d{0,4}$/.test(v)) setAnno(v);
             }}
-            placeholder={`Vuoto = ${annoPiano}`}
           />
+          <span className="muted">Facoltativo</span>
         </label>
         <label>
-          Note (facoltative)
-          <textarea
-            rows={3}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Es. solo pericoli tagliati, potatura vera con le nocciole raccolte"
-          />
+          Note
+          <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         {errore ? <p className="form-error">{errore}</p> : null}
         <div className="danger-actions">

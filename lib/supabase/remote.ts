@@ -52,7 +52,7 @@ export function messaggioErroreSupabase(message: string) {
     return "Permesso negato sul database (policy RLS). In Supabase → SQL esegui tutto supabase/schema.sql, poi verifica che il tuo account abbia un profilo con ruolo corretto.";
   }
   if (/schema cache|does not exist|could not find the/i.test(message)) {
-    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int, da_non_tagliare e rinvio_mese sulle campate).";
+    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int, est_int, nord_int, da_non_tagliare e rinvio_mese sulle campate).";
   }
   if (/foreign key constraint|violates foreign key/i.test(message)) {
     return "Dati non allineati: manca la linea collegata sul database. Sincronizza le anagrafiche o riesegui supabase/schema.sql.";
@@ -235,7 +235,7 @@ export async function pushCampatePending(rapportinoId?: string) {
     // Senza da_non_tagliare il tecnico vedrebbe la campata come normale: meglio
     // fallire con un messaggio chiaro che perdere il segno in silenzio.
     await upsertCampateLavoro(rows.map(campataLavoroToRow), {
-      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese"],
+      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "est_int"],
     });
 
     const ids = new Set(rows.map((c) => c.id));

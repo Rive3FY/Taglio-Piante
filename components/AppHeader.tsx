@@ -50,13 +50,14 @@ export function AppHeader({
           : "Sincronizzato";
 
   return (
-    <header className="app-header">
+    <header className={`app-header${backHref ? " has-back" : ""}`}>
+      {backHref ? (
+        <Link href={backHref} replace className="back-link">
+          ← Indietro
+        </Link>
+      ) : null}
       <div className="app-header-left">
-        {backHref ? (
-          <Link href={backHref} className="back-link">
-            ← Indietro
-          </Link>
-        ) : (
+        {backHref ? null : (
           <Link href="/" className="brand">
             Rapportini Taglio
           </Link>

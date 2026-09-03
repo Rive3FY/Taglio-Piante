@@ -26,6 +26,7 @@ import {
 } from "@/lib/campate/guard";
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { useDialogBack } from "@/lib/useDialogBack";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
@@ -105,6 +106,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  useDialogBack(Boolean(previewUrl), () => setPreviewUrl(null));
   const [dockReady, setDockReady] = useState(false);
   const previewBlobRef = useRef<string | null>(null);
 
@@ -652,7 +654,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           <DeleteRapportinoButton
             id={existing.id}
             numero={existing.numero}
-            href={session?.ruolo === "tecnico" ? "/tecnico/archiviati" : "/operatore"}
+            href={session?.ruolo === "tecnico" ? "/tecnico/fogli?s=archiviati" : "/operatore"}
           />
         </div>
       ) : null}

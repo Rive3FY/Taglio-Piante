@@ -1,4 +1,5 @@
 import { normalizzaCampata } from "./normalize";
+import { parseNumeroMetri } from "./geo";
 import type { CampataPriorita } from "@/lib/types";
 
 export type RigaImportBruta = {
@@ -8,6 +9,8 @@ export type RigaImportBruta = {
   codiceLinea: string;
   nomeLinea: string;
   distInt?: number;
+  estInt?: number;
+  nordInt?: number;
   riga: number;
 };
 
@@ -36,7 +39,7 @@ const HEADER =
  * I trattini dopo la campata possono essere assenti nel PDF (solo spazi).
  */
 const RIGA =
-  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)\s*-*\s*([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+[\d.,]+\s+[\d.,]+\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*\s*-*\s*[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
+  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)\s*-*\s*([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+([\d.,]+)\s+([\d.,]+)\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*\s*-*\s*[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
 
 export function parseDistInt(raw: string) {
   let t = raw.trim();
@@ -95,7 +98,9 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
     const originale = m[2];
     const distInt = parseDistInt(m[3]);
     const priorita = PRIORITA[m[4].toUpperCase()];
-    const nomeLinea = m[5].replace(HEADER, "").trim().replace(/\s+/g, " ");
+    const estInt = parseNumeroMetri(m[5] ?? "");
+    const nordInt = parseNumeroMetri(m[6] ?? "");
+    const nomeLinea = m[7].replace(HEADER, "").trim().replace(/\s+/g, " ");
     const normalizzata = normalizzaCampata(originale);
     if (!priorita) {
       scartate.push({ riga: n, testo: m[0].slice(0, 80), motivo: "Priorità non riconosciuta." });
@@ -112,6 +117,8 @@ export function parseTestoCampate(raw: string): ParseCampateResult {
       codiceLinea,
       nomeLinea,
       distInt,
+      estInt,
+      nordInt,
       riga: n,
     });
   }
@@ -139,6 +146,22 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
   const iPrio = header.findIndex((h) => h.includes("prior"));
   const iLinea = header.findIndex((h) => h === "linea" || h === "codice linea" || h === "codice");
   const iNome = header.findIndex((h) => h.includes("nome") && h.includes("linea"));
+  const iEst = header.findIndex(
+    (h) =>
+      h === "c. est int" ||
+      h === "c.est int" ||
+      h === "est int" ||
+      h === "easting" ||
+      (h.includes("est") && h.includes("int") && !h.includes("nord")),
+  );
+  const iNord = header.findIndex(
+    (h) =>
+      h === "c. nord int" ||
+      h === "c.nord int" ||
+      h === "nord int" ||
+      h === "northing" ||
+      (h.includes("nord") && h.includes("int")),
+  );
   if (iCampata < 0 || iPrio < 0 || iLinea < 0) return null;
 
   const riconosciute: RigaImportBruta[] = [];
@@ -147,6 +170,8 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
     const cols = splitCsv(line, sep);
     const campataCell = cols[iCampata] ?? "";
     const distInt = iDist >= 0 ? parseDistInt(cols[iDist] ?? "") : undefined;
+    const estInt = iEst >= 0 ? parseNumeroMetri(cols[iEst] ?? "") : undefined;
+    const nordInt = iNord >= 0 ? parseNumeroMetri(cols[iNord] ?? "") : undefined;
     const prioCell = (cols[iPrio] ?? "").trim().toUpperCase();
     const codiceCell = (cols[iLinea] ?? "").trim().toUpperCase();
     const nome = (iNome >= 0 ? cols[iNome] : "").trim();
@@ -168,6 +193,8 @@ export function parseCsvCampate(raw: string): ParseCampateResult | null {
       codiceLinea: codiceCell,
       nomeLinea: nome,
       distInt,
+      estInt,
+      nordInt,
       riga: idx + 2,
     });
   });

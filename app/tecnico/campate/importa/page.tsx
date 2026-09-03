@@ -172,10 +172,11 @@ export default function ImportaCampatePage() {
             <div className="panel">
               <p>
                 Esiste già un piano {anno}. <strong>Aggiorna solo le distanze</strong> lascia stati e
-                rapportini. <strong>Importa piano {anno}</strong> sostituisce le campate di quest’anno.
+                rapportini, e attacca anche le coordinate Maps. <strong>Importa piano {anno}</strong>{" "}
+                sostituisce le campate di quest’anno.
               </p>
               <p>
-                Trovate <strong>{distanze?.nelFile ?? 0} distanze</strong> nel file, di cui{" "}
+                Trovate <strong>{distanze?.nelFile ?? 0} misure</strong> nel file, di cui{" "}
                 <strong>{distanze?.aggiornabili ?? 0}</strong> si possono attaccare alle campate {anno}.
               </p>
             </div>

@@ -289,6 +289,21 @@ class RapportiniDB extends Dexie {
       campateDeleteQueue: "id",
       syncQueue: "id, rapportinoId, createdAt",
     });
+    this.version(17).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro:
+        "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rinvioMese, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt, anno",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    });
   }
 }
 
@@ -421,4 +436,10 @@ export async function deleteRapportino(id: string) {
     }
     await db.rapportini.delete(id);
   });
+}
+
+export async function deleteRapportini(ids: string[]) {
+  for (const id of ids) {
+    await deleteRapportino(id);
+  }
 }
