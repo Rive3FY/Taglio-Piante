@@ -134,15 +134,16 @@ export function wgs84DaEstNord(
 ): PuntoWgs84 | null {
   if (est == null || nord == null || !eUtmPlausibile(est, nord)) return null;
 
-  const c32 = { ...utmWgs84(est, nord, 32), zona: 32 as const };
-  const c33 = { ...utmWgs84(est, nord, 33), zona: 33 as const };
+  type Candidato = { lat: number; lng: number; zona: 32 | 33 };
+  const c32: Candidato = { ...utmWgs84(est, nord, 32), zona: 32 };
+  const c33: Candidato = { ...utmWgs84(est, nord, 33), zona: 33 };
   const s32 = punteggioItalia(c32.lat, c32.lng, 32);
   const s33 = punteggioItalia(c33.lat, c33.lng, 33);
   const hint = hintDaNome(nomeLinea);
 
   // Questo piano è Campania e regioni vicine: il fuso giusto è 33N.
   // Lo stesso est/nord letto come 32N cade in Sardegna e sembrava «più Italia».
-  let scelto = c33;
+  let scelto: Candidato = c33;
   let incerto = false;
   if (hint === 32 && s32 > 0) {
     scelto = c32;
