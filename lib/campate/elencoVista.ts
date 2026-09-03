@@ -3,6 +3,7 @@ import { PERIODO_VUOTO, type Periodo } from "@/components/FiltroPeriodo";
 import type { CampataOrigine, CampataPriorita, CampataStatoLavoro } from "@/lib/types";
 
 export type RipresaFiltro = "tutte" | "da_fare" | "fatte";
+export type OrdineElenco = "linea" | "dist_asc" | "dist_desc";
 
 export type VistaElencoCampate = {
   q: string;
@@ -20,6 +21,7 @@ export type VistaElencoCampate = {
   /** Solo elenco «Da riprendere»: mese di ripresa e promemoria già chiusi. */
   meseRinvio: number | "tutti";
   ripresa: RipresaFiltro;
+  ordine: OrdineElenco;
 };
 
 function key(userId: string, ruolo: string) {
@@ -50,6 +52,7 @@ export function readElencoVista(userId: string | undefined | null, ruolo: string
     const meseRinvio =
       typeof p.meseRinvio === "number" && p.meseRinvio >= 1 && p.meseRinvio <= 12 ? p.meseRinvio : "tutti";
     const ripresa = p.ripresa === "da_fare" || p.ripresa === "fatte" ? p.ripresa : "tutte";
+    const ordine = p.ordine === "dist_asc" || p.ordine === "dist_desc" ? p.ordine : "linea";
     const visibili = typeof p.visibili === "number" && p.visibili >= 40 ? Math.min(2000, Math.round(p.visibili)) : 40;
     return {
       q: typeof p.q === "string" ? p.q : "",
@@ -66,6 +69,7 @@ export function readElencoVista(userId: string | undefined | null, ruolo: string
       visibili,
       meseRinvio,
       ripresa,
+      ordine,
     };
   } catch {
     return null;

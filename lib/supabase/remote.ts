@@ -320,26 +320,30 @@ export async function pullDeletedRapportini() {
   const supabase = getSupabase();
   if (!supabase) return 0;
 
-  const lastPull =
-    typeof window !== "undefined" ? localStorage.getItem(LAST_PULL_KEY) : null;
-  if (!lastPull) return 0;
-
-  const { data, error } = await supabase
-    .from("rapportini")
-    .select("id, updated_at")
-    .not("deleted_at", "is", null)
-    .gte("updated_at", pullCursorWithOverlap(lastPull));
-
-  if (error) throw new Error(error.message);
-
-  let removed = 0;
-  for (const row of data ?? []) {
-    const local = await db.rapportini.get(row.id);
-    if (!local || local.syncStatus === "pending") continue;
-    await db.rapportini.delete(row.id);
-    removed += 1;
+  // Il login azzera rt.lastPullAt: se qui si usciva senza cursore, i fogli già
+  // cancellati sul server restavano per sempre nella copia Dexie del tablet.
+  // Allineamento: ciò che è synced in locale ma non è più vivo sul server si toglie.
+  const vivi = new Set<string>();
+  for (let from = 0; ; from += PULL_PAGE) {
+    const { data, error } = await supabase
+      .from("rapportini")
+      .select("id")
+      .is("deleted_at", null)
+      .order("id")
+      .range(from, from + PULL_PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    for (const row of rows) vivi.add(String((row as { id: string }).id));
+    if (rows.length < PULL_PAGE) break;
   }
-  return removed;
+
+  const locali = await db.rapportini.toArray();
+  const daTogliere = locali
+    .filter((r) => r.syncStatus !== "pending" && r.syncStatus !== "error" && !vivi.has(r.id))
+    .map((r) => r.id);
+  if (daTogliere.length === 0) return 0;
+  await db.rapportini.bulkDelete(daTogliere);
+  return daTogliere.length;
 }
 
 let lastReferencePullAt = 0;

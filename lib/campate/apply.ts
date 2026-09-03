@@ -33,6 +33,69 @@ function eEventoAttenzione(evento: string) {
   return evento === "attenzionare" || evento === "attenzionare_off";
 }
 
+type CampiRinvio = Pick<
+  CampataLavoro,
+  "rinvioMese" | "rinvioAnno" | "rinvioNote" | "rinvioBy" | "rinvioFattaIl" | "rinvioFattaBy"
+>;
+
+type SnapRinvio = {
+  chiave: string;
+  campi: CampiRinvio;
+  annoOrigine: number;
+  campata: CampataLavoro;
+};
+
+function campiRinvioDi(c: CampataLavoro): CampiRinvio {
+  return {
+    rinvioMese: c.rinvioMese,
+    rinvioAnno: c.rinvioAnno,
+    rinvioNote: c.rinvioNote,
+    rinvioBy: c.rinvioBy,
+    rinvioFattaIl: c.rinvioFattaIl,
+    rinvioFattaBy: c.rinvioFattaBy,
+  };
+}
+
+function conRinvio(c: CampataLavoro, r: CampiRinvio): CampataLavoro {
+  const out: CampataLavoro = { ...c };
+  out.rinvioMese = r.rinvioMese;
+  if (r.rinvioAnno != null) out.rinvioAnno = r.rinvioAnno;
+  else delete out.rinvioAnno;
+  if (r.rinvioNote) out.rinvioNote = r.rinvioNote;
+  else delete out.rinvioNote;
+  if (r.rinvioBy) out.rinvioBy = r.rinvioBy;
+  else delete out.rinvioBy;
+  if (r.rinvioFattaIl) out.rinvioFattaIl = r.rinvioFattaIl;
+  else delete out.rinvioFattaIl;
+  if (r.rinvioFattaBy) out.rinvioFattaBy = r.rinvioFattaBy;
+  else delete out.rinvioFattaBy;
+  return out;
+}
+
+function senzaRinvio(c: CampataLavoro): CampataLavoro {
+  const out: CampataLavoro = { ...c };
+  delete out.rinvioMese;
+  delete out.rinvioAnno;
+  delete out.rinvioNote;
+  delete out.rinvioBy;
+  delete out.rinvioFattaIl;
+  delete out.rinvioFattaBy;
+  return out;
+}
+
+/** Solo i promemoria dello stesso anno: il piano nuovo non eredita quelli degli anni scorsi. */
+function rinviiStessoAnno(tutte: CampataLavoro[], annoPiano: number): SnapRinvio[] {
+  const perChiave = new Map<string, SnapRinvio>();
+  for (const c of tutte) {
+    if (c.tipo === "base") continue;
+    if (!campataDaRiprendere(c)) continue;
+    if (annoDi(c) !== annoPiano) continue;
+    const chiave = chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita);
+    perChiave.set(chiave, { chiave, campi: campiRinvioDi(c), annoOrigine: annoPiano, campata: c });
+  }
+  return [...perChiave.values()];
+}
+
 const FINESTRA_ATTENZIONE_MS = 2 * 60 * 1000;
 
 function richiediRete() {
@@ -57,6 +120,7 @@ export async function confermaImportCampate(opts: {
 }) {
   const supabase = richiediRete();
   const anno = opts.anno || new Date().getFullYear();
+  const rinvii = opts.azzera ? [] : rinviiStessoAnno(await db.campateLavoro.toArray(), anno);
   if (opts.azzera) await resetOperativoPerImport();
   else await eliminaPianoAnno(anno);
 
@@ -115,6 +179,24 @@ export async function confermaImportCampate(opts: {
     });
   }
 
+  for (let i = 0; i < daScrivere.length; i++) {
+    const riga = daScrivere[i];
+    const snap = rinvii.find(
+      (s) => s.chiave === chiaveCampata(riga.codiceLinea, riga.normalizzata, riga.priorita),
+    );
+    if (!snap) continue;
+    daScrivere[i] = conRinvio(riga, snap.campi);
+    storico.push({
+      id: uid("sto"),
+      campataId: riga.id,
+      evento: "da_riprendere",
+      stato: riga.stato,
+      priorita: riga.priorita,
+      note: etichettaRinvio(daScrivere[i]),
+      createdAt: now,
+    });
+  }
+
   const riepilogo: ImportCampate = {
     id: importId,
     fileName: opts.fileName,
@@ -135,7 +217,9 @@ export async function confermaImportCampate(opts: {
   }
 
   if (daScrivere.length > 0) {
-    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), { vietatoOmettere: ["anno", "est_int"] });
+    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), {
+      vietatoOmettere: ["anno", "est_int", "rinvio_mese"],
+    });
     await db.campateLavoro.bulkPut(daScrivere);
   }
 
@@ -932,6 +1016,29 @@ export async function aggiornaDettagliCampata(
     }
 
     daScrivere.push(aggiornata);
+  }
+
+  // Un solo promemoria per span: se la segni sul piano di quest’anno, togli il doppione dagli altri.
+  if (patch.rinvio && !isBaseLavoro(presente) && presente.normalizzata) {
+    const sullaLinea = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
+    const gia = new Set(daScrivere.map((c) => c.id));
+    for (const altra of sullaLinea) {
+      if (gia.has(altra.id)) continue;
+      if (isBaseLavoro(altra) || altra.normalizzata !== presente.normalizzata) continue;
+      if (!campataDaRiprendere(altra)) continue;
+      if (!puoModificareSceltaCampata(session, altra.rinvioBy)) continue;
+      daScrivere.push({ ...senzaRinvio(altra), syncStatus: "pending", updatedAt: now });
+      storico.push({
+        id: uid("sto"),
+        campataId: altra.id,
+        evento: "da_riprendere_off",
+        stato: altra.stato,
+        priorita: altra.priorita,
+        operatore: nome,
+        note: "Un solo promemoria: aggiornato su quest’anno",
+        createdAt: now,
+      });
+    }
   }
 
   if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);

@@ -88,8 +88,8 @@ export default function ImportaCampatePage() {
     const nAnno = esistenti.filter((c) => c.tipo !== "base" && annoDi(c) === anno).length;
     const ok = window.confirm(
       haPianoAnno
-        ? `Sostituire il piano ${anno}? Verranno rimosse ${nAnno} campate di quell’anno (anche già tagliate) e rimesse le ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe del file, tutte da tagliare. Rapportini e gli altri anni restano.`
-        : `Importare il piano ${anno}? Si aggiungono ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} campate da tagliare. Rapportini e gli anni già in elenco restano.`,
+        ? `Sostituire il piano ${anno}? Verranno rimosse ${nAnno} campate di quell’anno (anche già tagliate) e rimesse le ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe del file, tutte da tagliare. I grafici di quest’anno ripartono dal file. I promemoria «Da riprendere» di quest’anno restano sulle stesse campate, senza cambiare lo stato. Rapportini e gli altri anni restano.`
+        : `Importare il piano ${anno}? Si aggiungono ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} campate da tagliare, come nel file. «Da riprendere» non si copia sul piano nuovo e non entra nei grafici. Rapportini e gli anni già in elenco restano.`,
     );
     if (!ok) return;
     setBusy(true);
@@ -171,9 +171,10 @@ export default function ImportaCampatePage() {
           {haPianoAnno ? (
             <div className="panel">
               <p>
-                Esiste già un piano {anno}. <strong>Aggiorna solo le distanze</strong> lascia stati e
-                rapportini, e attacca anche le coordinate Maps. <strong>Importa piano {anno}</strong>{" "}
-                sostituisce le campate di quest’anno.
+                Esiste già un piano {anno}. <strong>Aggiorna solo le distanze</strong> lascia stati,
+                grafici, rapportini e «Da riprendere», e attacca le coordinate Maps.{" "}
+                <strong>Importa piano {anno}</strong> rimette le campate del file tutte da tagliare:
+                i promemoria di quest’anno restano, ma non cambiano lo stato e non entrano in torta.
               </p>
               <p>
                 Trovate <strong>{distanze?.nelFile ?? 0} misure</strong> nel file, di cui{" "}
@@ -184,7 +185,8 @@ export default function ImportaCampatePage() {
             <div className="panel">
               <p>
                 Si aggiungono <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} campate</strong>{" "}
-                da tagliare per il {anno}. Rapportini e altri anni non vengono toccati.
+                da tagliare per il {anno}, come nel file. «Da riprendere» resta l’elenco a parte
+                (anni scorsi): non si copia qui e non entra nei grafici.
               </p>
             </div>
           )}

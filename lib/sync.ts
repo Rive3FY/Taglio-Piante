@@ -181,8 +181,8 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
   if (autenticato) {
     try {
       await pullReferenceData();
-      await pullDeletedRapportini();
-      pulled = await pullRapportini();
+      const rimossi = await pullDeletedRapportini();
+      pulled = (await pullRapportini()) + rimossi;
     } catch (error) {
       pullError =
         error instanceof Error ? error.message.slice(0, 280) : "Lettura dal server non riuscita.";

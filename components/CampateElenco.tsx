@@ -8,7 +8,8 @@ import { formatDate, formatDistInt, TENSIONI, tensioneLabel } from "@/lib/format
 import { aggiornaDettagliCampata, type PatchRinvio } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
-import { readElencoVista, writeElencoVista, type RipresaFiltro } from "@/lib/campate/elencoVista";
+import { chiaveCampata } from "@/lib/campate/normalize";
+import { readElencoVista, writeElencoVista, type OrdineElenco, type RipresaFiltro } from "@/lib/campate/elencoVista";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
@@ -37,6 +38,53 @@ type OrigineFiltro = CampataOrigine | "tutte";
 type PrioritaFiltro = CampataPriorita | "tutte";
 type StatoFiltro = CampataStatoLavoro | "tutte";
 type ModoElenco = "piano" | "rinvii";
+
+/** Una riga per span+priorità: se lo stesso promemoria è su due anni, resta quello aperto più recente. */
+function rinviiSenzaDoppioni(lista: CampataLavoro[]) {
+  const scelte = new Map<string, CampataLavoro>();
+  for (const c of lista) {
+    if (!campataDaRiprendere(c)) continue;
+    const chiave = chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita);
+    const gia = scelte.get(chiave);
+    if (!gia) {
+      scelte.set(chiave, c);
+      continue;
+    }
+    const aperto = !rinvioRipreso(c);
+    const giaAperto = !rinvioRipreso(gia);
+    if (aperto !== giaAperto) {
+      if (aperto) scelte.set(chiave, c);
+      continue;
+    }
+    if (annoDi(c) > annoDi(gia)) scelte.set(chiave, c);
+  }
+  return [...scelte.values()];
+}
+
+const ORDINE_LABEL: Record<OrdineElenco, string> = {
+  linea: "Linea",
+  dist_asc: "Distanza crescente",
+  dist_desc: "Distanza decrescente",
+};
+
+function confrontaLinea(a: CampataLavoro, b: CampataLavoro) {
+  return (
+    a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
+    a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+    (a.priorita ?? "").localeCompare(b.priorita ?? "")
+  );
+}
+
+function confrontaElenco(a: CampataLavoro, b: CampataLavoro, ordine: OrdineElenco) {
+  if (ordine === "linea") return confrontaLinea(a, b);
+  const da = a.distInt;
+  const db = b.distInt;
+  if (da == null && db == null) return confrontaLinea(a, b);
+  if (da == null) return 1;
+  if (db == null) return -1;
+  const delta = ordine === "dist_asc" ? da - db : db - da;
+  return delta || confrontaLinea(a, b);
+}
 
 export type PatchCampata = {
   attenzionare?: boolean;
@@ -104,17 +152,26 @@ export function CampateElenco({
   const [visibili, setVisibili] = useState(vistaSalvata?.visibili ?? 40);
   const [meseRinvio, setMeseRinvio] = useState<number | "tutti">(vistaSalvata?.meseRinvio ?? "tutti");
   const [ripresa, setRipresa] = useState<RipresaFiltro>(vistaSalvata?.ripresa ?? "tutte");
+  const [ordine, setOrdine] = useState<OrdineElenco>(vistaSalvata?.ordine ?? "linea");
   const [popup, setPopup] = useState<string | null>(null);
   // In «Da riprendere» l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
   const universo = useMemo(
-    () => (soloRinvii ? campate.filter((c) => campataDaRiprendere(c)) : campate),
+    () => (soloRinvii ? rinviiSenzaDoppioni(campate) : campate),
     [campate, soloRinvii],
   );
   const anni = useMemo(() => anniPiani(universo), [universo]);
   const [anno, setAnno] = useState<number | null>(vistaSalvata?.anno ?? null);
-  const annoEffettivo = anno != null && anni.includes(anno) ? anno : (anni[0] ?? annoPianoPiuRecente(campate));
+  // In «Da riprendere» null = tutti gli anni (il promemoria non è di un solo piano).
+  const annoEffettivo = soloRinvii
+    ? anno != null && anni.includes(anno)
+      ? anno
+      : null
+    : anno != null && anni.includes(anno)
+      ? anno
+      : (anni[0] ?? annoPianoPiuRecente(campate));
+  const annoRiferimento = annoEffettivo ?? annoPianoPiuRecente(campate);
   const delPiano = useMemo(
-    () => universo.filter((c) => annoDi(c) === annoEffettivo),
+    () => (annoEffettivo == null ? universo : universo.filter((c) => annoDi(c) === annoEffettivo)),
     [universo, annoEffettivo],
   );
 
@@ -146,12 +203,7 @@ export function CampateElenco({
     const term = q.trim().toLowerCase();
     return [...delPiano]
       .filter((c) => c.tipo !== "base")
-      .sort(
-        (a, b) =>
-          a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
-          a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
-          (a.priorita ?? "").localeCompare(b.priorita ?? ""),
-      )
+      .sort((a, b) => confrontaElenco(a, b, ordine))
       .filter((c) => passaFiltriVista(c, { term, kv, stato, linea, operatore, periodo }))
       .filter((c) => {
         if (priorita !== "tutte" && c.priorita !== priorita) return false;
@@ -180,6 +232,7 @@ export function CampateElenco({
     soloRinvii,
     meseRinvio,
     ripresa,
+    ordine,
   ]);
 
   const basiVista = useMemo(() => {
@@ -233,6 +286,7 @@ export function CampateElenco({
       visibili,
       meseRinvio,
       ripresa,
+      ordine,
     });
   }, [
     session?.userId,
@@ -251,6 +305,7 @@ export function CampateElenco({
     visibili,
     meseRinvio,
     ripresa,
+    ordine,
   ]);
 
   useEffect(() => {
@@ -280,7 +335,8 @@ export function CampateElenco({
         {soloRinvii ? (
           <>
             <span className="muted">
-              {conteggi.daRiprendere} da riprendere · piano {annoEffettivo}
+              {conteggi.daRiprendere} da riprendere
+              {annoEffettivo == null ? " · tutti gli anni" : ` · piano ${annoEffettivo}`}
             </span>
             <span className="badge">{conteggi.daRiprendere - conteggi.riprese} da fare</span>
             <span className="badge badge-tagliata">{conteggi.riprese} riprese</span>
@@ -315,7 +371,22 @@ export function CampateElenco({
 
       <div className="filtri-gruppi">
         {anni.length > 0 ? (
-          <FiltroGruppo titolo={`Anno ${annoEffettivo}`} attivo={anni.length > 1}>
+          <FiltroGruppo
+            titolo={annoEffettivo == null ? "Tutti gli anni" : `Anno ${annoEffettivo}`}
+            attivo={soloRinvii ? annoEffettivo != null : anni.length > 1}
+          >
+            {soloRinvii ? (
+              <button
+                type="button"
+                className={`chip ${annoEffettivo == null ? "on" : ""}`}
+                onClick={() => {
+                  setAnno(null);
+                  setVisibili(40);
+                }}
+              >
+                Tutti
+              </button>
+            ) : null}
             {anni.map((a) => (
               <button
                 key={a}
@@ -331,6 +402,22 @@ export function CampateElenco({
             ))}
           </FiltroGruppo>
         ) : null}
+
+        <FiltroGruppo titolo={ORDINE_LABEL[ordine]} attivo={ordine !== "linea"}>
+          {(["linea", "dist_asc", "dist_desc"] as const).map((o) => (
+            <button
+              key={o}
+              type="button"
+              className={`chip ${ordine === o ? "on" : ""}`}
+              onClick={() => {
+                setOrdine(o);
+                setVisibili(40);
+              }}
+            >
+              {ORDINE_LABEL[o]}
+            </button>
+          ))}
+        </FiltroGruppo>
 
         <FiltroGruppo
           titolo={kv === "tutte" ? "Tutte le tensioni" : tensioneLabel(kv)}
@@ -524,7 +611,7 @@ export function CampateElenco({
               stato,
               priorita,
               origine,
-              anno: annoEffettivo,
+              anno: annoEffettivo ?? undefined,
               prefisso: soloRinvii ? "da-riprendere" : undefined,
               rinvio: soloRinvii,
             })
@@ -558,7 +645,21 @@ export function CampateElenco({
                 <th>Nome linea</th>
                 <th>kV</th>
                 <th>Campata</th>
-                <th>Dist int</th>
+                <th>
+                  <button
+                    type="button"
+                    className="th-sort"
+                    onClick={() => {
+                      setOrdine((o) =>
+                        o === "linea" ? "dist_asc" : o === "dist_asc" ? "dist_desc" : "linea",
+                      );
+                      setVisibili(40);
+                    }}
+                  >
+                    Dist int
+                    {ordine === "dist_asc" ? " ↑" : ordine === "dist_desc" ? " ↓" : ""}
+                  </button>
+                </th>
                 <th>Maps</th>
                 <th>Priorità</th>
                 <th>Stato</th>
@@ -578,7 +679,7 @@ export function CampateElenco({
                   sessionUserId={session?.userId}
                   sessionRuolo={session?.ruolo}
                   storico={storicoPer.get(c.id) ?? []}
-                  anniPrecedenti={anniTaglioPrecedenti(campate, c.codiceLinea, c.normalizzata, annoEffettivo)}
+                  anniPrecedenti={anniTaglioPrecedenti(campate, c.codiceLinea, c.normalizzata, annoRiferimento)}
                   aperta={aperta === c.id}
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
                   onPatch={(patch) => void patchCampata(c.id, patch)}

@@ -9,10 +9,9 @@ export default function TecnicoRinviiPage() {
         <div>
           <h2>Da riprendere</h2>
           <p className="muted">
-            Le stesse campate dell’elenco, segnate per tornarci in un mese preciso. È solo un
-            promemoria: lo stato nell’elenco campate e le torte non cambiano, quelle le muove solo il
-            rapportino. Da qui puoi cambiare mese, togliere il promemoria o spuntare «Tagliata»
-            quando ci sei tornato.
+            Promemoria a parte: non entra nei grafici e non cambia lo stato nell’elenco campate.
+            Il piano nuovo del file resta tutto da tagliare; questo elenco non lo sovrascrive. Una
+            campata compare una sola volta: se la segni di nuovo si aggiorna, non si duplica.
           </p>
         </div>
       </div>
