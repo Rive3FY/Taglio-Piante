@@ -19,6 +19,8 @@ const TOKEN_32 = [
 
 const TOKEN_33 = [
   "napoli", "maddaloni", "caserta", "salerno", "avellino", "benevento", "nola", "acerra",
+  "patria", "sofia", "presenzano", "troia", "aversa", "capua", "casoria", "afragola",
+  "giugliano", "pomigliano", "nocera", "pagani", "irpinia", "sannio", "cilento",
   "bari", "lecce", "foggia", "taranto", "brindisi", "potenza", "matera", "pescara",
   "chieti", "l'aquila", "teramo", "campobasso", "isernia", "ancona", "ascoli", "macerata",
   "palermo", "catania", "messina", "siracusa", "trapani", "reggio", "catanzaro", "cosenza",
@@ -31,7 +33,7 @@ const TOKEN_33 = [
 export function parseNumeroMetri(raw: string) {
   let t = raw.trim();
   if (!t) return undefined;
-  if (/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) {
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) {
     t = t.replace(/\./g, "").replace(",", ".");
   } else {
     t = t.replace(",", ".");
@@ -99,11 +101,23 @@ function punteggioItalia(lat: number, lng: number, zona: 32 | 33) {
   return s;
 }
 
+/** Parole intere: «PRATOLA SERRA» (Avellino) non deve valere come Prato. */
+function parolePulite(nome: string) {
+  const t = nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z']+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t ? ` ${t} ` : "";
+}
+
 function hintDaNome(nome?: string): 32 | 33 | null {
-  const t = (nome ?? "").toLowerCase();
+  const t = parolePulite(nome ?? "");
   if (!t) return null;
-  const h32 = TOKEN_32.some((p) => t.includes(p));
-  const h33 = TOKEN_33.some((p) => t.includes(p));
+  const h32 = TOKEN_32.some((p) => t.includes(` ${p} `));
+  const h33 = TOKEN_33.some((p) => t.includes(` ${p} `));
   if (h32 && !h33) return 32;
   if (h33 && !h32) return 33;
   return null;
@@ -126,18 +140,21 @@ export function wgs84DaEstNord(
   const s33 = punteggioItalia(c33.lat, c33.lng, 33);
   const hint = hintDaNome(nomeLinea);
 
-  let scelto = s33 >= s32 ? c33 : c32;
-  let incerto = Math.abs(s33 - s32) < 2 && s32 > 0 && s33 > 0;
-
+  // Questo piano è Campania e regioni vicine: il fuso giusto è 33N.
+  // Lo stesso est/nord letto come 32N cade in Sardegna e sembrava «più Italia».
+  let scelto = c33;
+  let incerto = false;
   if (hint === 32 && s32 > 0) {
     scelto = c32;
-    incerto = s33 > 0 && Math.abs(s33 - s32) < 2;
-  } else if (hint === 33 && s33 > 0) {
+    incerto = s33 > 0;
+  } else if (s33 > 0) {
     scelto = c33;
-    incerto = s32 > 0 && Math.abs(s33 - s32) < 2;
+  } else if (s32 > 0) {
+    scelto = c32;
+    incerto = true;
+  } else {
+    return null;
   }
-
-  if (s32 === 0 && s33 === 0) return null;
 
   const epsg = scelto.zona === 32 ? "EPSG:32632" : "EPSG:32633";
   const etichetta = incerto
