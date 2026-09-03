@@ -528,6 +528,37 @@ select.inline-field { width: auto; min-width: 160px; }
 .badge-attenzionare { background: #fef08a; color: #854d0e; }
 .badge-rinvio { background: #e0e7ff; color: #3730a3; }
 
+.cerca-wrap { position: relative; }
+.suggerimenti {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  max-height: 320px;
+  overflow: auto;
+}
+.suggerimento {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.suggerimento:hover, .suggerimento:focus-visible { background: #f0f7f2; }
+.sugg-titolo { display: block; font-weight: 650; }
+.sugg-nota { display: block; font-size: 12px; opacity: 0.7; margin-top: 2px; }
+
 .campate-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
 .campate-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .campate-table th, .campate-table td { text-align: left; padding: 8px 10px; vertical-align: top; }

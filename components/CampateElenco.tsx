@@ -94,10 +94,23 @@ export type PatchCampata = {
   rinvioFatta?: boolean;
 };
 
+function campiRicerca(c: CampataLavoro) {
+  return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note, c.distInt]
+    .filter((v) => v != null && v !== "")
+    .map((v) => String(v).toLowerCase());
+}
+
+/** «patria 58» deve trovare la campata 57-58 di quella linea: ogni parola in un campo qualsiasi. */
+function passaTermini(c: CampataLavoro, termini: string[]) {
+  if (termini.length === 0) return true;
+  const campi = campiRicerca(c);
+  return termini.every((t) => campi.some((v) => v.includes(t)));
+}
+
 function passaFiltriVista(
   c: CampataLavoro,
   p: {
-    term: string;
+    termini: string[];
     kv: number | "tutte";
     stato: StatoFiltro;
     linea: string;
@@ -115,10 +128,7 @@ function passaFiltriVista(
   if (p.operatore && c.operatore !== p.operatore) return false;
   if (c.dataTaglio && !nelPeriodo(c.dataTaglio, p.periodo)) return false;
   if (p.periodo.da && !c.dataTaglio) return false;
-  if (!p.term) return true;
-  return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note, c.distInt]
-    .filter((v) => v != null && v !== "")
-    .some((v) => String(v).toLowerCase().includes(p.term));
+  return passaTermini(c, p.termini);
 }
 
 export function CampateElenco({
@@ -153,6 +163,7 @@ export function CampateElenco({
   const [meseRinvio, setMeseRinvio] = useState<number | "tutti">(vistaSalvata?.meseRinvio ?? "tutti");
   const [ripresa, setRipresa] = useState<RipresaFiltro>(vistaSalvata?.ripresa ?? "tutte");
   const [ordine, setOrdine] = useState<OrdineElenco>(vistaSalvata?.ordine ?? "linea");
+  const [suggAperti, setSuggAperti] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
   // In «Da riprendere» l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
   const universo = useMemo(
@@ -199,12 +210,13 @@ export function CampateElenco({
     return [...set].sort((a, b) => a.localeCompare(b, "it"));
   }, [delPiano]);
 
+  const termini = useMemo(() => q.trim().toLowerCase().split(/\s+/).filter(Boolean), [q]);
+
   const filtrate = useMemo(() => {
-    const term = q.trim().toLowerCase();
     return [...delPiano]
       .filter((c) => c.tipo !== "base")
       .sort((a, b) => confrontaElenco(a, b, ordine))
-      .filter((c) => passaFiltriVista(c, { term, kv, stato, linea, operatore, periodo }))
+      .filter((c) => passaFiltriVista(c, { termini, kv, stato, linea, operatore, periodo }))
       .filter((c) => {
         if (priorita !== "tutte" && c.priorita !== priorita) return false;
         if (soloAttenzione && !c.attenzionare) return false;
@@ -219,7 +231,7 @@ export function CampateElenco({
       });
   }, [
     delPiano,
-    q,
+    termini,
     kv,
     priorita,
     stato,
@@ -236,11 +248,29 @@ export function CampateElenco({
   ]);
 
   const basiVista = useMemo(() => {
-    const term = q.trim().toLowerCase();
     return delPiano
       .filter((c) => c.tipo === "base")
-      .filter((c) => passaFiltriVista(c, { term, kv, stato, linea, operatore, periodo }));
-  }, [delPiano, q, kv, stato, linea, operatore, periodo]);
+      .filter((c) => passaFiltriVista(c, { termini, kv, stato, linea, operatore, periodo }));
+  }, [delPiano, termini, kv, stato, linea, operatore, periodo]);
+
+  /** Suggerimenti mentre si scrive: prima le linee che combaciano, poi le singole campate. */
+  const suggerimenti = useMemo(() => {
+    if (termini.length === 0) return { linee: [], campate: [] as CampataLavoro[] };
+    const trovate = delPiano
+      .filter((c) => c.tipo !== "base" && passaTermini(c, termini))
+      .sort(confrontaLinea);
+    const perLinea = new Map<string, { codice: string; nome: string; quante: number }>();
+    for (const c of trovate) {
+      const voce = perLinea.get(c.codiceLinea) ?? {
+        codice: c.codiceLinea,
+        nome: c.nomeLinea,
+        quante: 0,
+      };
+      voce.quante += 1;
+      perLinea.set(c.codiceLinea, voce);
+    }
+    return { linee: [...perLinea.values()].slice(0, 3), campate: trovate.slice(0, 6) };
+  }, [delPiano, termini]);
 
   const daScaricare = useMemo(() => [...filtrate, ...basiVista], [filtrate, basiVista]);
 
@@ -268,6 +298,8 @@ export function CampateElenco({
   }, [delPiano]);
 
   const campataPopup = popup ? campate.find((c) => c.id === popup) : undefined;
+  const mostraSugg =
+    suggAperti && (suggerimenti.linee.length > 0 || suggerimenti.campate.length > 0);
 
   useEffect(() => {
     if (!session?.userId) return;
@@ -357,17 +389,74 @@ export function CampateElenco({
         )}
       </div>
 
-      <label>
-        Cerca
-        <input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setVisibili(40);
-          }}
-          placeholder="Codice linea, nome, campata…"
-        />
-      </label>
+      <div className="cerca-wrap">
+        <label>
+          Cerca
+          <input
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setVisibili(40);
+              setSuggAperti(true);
+            }}
+            onFocus={() => setSuggAperti(true)}
+            onBlur={() => setSuggAperti(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSuggAperti(false);
+            }}
+            placeholder="Es. patria 58, oppure 21317B1"
+            autoComplete="off"
+          />
+        </label>
+        {mostraSugg ? (
+          <ul className="suggerimenti" onMouseDown={(e) => e.preventDefault()}>
+            {suggerimenti.linee.map((l) => (
+              <li key={`lin-${l.codice}`}>
+                <button
+                  type="button"
+                  className="suggerimento"
+                  onClick={() => {
+                    setLinea(l.codice);
+                    setQ("");
+                    setVisibili(40);
+                    setSuggAperti(false);
+                  }}
+                >
+                  <span className="sugg-titolo">
+                    {l.codice} · {l.nome}
+                  </span>
+                  <span className="sugg-nota">
+                    tutta la linea · {l.quante} {l.quante === 1 ? "campata" : "campate"}
+                  </span>
+                </button>
+              </li>
+            ))}
+            {suggerimenti.campate.map((c) => (
+              <li key={`cam-${c.id}`}>
+                <button
+                  type="button"
+                  className="suggerimento"
+                  onClick={() => {
+                    setQ(`${c.codiceLinea} ${c.normalizzata}`);
+                    setAperta(c.id);
+                    setVisibili(40);
+                    setSuggAperti(false);
+                  }}
+                >
+                  <span className="sugg-titolo">
+                    Campata {c.normalizzata} · {c.nomeLinea}
+                  </span>
+                  <span className="sugg-nota">
+                    {c.codiceLinea}
+                    {c.distInt != null ? ` · Dist int ${formatDistInt(c.distInt)}` : ""}
+                    {c.priorita ? ` · ${CAMPATA_PRIORITA_LABEL[c.priorita]}` : ""}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
 
       <div className="filtri-gruppi">
         {anni.length > 0 ? (
