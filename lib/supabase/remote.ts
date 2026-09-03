@@ -52,7 +52,7 @@ export function messaggioErroreSupabase(message: string) {
     return "Permesso negato sul database (policy RLS). In Supabase → SQL esegui tutto supabase/schema.sql, poi verifica che il tuo account abbia un profilo con ruolo corretto.";
   }
   if (/schema cache|does not exist|could not find the/i.test(message)) {
-    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int e da_non_tagliare sulle campate).";
+    return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int, da_non_tagliare e rinvio_mese sulle campate).";
   }
   if (/foreign key constraint|violates foreign key/i.test(message)) {
     return "Dati non allineati: manca la linea collegata sul database. Sincronizza le anagrafiche o riesegui supabase/schema.sql.";
@@ -235,7 +235,7 @@ export async function pushCampatePending(rapportinoId?: string) {
     // Senza da_non_tagliare il tecnico vedrebbe la campata come normale: meglio
     // fallire con un messaggio chiaro che perdere il segno in silenzio.
     await upsertCampateLavoro(rows.map(campataLavoroToRow), {
-      vietatoOmettere: ["da_non_tagliare"],
+      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese"],
     });
 
     const ids = new Set(rows.map((c) => c.id));
@@ -407,6 +407,9 @@ export async function pullReferenceData() {
   if ((prestRes.data ?? []).length > 0) {
     await db.prestazioni.bulkPut((prestRes.data ?? []).map(rowToPrestazione));
   }
+  const { allineaPrestazioniLocali } = await import("@/lib/db");
+  await allineaPrestazioniLocali();
+  await upsertCatalogoPrestazioni();
 
   // I profili si controllano per ultimi: se falliscono, linee e anagrafiche sono già aggiornate.
   if (profiliRes.error) throw new Error(profiliRes.error.message);
@@ -467,9 +470,18 @@ export async function pullCampateLavoro() {
   }
 }
 
+export async function upsertCatalogoPrestazioni() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { error } = await supabase.from("prestazioni").upsert(SEED_PRESTAZIONI.map(prestazioneToRow));
+  if (error) throw new Error(messaggioErroreSupabase(error.message));
+}
+
 export async function seedRemoteReferenceData() {
   const supabase = getSupabase();
   if (!supabase) return false;
+
+  await upsertCatalogoPrestazioni();
 
   const { count } = await supabase.from("linee").select("*", { count: "exact", head: true });
   if ((count ?? 0) > 0) return false;
@@ -479,11 +491,6 @@ export async function seedRemoteReferenceData() {
 
   const { error: ditteError } = await supabase.from("ditte").upsert(SEED_DITTE.map(dittaToRow));
   if (ditteError) throw new Error(ditteError.message);
-
-  const { error: prestError } = await supabase
-    .from("prestazioni")
-    .upsert(SEED_PRESTAZIONI.map(prestazioneToRow));
-  if (prestError) throw new Error(prestError.message);
 
   return true;
 }

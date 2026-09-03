@@ -211,17 +211,41 @@ end $$;
 
 -- Stessa campata fisica può essere sia urgente sia differibile: due interventi distinti.
 -- La base (pulizia 5.2–5.4) è un registro a parte, stesso numero di sostegno.
+-- Più anni: la stessa linea+campata può esistere nel 2026 e nel 2027.
+alter table campate_lavoro add column if not exists anno integer not null default 2026;
+alter table import_campate add column if not exists anno integer not null default 2026;
 drop index if exists campate_lavoro_unica_idx;
 create unique index if not exists campate_lavoro_unica_idx
-  on campate_lavoro (codice_linea, normalizzata, (coalesce(priorita, '')), tipo);
+  on campate_lavoro (anno, codice_linea, normalizzata, (coalesce(priorita, '')), tipo);
 create index if not exists campate_lavoro_linea_idx on campate_lavoro(linea_id);
 create index if not exists campate_lavoro_stato_idx on campate_lavoro(stato);
+create index if not exists campate_lavoro_anno_idx on campate_lavoro(anno);
 
 alter table campate_lavoro add column if not exists attenzionare boolean not null default false;
 alter table campate_lavoro add column if not exists dist_int numeric;
 alter table campate_lavoro add column if not exists da_non_tagliare boolean not null default false;
 alter table campate_lavoro add column if not exists da_non_tagliare_by text;
 alter table campate_lavoro add column if not exists attenzionare_by text;
+
+-- Promemoria «da riprendere»: elenco parallelo, non è uno stato di taglio.
+-- Le torte restano legate a stato e da_non_tagliare.
+alter table campate_lavoro add column if not exists rinvio_mese integer;
+alter table campate_lavoro add column if not exists rinvio_anno integer;
+alter table campate_lavoro add column if not exists rinvio_note text;
+alter table campate_lavoro add column if not exists rinvio_by text;
+alter table campate_lavoro add column if not exists rinvio_fatta_il timestamptz;
+alter table campate_lavoro add column if not exists rinvio_fatta_by text;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'campate_lavoro_rinvio_mese_check'
+  ) then
+    alter table campate_lavoro
+      add constraint campate_lavoro_rinvio_mese_check
+      check (rinvio_mese is null or rinvio_mese between 1 and 12);
+  end if;
+end $$;
+create index if not exists campate_lavoro_rinvio_idx on campate_lavoro(rinvio_mese);
 
 create table if not exists campate_storico (
   id text primary key,

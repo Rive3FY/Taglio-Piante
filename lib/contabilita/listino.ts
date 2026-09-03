@@ -1,14 +1,16 @@
 /**
- * Prezziario di contratto, solo voci presenti sul rapportino.
+ * Prezziario di contratto, voci del foglio ufficiale.
  * CAD del listino = caduno = n. sul foglio.
- * Voci in mq (1.1 / 1.2 / 1.3): sul rapportino si indicano i metri quadri,
+ * Voci in mq (1.1 / 1.2 / 1.3 / 1.5): sul rapportino si indicano i metri quadri,
  * il prezzo è ogni 100 mq → importo = (mq / 100) × prezzo, arrotondato a 2 decimali.
- * 6.1 / 6.2: il prezzo è al metro cubo.
+ * 1.4: prezzo al metro. 6.1 / 6.2: prezzo al metro cubo.
  */
 export const LISTINO: Record<string, number> = {
   "1.1": 20.8,
   "1.2": 16.64,
   "1.3": 14.69,
+  "1.4": 5.9,
+  "1.5": 5.67,
   "2.1": 10.58,
   "2.2": 14.02,
   "2.3": 55.66,
@@ -19,9 +21,16 @@ export const LISTINO: Record<string, number> = {
   "3.3": 13.23,
   "3.4": 707.04,
   "3.5": 5.46,
+  "4.1": 12.06,
+  "4.2": 14.16,
+  "4.3": 27.85,
+  "5.1": 7.57,
   "5.2": 11.37,
   "5.3": 22.76,
   "5.4": 30.29,
+  "5.5": 0.39,
+  "5.6": 0.36,
+  "5.7": 1.21,
   "6.1": 31.17,
   "6.2": 44.91,
   "6.3": 0.15,
@@ -45,7 +54,7 @@ export function eUnitaMq(unitaMisura: string, codice = "") {
     .replaceAll("m²", "mq")
     .replaceAll("m2", "mq");
   if (n.includes("mq")) return true;
-  return codice === "1.1" || codice === "1.2" || codice === "1.3";
+  return codice === "1.1" || codice === "1.2" || codice === "1.3" || codice === "1.5";
 }
 
 export function importoVoce(quantita: number, codice: string, unitaMisura: string) {
@@ -64,6 +73,7 @@ export function etichettaUnita(unitaMisura: string) {
   const n = unitaMisura.trim().toLowerCase().replaceAll("°", "");
   if (n === "n" || n === "n." || n === "cad") return "n.";
   if (n === "g" || n === "g.") return "G";
+  if (n === "m" || n === "ml") return "m";
   if (n === "mc" || n === "m3" || n === "m³") return "m³";
   if (n === "kg") return "kg";
   if (n.includes("mq") || n.includes("m²") || n.includes("m2")) return "100 mq";

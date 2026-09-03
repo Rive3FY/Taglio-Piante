@@ -2,7 +2,7 @@ import type { Prestazione, Rapportino, RapportinoCampata } from "@/lib/types";
 import { uid } from "@/lib/format";
 import { normalizzaCampata, spezzaCampateTesto } from "./normalize";
 
-/** Pulizia basamento: 5.1 arriverà sul foglio; 5.2–5.4 ci sono già. */
+/** Pulizia basamento sul foglio ufficiale: 5.1–5.4. */
 export const CODICI_PULIZIA_BASE = new Set(["5.1", "5.2", "5.3", "5.4"]);
 
 export function isBaseLavoro(c: { tipo?: string }) {

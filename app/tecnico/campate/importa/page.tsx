@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { parseFileCampate } from "@/lib/campate/file";
 import { costruisciAnteprima, conteggioDistanzeDaFile, type AnteprimaImport } from "@/lib/campate/preview";
 import { aggiornaDistanzeDaFile, confermaImportCampate } from "@/lib/campate/apply";
+import { annoDi, anniPiani } from "@/lib/campate/anno";
 import { useSession } from "@/lib/SessionContext";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 import { formatDistInt } from "@/lib/format";
+import type { RigaImportBruta, RigaImportScartata } from "@/lib/campate/parse";
 
 export default function ImportaCampatePage() {
   const router = useRouter();
@@ -20,28 +22,42 @@ export default function ImportaCampatePage() {
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
-  const [anteprima, setAnteprima] = useState<AnteprimaImport | null>(null);
-  const haPiano = esistenti.length > 0;
-  const distanze = anteprima ? conteggioDistanzeDaFile(anteprima.voci, esistenti) : null;
+  const [parsed, setParsed] = useState<{
+    riconosciute: RigaImportBruta[];
+    scartate: RigaImportScartata[];
+  } | null>(null);
+  const [anno, setAnno] = useState(() => new Date().getFullYear());
+  const [azzeraTesto, setAzzeraTesto] = useState("");
+
+  const anteprima: AnteprimaImport | null = useMemo(() => {
+    if (!parsed) return null;
+    return costruisciAnteprima(
+      parsed.riconosciute,
+      parsed.scartate,
+      Array.isArray(esistenti) ? esistenti : [],
+      new Set((Array.isArray(linee) ? linee : []).map((l) => l.codice.toUpperCase())),
+      anno,
+    );
+  }, [parsed, esistenti, linee, anno]);
+
+  const haPianoAnno = esistenti.some((c) => annoDi(c) === anno);
+  const anniPresenti = anniPiani(esistenti);
+  const distanze = anteprima ? conteggioDistanzeDaFile(anteprima.voci, esistenti, anno) : null;
+  const nCampate = esistenti.filter((c) => c.tipo !== "base").length;
 
   async function onFile(file: File | null) {
     if (!file) return;
     setBusy(true);
     setErrore(null);
-    setAnteprima(null);
+    setParsed(null);
     setFileName(file.name);
+    setAzzeraTesto("");
     try {
-      const parsed = await parseFileCampate(file);
-      const preview = costruisciAnteprima(
-        parsed.riconosciute,
-        parsed.scartate,
-        Array.isArray(esistenti) ? esistenti : [],
-        new Set((Array.isArray(linee) ? linee : []).map((l) => l.codice.toUpperCase())),
-      );
-      if (preview.voci.length === 0 && preview.scartate.length > 0) {
-        setErrore(preview.scartate[0]?.motivo ?? "Nessuna campata riconosciuta.");
+      const letto = await parseFileCampate(file);
+      setParsed({ riconosciute: letto.riconosciute, scartate: letto.scartate });
+      if (letto.riconosciute.length === 0 && letto.scartate.length > 0) {
+        setErrore(letto.scartate[0]?.motivo ?? "Nessuna campata riconosciuta.");
       }
-      setAnteprima(preview);
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Impossibile leggere il file.");
     } finally {
@@ -54,9 +70,9 @@ export default function ImportaCampatePage() {
     setBusy(true);
     setErrore(null);
     try {
-      const { aggiornate } = await aggiornaDistanzeDaFile({ anteprima });
+      const { aggiornate } = await aggiornaDistanzeDaFile({ anteprima, anno });
       if (aggiornate === 0) {
-        setErrore("Nessuna distanza da attaccare: nel file non c’è Dist int oppure le campate non coincidono.");
+        setErrore("Nessuna distanza da attaccare: nel file non c’è Dist int oppure le campate non coincidono con questo anno.");
         return;
       }
       router.push("/tecnico/campate");
@@ -67,17 +83,43 @@ export default function ImportaCampatePage() {
     }
   }
 
-  async function conferma() {
+  async function importaPiano() {
     if (!anteprima || !session) return;
+    const nAnno = esistenti.filter((c) => c.tipo !== "base" && annoDi(c) === anno).length;
     const ok = window.confirm(
-      "Confermi? Verranno eliminati tutti i rapportini, le campate e le linee attuali " +
-        "(sul telefono e su Supabase). L’app ripartirà solo con le righe di questo file.",
+      haPianoAnno
+        ? `Sostituire il piano ${anno}? Verranno rimosse ${nAnno} campate di quell’anno (anche già tagliate) e rimesse le ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe del file, tutte da tagliare. Rapportini e gli altri anni restano.`
+        : `Importare il piano ${anno}? Si aggiungono ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} campate da tagliare. Rapportini e gli anni già in elenco restano.`,
     );
     if (!ok) return;
     setBusy(true);
     setErrore(null);
     try {
-      await confermaImportCampate({ fileName, anteprima, session });
+      await confermaImportCampate({ fileName, anteprima, session, anno, azzera: false });
+      router.push("/tecnico/campate");
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Importazione non riuscita.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function azzeraEImporta() {
+    if (!anteprima || !session) return;
+    if (azzeraTesto.trim().toUpperCase() !== "AZZERA") {
+      setErrore("Per azzerare tutto scrivi AZZERA nel campo sotto, poi conferma.");
+      return;
+    }
+    const ok = window.confirm(
+      `Confermi l’azzeramento? Spariscono ${rapportini.length} rapportini, ${nCampate} campate` +
+        (anniPresenti.length ? ` (anni ${anniPresenti.join(", ")})` : "") +
+        ` e ${linee.length} linee, sul telefono e su Supabase. Poi si riparte solo con le ${anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe di questo file come piano ${anno}. Serve solo per cancellare prove o ripartire da zero.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setErrore(null);
+    try {
+      await confermaImportCampate({ fileName, anteprima, session, anno, azzera: true });
       router.push("/tecnico/campate");
     } catch (e) {
       setErrore(
@@ -95,19 +137,21 @@ export default function ImportaCampatePage() {
       <h2>Carica file campate</h2>
 
       <section className="panel">
-        {haPiano ? (
-          <p className="muted">
-            Le distanze <strong>non sono già nei dati importati</strong>: serve di nuovo lo stesso file LIDAR.
-            Usa <strong>Aggiorna solo le distanze</strong>: restano rapportini, stati e storico.
-            «Azzera e importa» cancella tutto il piano operativo.
-          </p>
-        ) : (
-          <p className="muted">
-            Caricando un nuovo file l’app viene <strong>azzerata</strong> sul piano operativo: spariscono
-            rapportini, campate, linee e storico. Restano solo ditte, prestazioni e account operatori.
-            Poi si riparte con le righe del file.
-          </p>
-        )}
+        <p className="muted">
+          Ogni file è un <strong>piano di un anno</strong>. Per il report nuovo usa{" "}
+          <strong>Importa piano</strong>: i rapportini e i tagli degli anni scorsi restano.
+          «Azzera tutto e riparti» serve solo a cancellare prove o ripartire da zero.
+        </p>
+        <label>
+          Anno del piano
+          <input
+            type="number"
+            min={2020}
+            max={2100}
+            value={anno}
+            onChange={(e) => setAnno(Number(e.target.value) || new Date().getFullYear())}
+          />
+        </label>
         <label className="file-btn btn btn-primary">
           Scegli file PDF o CSV
           <input
@@ -123,24 +167,23 @@ export default function ImportaCampatePage() {
 
       {anteprima ? (
         <section className="panel">
-          <h2>Anteprima</h2>
-          {haPiano ? (
+          <h2>Anteprima · piano {anno}</h2>
+          {haPianoAnno ? (
             <div className="panel">
               <p>
+                Esiste già un piano {anno}. <strong>Aggiorna solo le distanze</strong> lascia stati e
+                rapportini. <strong>Importa piano {anno}</strong> sostituisce le campate di quest’anno.
+              </p>
+              <p>
                 Trovate <strong>{distanze?.nelFile ?? 0} distanze</strong> nel file, di cui{" "}
-                <strong>{distanze?.aggiornabili ?? 0}</strong> si possono attaccare alle campate già in elenco.
-                Rapportini e tagli già fatti non vengono toccati.
+                <strong>{distanze?.aggiornabili ?? 0}</strong> si possono attaccare alle campate {anno}.
               </p>
             </div>
           ) : (
-            <div className="panel" style={{ borderColor: "var(--danger, #c0392b)" }}>
+            <div className="panel">
               <p>
-                <strong>Attenzione:</strong> confermando verranno eliminati{" "}
-                <strong>{rapportini.length} rapportini</strong>,{" "}
-                <strong>{esistenti.filter((c) => c.tipo !== "base").length} campate</strong> e{" "}
-                <strong>{linee.length} linee</strong> attuali. Al loro posto resteranno solo le{" "}
-                <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} righe</strong>{" "}
-                riconosciute in questo file.
+                Si aggiungono <strong>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} campate</strong>{" "}
+                da tagliare per il {anno}. Rapportini e altri anni non vengono toccati.
               </p>
             </div>
           )}
@@ -149,6 +192,7 @@ export default function ImportaCampatePage() {
             <li>{anteprima.voci.filter((v) => v.azione !== "duplicato").length} interventi nel file</li>
             <li>{anteprima.duplicati} duplicati nel file (si importa una sola volta)</li>
             <li>{anteprima.doppiaPriorita} campate sia urgenti sia differibili</li>
+            <li>{anteprima.giaTagliateAnniScorsi} già tagliate in anni precedenti (restano da fare quest’anno)</li>
             <li>{anteprima.scartate.length} righe non riconosciute</li>
           </ul>
 
@@ -168,6 +212,7 @@ export default function ImportaCampatePage() {
                   <th>Normalizzata</th>
                   <th>Dist int</th>
                   <th>Priorità</th>
+                  <th>Anni scorsi</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,6 +224,11 @@ export default function ImportaCampatePage() {
                     <td>{v.normalizzata}</td>
                     <td>{v.distInt != null ? formatDistInt(v.distInt) : "—"}</td>
                     <td>{CAMPATA_PRIORITA_LABEL[v.priorita]}</td>
+                    <td>
+                      {v.anniTaglioPrecedenti?.length
+                        ? v.anniTaglioPrecedenti.join(", ")
+                        : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -189,10 +239,10 @@ export default function ImportaCampatePage() {
           ) : null}
 
           <div className="elenco-azioni">
-            {haPiano ? (
+            {haPianoAnno ? (
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-secondary"
                 disabled={busy || (distanze?.aggiornabili ?? 0) === 0}
                 onClick={() => void aggiornaDistanze()}
               >
@@ -201,11 +251,39 @@ export default function ImportaCampatePage() {
             ) : null}
             <button
               type="button"
-              className={haPiano ? "btn" : "btn btn-primary"}
+              className="btn btn-primary"
               disabled={busy || anteprima.voci.length === 0}
-              onClick={() => void conferma()}
+              onClick={() => void importaPiano()}
             >
-              {busy ? "Importazione…" : "Azzera e importa file"}
+              {busy ? "Importazione…" : `Importa piano ${anno}`}
+            </button>
+          </div>
+
+          <div className="panel" style={{ borderColor: "var(--danger, #c0392b)", marginTop: 24 }}>
+            <p>
+              <strong>Azzera tutto e riparti</strong> — solo per cancellare prove o ripartire da zero.
+              Per il report del nuovo anno usa Importa piano. Elimina {rapportini.length} rapportini,{" "}
+              {nCampate} campate e {linee.length} linee.
+            </p>
+            <label>
+              Scrivi AZZERA per confermare
+              <input
+                value={azzeraTesto}
+                onChange={(e) => {
+                  setAzzeraTesto(e.target.value);
+                  setErrore(null);
+                }}
+                placeholder="AZZERA"
+                autoComplete="off"
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={busy || anteprima.voci.length === 0 || azzeraTesto.trim().toUpperCase() !== "AZZERA"}
+              onClick={() => void azzeraEImporta()}
+            >
+              {busy ? "Azzeramento…" : "Azzera tutto e riparti"}
             </button>
           </div>
         </section>

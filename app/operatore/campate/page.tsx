@@ -8,8 +8,8 @@ export default function OperatoreCampatePage() {
       <h2>Elenco campate</h2>
       <p className="muted">
         Quello che il tecnico ha pianificato e quello che è già tagliato. Da qui puoi aprire un
-        rapportino precompilato sulla linea. Tocca una riga per nota, «da attenzionare» e «da non
-        tagliare».
+        rapportino precompilato sulla linea. Tocca una riga per nota, «da attenzionare», «da non
+        tagliare» e «da riprendere».
       </p>
       <CampateElenco ruolo="operatore" />
     </>

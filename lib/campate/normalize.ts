@@ -29,12 +29,16 @@ export function idCampataLavoro(
   normalizzata: string,
   priorita?: string | null,
   tipo?: string | null,
+  anno?: number | null,
 ) {
   const slug = `${codiceLinea}_${normalizzata}_${priorita || "x"}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
-  return tipo === "base" ? `clb_${slug}` : `cl_${slug}`;
+  const prefix = tipo === "base" ? "clb" : "cl";
+  const y = anno ?? 2026;
+  // Le righe 2026 tengono l’id storico, senza anno, così non si spezzano i collegamenti.
+  return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
 /** Spezza il campo libero del rapportino in bianco: 21-22, 22-23 / 54-55. */

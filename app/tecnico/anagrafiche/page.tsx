@@ -9,7 +9,12 @@ import { tensioneLabel, tensioneLinea } from "@/lib/format";
 export default function AnagrafichePage() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const ditte = useLiveQuery(() => db.ditte.toArray(), []) ?? [];
-  const prestazioni = useLiveQuery(() => db.prestazioni.orderBy("codice").toArray(), []) ?? [];
+  const prestazioni = useLiveQuery(
+    () => db.prestazioni.toArray().then((lista) =>
+      [...lista].sort((a, b) => a.codice.localeCompare(b.codice, "it", { numeric: true })),
+    ),
+    [],
+  ) ?? [];
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
 
   const [codice, setCodice] = useState("");

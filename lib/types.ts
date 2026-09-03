@@ -62,10 +62,20 @@ export type CampataLavoro = {
   /** Niente da tagliare: in elenco resta Tagliata (verde), senza rapportino. */
   daNonTagliare?: boolean;
   daNonTagliareBy?: string;
+  /** Promemoria «da riprendere» in un mese (1–12): elenco parallelo, non è uno stato di taglio. */
+  rinvioMese?: number;
+  rinvioAnno?: number;
+  rinvioNote?: string;
+  rinvioBy?: string;
+  /** Promemoria chiuso dal tecnico: la riga resta in elenco, le torte non si muovono. */
+  rinvioFattaIl?: string;
+  rinvioFattaBy?: string;
   /** Distanza interna dal file LIDAR (colonna «Dist int»). */
   distInt?: number;
   rapportinoId?: string;
   importId?: string;
+  /** Anno del piano LIDAR (2026, 2027, …). Assente = 2026. */
+  anno?: number;
   syncStatus: SyncStatus;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +103,7 @@ export type ImportCampate = {
   esistenti: number;
   duplicati: number;
   scartate: number;
+  anno?: number;
 };
 
 export type RapportinoCampata = {
@@ -247,6 +258,41 @@ export function campataETagliata(c: Pick<CampataLavoro, "stato" | "daNonTagliare
 
 export function campataDaNonTagliare(c: Pick<CampataLavoro, "stato" | "daNonTagliare">) {
   return Boolean(c.daNonTagliare) || c.stato === "tralasciata";
+}
+
+export const MESI_LABEL = [
+  "gennaio",
+  "febbraio",
+  "marzo",
+  "aprile",
+  "maggio",
+  "giugno",
+  "luglio",
+  "agosto",
+  "settembre",
+  "ottobre",
+  "novembre",
+  "dicembre",
+] as const;
+
+export function meseLabel(mese: number | undefined) {
+  if (!mese || mese < 1 || mese > 12) return "";
+  return MESI_LABEL[mese - 1];
+}
+
+/** In elenco «Da riprendere» finché c’è un mese, anche dopo la spunta del tecnico. */
+export function campataDaRiprendere(c: Pick<CampataLavoro, "rinvioMese">) {
+  return typeof c.rinvioMese === "number" && c.rinvioMese >= 1 && c.rinvioMese <= 12;
+}
+
+export function rinvioRipreso(c: Pick<CampataLavoro, "rinvioMese" | "rinvioFattaIl">) {
+  return campataDaRiprendere(c) && Boolean(c.rinvioFattaIl);
+}
+
+export function etichettaRinvio(c: Pick<CampataLavoro, "rinvioMese" | "rinvioAnno">) {
+  if (!campataDaRiprendere(c)) return "";
+  const mese = meseLabel(c.rinvioMese);
+  return c.rinvioAnno ? `${mese} ${c.rinvioAnno}` : mese;
 }
 
 /** Tecnico sempre; operatore solo se l’ha segnata lui o se nessuno l’ha ancora segnata. */

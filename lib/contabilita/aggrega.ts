@@ -107,7 +107,7 @@ function vociDaRapportini(
     }
   }
   const voci: VoceContabile[] = [];
-  for (const p of [...prestazioni].sort((a, b) => a.codice.localeCompare(b.codice, "it"))) {
+  for (const p of [...prestazioni].sort((a, b) => a.codice.localeCompare(b.codice, "it", { numeric: true }))) {
     const quantita = qty.get(p.id) ?? 0;
     if (quantita <= 0) continue;
     const prezzo = prezzoChiamata(p.codice);

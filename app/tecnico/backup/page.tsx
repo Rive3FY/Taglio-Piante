@@ -15,6 +15,7 @@ export default function TecnicoBackupPage() {
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const prestazioni = useLiveQuery(() => db.prestazioni.orderBy("codice").toArray(), []) ?? [];
+  const campate = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
   const mesi = useMemo(() => mesiConRapportiniChiusi(rapportini), [rapportini]);
   const [scelti, setScelti] = useState<string[] | "init">("init");
   const [busy, setBusy] = useState(false);
@@ -58,6 +59,7 @@ export default function TecnicoBackupPage() {
     try {
       const esito = await scaricaBackupZip(fogli, prestazioni, {
         finoA: todayIso(),
+        campate,
         onProgress: (fatto, totale, numero) => {
           setProgresso(`Foglio ${fatto} di ${totale} · ${numero}`);
         },
@@ -80,7 +82,9 @@ export default function TecnicoBackupPage() {
         <h2>Zip dei rapportini</h2>
         <p className="muted">
           Copia manuale dei fogli ufficiali già archiviati. Nello zip c’è una cartella per mese e,
-          dentro, solo le linee che in quel mese hanno avuto del lavoro. Le bozze restano fuori.
+          dentro, solo le linee che in quel mese hanno avuto del lavoro. I rapportini con pulizia
+          basi ci sono come gli altri. In più, se nei mesi scelti ci sono sostegni puliti, lo zip
+          contiene anche <strong>Basi.xlsx</strong>. Le bozze restano fuori.
         </p>
 
         {mesi.length === 0 ? (

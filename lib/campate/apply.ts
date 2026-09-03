@@ -15,7 +15,9 @@ import type {
 } from "@/lib/types";
 import {
   campataDaNonTagliare,
+  campataDaRiprendere,
   esitoRapportinoToStato,
+  etichettaRinvio,
   eventoStoricoDaEsito,
   puoModificareSceltaCampata,
   rapportinoEChiuso,
@@ -24,7 +26,8 @@ import { idCampataLavoro, chiaveCampata } from "./normalize";
 import { esitiClassificati, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import type { AnteprimaImport } from "./preview";
-import { resetOperativoPerImport } from "./reset";
+import { eliminaPianoAnno, resetOperativoPerImport } from "./reset";
+import { annoDaDataLavoro, annoDi } from "./anno";
 
 function eEventoAttenzione(evento: string) {
   return evento === "attenzionare" || evento === "attenzionare_off";
@@ -49,9 +52,13 @@ export async function confermaImportCampate(opts: {
   fileName: string;
   anteprima: AnteprimaImport;
   session: Session;
+  anno: number;
+  azzera?: boolean;
 }) {
   const supabase = richiediRete();
-  await resetOperativoPerImport();
+  const anno = opts.anno || new Date().getFullYear();
+  if (opts.azzera) await resetOperativoPerImport();
+  else await eliminaPianoAnno(anno);
 
   const now = new Date().toISOString();
   const importId = uid("imp");
@@ -77,7 +84,7 @@ export async function confermaImportCampate(opts: {
     const linea = lineeMap.get(voce.codiceLinea.toUpperCase());
     if (!linea) continue;
     const campata: CampataLavoro = {
-      id: idCampataLavoro(voce.codiceLinea, voce.normalizzata, voce.priorita),
+      id: idCampataLavoro(voce.codiceLinea, voce.normalizzata, voce.priorita, "campata", anno),
       lineaId: linea.id,
       codiceLinea: voce.codiceLinea,
       nomeLinea: voce.nomeLinea || linea.nome,
@@ -90,6 +97,7 @@ export async function confermaImportCampate(opts: {
       stato: "da_tagliare",
       origine: "prevista",
       importId,
+      anno,
       syncStatus: "synced",
       createdAt: now,
       updatedAt: now,
@@ -115,6 +123,7 @@ export async function confermaImportCampate(opts: {
     esistenti: 0,
     duplicati: opts.anteprima.duplicati,
     scartate: opts.anteprima.scartate.length,
+    anno,
   };
 
   if (linee.length > 0) {
@@ -124,7 +133,7 @@ export async function confermaImportCampate(opts: {
   }
 
   if (daScrivere.length > 0) {
-    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow));
+    await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), { vietatoOmettere: ["anno"] });
     await db.campateLavoro.bulkPut(daScrivere);
   }
 
@@ -144,9 +153,10 @@ export async function confermaImportCampate(opts: {
 /**
  * Attacca Dist int alle campate già importate. Non cancella rapportini né stati.
  */
-export async function aggiornaDistanzeDaFile(opts: { anteprima: AnteprimaImport }) {
+export async function aggiornaDistanzeDaFile(opts: { anteprima: AnteprimaImport; anno: number }) {
   const supabase = richiediRete();
-  const esistenti = await db.campateLavoro.toArray();
+  const anno = opts.anno || new Date().getFullYear();
+  const esistenti = (await db.campateLavoro.toArray()).filter((c) => annoDi(c) === anno);
   const indice = new Map(
     esistenti.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );
@@ -192,12 +202,13 @@ function bersagliPerEsito(
   tutte: CampataLavoro[],
   esito: RapportinoCampata,
   codiceLinea: string,
+  anno: number,
 ): CampataLavoro[] {
   const cercaBase = esito.tipo === "base";
   const nelTipo = tutte.filter((c) => (isBaseLavoro(c) ? cercaBase : !cercaBase));
   // Una base non deve mai chiudere la campata pianificata, anche se l’id è rimasto attaccato.
   if (esito.campataId && !cercaBase) {
-    const byId = nelTipo.filter((c) => c.id === esito.campataId);
+    const byId = nelTipo.filter((c) => c.id === esito.campataId && annoDi(c) === anno);
     if (byId.length > 0) return byId;
   }
   const idDeterministico = idCampataLavoro(
@@ -205,6 +216,7 @@ function bersagliPerEsito(
     esito.normalizzata,
     esito.priorita,
     esito.tipo,
+    anno,
   );
   const byDet = nelTipo.filter((c) => c.id === idDeterministico);
   if (byDet.length > 0) return byDet;
@@ -224,6 +236,7 @@ function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro
     for (const c of tutte) {
       if (c.lineaId !== b.lineaId) continue;
       if (c.normalizzata !== b.normalizzata) continue;
+      if (annoDi(c) !== annoDi(b)) continue;
       if (isBaseLavoro(c)) continue;
       out.set(c.id, c);
     }
@@ -246,11 +259,14 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
   if (esiti.length === 0) return;
 
   const linea = await db.linee.get(item.lineaId);
-  const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
+  const anno = annoDaDataLavoro(item.dataLavoro);
+  const tutte = (await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray()).filter(
+    (c) => annoDi(c) === anno,
+  );
   for (const esito of esiti) {
     if (!esito.campataId || tutte.some((c) => c.id === esito.campataId)) continue;
     const extra = await db.campateLavoro.get(esito.campataId);
-    if (extra) tutte.push(extra);
+    if (extra && annoDi(extra) === anno) tutte.push(extra);
   }
   const now = new Date().toISOString();
   const operatore = session?.nome || item.dipendenteTerna || item.presoDa || "Operatore";
@@ -264,7 +280,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
     const stato = esitoRapportinoToStato(esito.esito);
     const trovati = espandiFratelliPriorita(
       tutte,
-      bersagliPerEsito(tutte, esito, linea?.codice ?? ""),
+      bersagliPerEsito(tutte, esito, linea?.codice ?? "", anno),
     );
     // Una riga «da non tagliare» non si richiude col rapportino, nemmeno se è
     // la gemella di priorità di una campata davvero tagliata.
@@ -274,7 +290,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
     if (bersagli.length === 0) {
       if (!linea) continue;
-      const id = idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita, esito.tipo);
+      const id = idCampataLavoro(linea.codice, esito.normalizzata, esito.priorita, esito.tipo, anno);
       if (tutte.some((c) => c.id === id) || daScrivere.some((c) => c.id === id)) continue;
       const nuova: CampataLavoro = {
         id,
@@ -288,6 +304,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
         priorita: esito.priorita,
         stato,
         origine: "aggiuntiva",
+        anno,
         attenzionare: false,
         daNonTagliare: esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata",
         daNonTagliareBy:
@@ -377,7 +394,7 @@ function copreCampata(
   for (const esito of esitiDaRapportino(item, prestazioni)) {
     const trovati = espandiFratelliPriorita(
       tutte,
-      bersagliPerEsito(tutte, esito, codiceLinea),
+      bersagliPerEsito(tutte, esito, codiceLinea, annoDi(presente)),
     );
     if (trovati.some((c) => c.id === presente.id)) return true;
   }
@@ -397,7 +414,9 @@ async function fogliCheAncoraCoprono(
       .filter((id): id is string => Boolean(id) && id !== esclusoId),
   );
   const linea = await db.linee.get(presente.lineaId);
-  const tutte = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
+  const tutte = (await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray()).filter(
+    (c) => annoDi(c) === annoDi(presente),
+  );
   const codice = linea?.codice ?? presente.codiceLinea;
   const out: Rapportino[] = [];
   for (const r of altri) {
@@ -437,10 +456,14 @@ async function campateCollegateAlRapportino(rapportinoId: string, item?: Rapport
 
   if (item) {
     const linea = await db.linee.get(item.lineaId);
-    const tutte = await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray();
+    const tutte = (await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray()).filter(
+      (c) => annoDi(c) === annoDaDataLavoro(item.dataLavoro),
+    );
     const prestazioni = await db.prestazioni.toArray();
     for (const esito of esitiDaRapportino(item, prestazioni)) {
-      for (const c of bersagliPerEsito(tutte, esito, linea?.codice ?? "")) aggiungi(c);
+      for (const c of bersagliPerEsito(tutte, esito, linea?.codice ?? "", annoDaDataLavoro(item.dataLavoro))) {
+        aggiungi(c);
+      }
     }
   }
 
@@ -556,7 +579,7 @@ export async function unisciCampateDoppie() {
   const gruppi = new Map<string, CampataLavoro[]>();
   for (const c of campate) {
     if (isBaseLavoro(c) || !c.normalizzata) continue;
-    const chiave = `${c.lineaId}|${c.normalizzata}`;
+    const chiave = `${annoDi(c)}|${c.lineaId}|${c.normalizzata}`;
     const list = gruppi.get(chiave) ?? [];
     list.push(c);
     gruppi.set(chiave, list);
@@ -682,10 +705,20 @@ export async function annullaEsitiDaRapportino(rapportinoId: string, item?: Rapp
   await enqueueSync(rapportinoId, "campate");
 }
 
-/** Nota, da attenzionare e da non tagliare si gestiscono dalla tabella campate. */
+export type PatchRinvio = { mese: number; anno?: number; note?: string };
+
+/** Nota, da attenzionare, da non tagliare e «da riprendere» si gestiscono dalla tabella campate. */
 export async function aggiornaDettagliCampata(
   id: string,
-  patch: { attenzionare?: boolean; note?: string; daNonTagliare?: boolean },
+  patch: {
+    attenzionare?: boolean;
+    note?: string;
+    daNonTagliare?: boolean;
+    /** Oggetto = metti o cambia il promemoria; null = toglilo dall’elenco parallelo. */
+    rinvio?: PatchRinvio | null;
+    /** Spunta «Tagliata» dell’elenco parallelo: chiude il promemoria, non muove le torte. */
+    rinvioFatta?: boolean;
+  },
   session?: Session | null,
 ) {
   const presente = await db.campateLavoro.get(id);
@@ -698,6 +731,31 @@ export async function aggiornaDettagliCampata(
   ) {
     throw new Error("«Da non tagliare» è già stato segnato da un altro operatore.");
   }
+  // «Da non tagliare» chiude lo span e riempie le torte: con un promemoria aperto
+  // l'urgenza deve restare viva, quindi le due scelte si escludono.
+  if (patch.daNonTagliare === true && campataDaRiprendere(presente)) {
+    throw new Error(
+      "È in «Da riprendere»: chiudi il promemoria da quell’elenco oppure fai il rapportino.",
+    );
+  }
+  if (patch.rinvio && campataDaNonTagliare(presente)) {
+    throw new Error(
+      "È segnata «da non tagliare»: togli quel segno prima di metterla in «Da riprendere».",
+    );
+  }
+  if (
+    patch.rinvio !== undefined &&
+    campataDaRiprendere(presente) &&
+    !puoModificareSceltaCampata(session, presente.rinvioBy)
+  ) {
+    throw new Error("«Da riprendere» è stato segnato da un altro operatore.");
+  }
+  if (patch.rinvio && (patch.rinvio.mese < 1 || patch.rinvio.mese > 12)) {
+    throw new Error("Scegli il mese in cui tornare sulla campata.");
+  }
+  if (patch.rinvioFatta !== undefined && session?.ruolo !== "tecnico") {
+    throw new Error("Solo il tecnico può segnare come tagliata una campata da riprendere.");
+  }
   if (
     patch.attenzionare !== undefined &&
     presente.attenzionare &&
@@ -709,19 +767,27 @@ export async function aggiornaDettagliCampata(
   const now = new Date().toISOString();
   const nome = session?.nome;
   const bersagli = [presente];
+  const toccaSpan =
+    patch.daNonTagliare !== undefined || patch.rinvio !== undefined || patch.rinvioFatta !== undefined;
 
-  // Stessa campata fisica segnata sia urgente sia differibile: «da non tagliare»
-  // vale sullo span, come il rapportino che le chiude insieme. Nota e
-  // «da attenzionare» restano invece sulla riga toccata.
-  if (patch.daNonTagliare !== undefined && !isBaseLavoro(presente) && presente.normalizzata) {
+  // Stessa campata fisica segnata sia urgente sia differibile: «da non tagliare» e
+  // «da riprendere» valgono sullo span, come il rapportino che le chiude insieme.
+  // Nota e «da attenzionare» restano invece sulla riga toccata.
+  if (toccaSpan && !isBaseLavoro(presente) && presente.normalizzata) {
     const sullaLinea = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
     for (const gemella of sullaLinea) {
       if (gemella.id === presente.id) continue;
+      if (annoDi(gemella) !== annoDi(presente)) continue;
       if (isBaseLavoro(gemella) || gemella.normalizzata !== presente.normalizzata) continue;
-      if (campataDaNonTagliare(gemella) === patch.daNonTagliare) continue;
-      // Già tagliata con un rapportino: quello è un fatto, non si riscrive.
-      if (patch.daNonTagliare && gemella.rapportinoId) continue;
-      if (!patch.daNonTagliare && !puoModificareSceltaCampata(session, gemella.daNonTagliareBy)) continue;
+      if (patch.daNonTagliare !== undefined) {
+        if (campataDaNonTagliare(gemella) === patch.daNonTagliare) continue;
+        // Già tagliata con un rapportino: quello è un fatto, non si riscrive.
+        if (patch.daNonTagliare && gemella.rapportinoId) continue;
+        if (!patch.daNonTagliare && !puoModificareSceltaCampata(session, gemella.daNonTagliareBy)) continue;
+      } else {
+        if (patch.rinvio && campataDaNonTagliare(gemella)) continue;
+        if (!puoModificareSceltaCampata(session, gemella.rinvioBy)) continue;
+      }
       bersagli.push(gemella);
     }
   }
@@ -756,6 +822,59 @@ export async function aggiornaDettagliCampata(
         id: uid("sto"),
         campataId: riga.id,
         evento: patch.daNonTagliare ? "da_non_tagliare" : "da_non_tagliare_off",
+        stato: aggiornata.stato,
+        priorita: riga.priorita,
+        operatore: nome,
+        createdAt: now,
+      });
+    }
+
+    if (patch.rinvio !== undefined) {
+      if (patch.rinvio) {
+        aggiornata.rinvioMese = patch.rinvio.mese;
+        if (patch.rinvio.anno != null) aggiornata.rinvioAnno = patch.rinvio.anno;
+        else delete aggiornata.rinvioAnno;
+        const nota = patch.rinvio.note?.trim();
+        if (nota) aggiornata.rinvioNote = nota;
+        else delete aggiornata.rinvioNote;
+        aggiornata.rinvioBy = session?.userId;
+        // Mese nuovo: il promemoria torna da fare.
+        delete aggiornata.rinvioFattaIl;
+        delete aggiornata.rinvioFattaBy;
+      } else {
+        delete aggiornata.rinvioMese;
+        delete aggiornata.rinvioAnno;
+        delete aggiornata.rinvioNote;
+        delete aggiornata.rinvioBy;
+        delete aggiornata.rinvioFattaIl;
+        delete aggiornata.rinvioFattaBy;
+      }
+      storico.push({
+        id: uid("sto"),
+        campataId: riga.id,
+        evento: patch.rinvio ? "da_riprendere" : "da_riprendere_off",
+        stato: aggiornata.stato,
+        priorita: riga.priorita,
+        operatore: nome,
+        note: patch.rinvio
+          ? [etichettaRinvio(aggiornata), patch.rinvio.note?.trim()].filter(Boolean).join(" · ")
+          : undefined,
+        createdAt: now,
+      });
+    }
+
+    if (patch.rinvioFatta !== undefined) {
+      if (patch.rinvioFatta) {
+        aggiornata.rinvioFattaIl = now;
+        aggiornata.rinvioFattaBy = session?.userId;
+      } else {
+        delete aggiornata.rinvioFattaIl;
+        delete aggiornata.rinvioFattaBy;
+      }
+      storico.push({
+        id: uid("sto"),
+        campataId: riga.id,
+        evento: patch.rinvioFatta ? "ripresa_fatta" : "ripresa_fatta_off",
         stato: aggiornata.stato,
         priorita: riga.priorita,
         operatore: nome,

@@ -215,9 +215,16 @@ export function campataLavoroToRow(c: CampataLavoro) {
     attenzionare_by: c.attenzionareBy ?? null,
     da_non_tagliare: Boolean(c.daNonTagliare),
     da_non_tagliare_by: c.daNonTagliareBy ?? null,
+    rinvio_mese: c.rinvioMese ?? null,
+    rinvio_anno: c.rinvioAnno ?? null,
+    rinvio_note: c.rinvioNote ?? null,
+    rinvio_by: c.rinvioBy ?? null,
+    rinvio_fatta_il: c.rinvioFattaIl ?? null,
+    rinvio_fatta_by: c.rinvioFattaBy ?? null,
     dist_int: c.distInt ?? null,
     rapportino_id: c.rapportinoId ?? null,
     import_id: c.importId ?? null,
+    anno: c.anno ?? 2026,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
   };
@@ -228,6 +235,7 @@ export function rowToCampataLavoro(
   row: Omit<ReturnType<typeof campataLavoroToRow>, "stato"> & {
     stato: string;
     tensione_kv?: number | null;
+    anno?: number | null;
   },
 ): CampataLavoro {
   return {
@@ -249,9 +257,16 @@ export function rowToCampataLavoro(
     attenzionareBy: row.attenzionare_by ?? undefined,
     daNonTagliare: Boolean(row.da_non_tagliare) || row.stato === "tralasciata",
     daNonTagliareBy: row.da_non_tagliare_by ?? undefined,
+    rinvioMese: row.rinvio_mese ?? undefined,
+    rinvioAnno: row.rinvio_anno ?? undefined,
+    rinvioNote: row.rinvio_note ?? undefined,
+    rinvioBy: row.rinvio_by ?? undefined,
+    rinvioFattaIl: row.rinvio_fatta_il ?? undefined,
+    rinvioFattaBy: row.rinvio_fatta_by ?? undefined,
     distInt: row.dist_int ?? undefined,
     rapportinoId: row.rapportino_id ?? undefined,
     importId: row.import_id ?? undefined,
+    anno: row.anno ?? 2026,
     syncStatus: "synced",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -297,10 +312,13 @@ export function importCampateToRow(i: ImportCampate) {
     esistenti: i.esistenti,
     duplicati: i.duplicati,
     scartate: i.scartate,
+    anno: i.anno ?? 2026,
   };
 }
 
-export function rowToImportCampate(row: ReturnType<typeof importCampateToRow>): ImportCampate {
+export function rowToImportCampate(
+  row: ReturnType<typeof importCampateToRow> & { anno?: number | null },
+): ImportCampate {
   return {
     id: row.id,
     fileName: row.file_name,
@@ -311,6 +329,7 @@ export function rowToImportCampate(row: ReturnType<typeof importCampateToRow>): 
     esistenti: row.esistenti,
     duplicati: row.duplicati,
     scartate: row.scartate,
+    anno: row.anno ?? 2026,
   };
 }
 

@@ -23,6 +23,7 @@ import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
 import { CalendarioMese } from "@/components/CalendarioMese";
 import { LineaPicker } from "@/components/LineaPicker";
+import { annoPianoPiuRecente, anniPiani, campateDellAnno } from "@/lib/campate/anno";
 
 const LINEE_INIZIALI = 6;
 
@@ -97,6 +98,13 @@ export default function ContabilitaPage() {
   const [cercaLinea, setCercaLinea] = useState("");
   const [lineaCercataId, setLineaCercataId] = useState("");
   const [mostraAltreLinee, setMostraAltreLinee] = useState(false);
+  const anniCampate = useMemo(() => anniPiani(campate), [campate]);
+  const [annoPiano, setAnnoPiano] = useState<number | null>(null);
+  const annoPianoEff =
+    annoPiano != null && anniCampate.includes(annoPiano)
+      ? annoPiano
+      : (anniCampate[0] ?? annoPianoPiuRecente(campate));
+  const campateAnno = useMemo(() => campateDellAnno(campate, annoPianoEff), [campate, annoPianoEff]);
 
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
   const aggregato = useMemo(
@@ -104,11 +112,11 @@ export default function ContabilitaPage() {
     [rapportini, prestazioni, linee, meseEffettivo],
   );
   const restano = giorniAllaChiusura(meseEffettivo, oggi);
-  const urgente = useMemo(() => avanzamentoPriorita(campate, "urgente"), [campate]);
-  const differibile = useMemo(() => avanzamentoPriorita(campate, "differibile"), [campate]);
+  const urgente = useMemo(() => avanzamentoPriorita(campateAnno, "urgente"), [campateAnno]);
+  const differibile = useMemo(() => avanzamentoPriorita(campateAnno, "differibile"), [campateAnno]);
   const basiMese = useMemo(
-    () => conteggioBasiTagliate(campate, meseEffettivo),
-    [campate, meseEffettivo],
+    () => conteggioBasiTagliate(campateAnno, meseEffettivo),
+    [campateAnno, meseEffettivo],
   );
   const conteggiGiorno = useMemo(() => {
     const m = new Map<string, number>();
@@ -218,7 +226,22 @@ export default function ContabilitaPage() {
         </div>
       </div>
 
-      <h2>Avanzamento campate</h2>
+      <h2>Avanzamento campate · piano {annoPianoEff}</h2>
+      <p className="muted">Le torte contano solo le campate urgenti e differibili, non le basi.</p>
+      {anniCampate.length > 1 ? (
+        <div className="chip-row" style={{ marginBottom: 12 }}>
+          {anniCampate.map((a) => (
+            <button
+              key={a}
+              type="button"
+              className={`chip ${annoPianoEff === a ? "on" : ""}`}
+              onClick={() => setAnnoPiano(a)}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="contab-torte">
         <TortaAvanzamento
           key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
@@ -319,14 +342,14 @@ export default function ContabilitaPage() {
                         <TortaAvanzamento
                           key={`${l.lineaId}-u`}
                           dati={avanzamentoPriorita(
-                            campate.filter((c) => c.lineaId === l.lineaId),
+                            campateAnno.filter((c) => c.lineaId === l.lineaId),
                             "urgente",
                           )}
                         />
                         <TortaAvanzamento
                           key={`${l.lineaId}-d`}
                           dati={avanzamentoPriorita(
-                            campate.filter((c) => c.lineaId === l.lineaId),
+                            campateAnno.filter((c) => c.lineaId === l.lineaId),
                             "differibile",
                           )}
                         />

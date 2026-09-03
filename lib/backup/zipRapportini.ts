@@ -5,7 +5,9 @@ import { fillOfficialScheda } from "@/lib/fillScheda";
 import { scaricaBlob } from "@/lib/download";
 import { formatDate, todayIso } from "@/lib/format";
 import { etichettaMese, rapportiniDelMese } from "@/lib/contabilita/aggrega";
-import type { Linea, Prestazione, Rapportino } from "@/lib/types";
+import { bytesVistaCampate } from "@/lib/campate/export";
+import { isBaseLavoro } from "@/lib/campate/basi";
+import type { CampataLavoro, Linea, Prestazione, Rapportino } from "@/lib/types";
 
 export type FoglioBackup = {
   item: Rapportino;
@@ -80,6 +82,7 @@ export async function scaricaBackupZip(
   opts?: {
     finoA?: string;
     onProgress?: (fatto: number, totale: number, numero: string) => void;
+    campate?: CampataLavoro[];
   },
 ) {
   if (fogli.length === 0) throw new Error("Nessun rapportino chiuso nei mesi scelti.");
@@ -115,13 +118,23 @@ export async function scaricaBackupZip(
 
   const finoA = opts?.finoA ?? todayIso();
   const mesi = [...new Set(fogli.map((f) => f.mese))].sort();
+  const mesiSet = new Set(mesi);
+  const basi = (opts?.campate ?? []).filter(
+    (c) => isBaseLavoro(c) && c.stato === "tagliata" && c.dataTaglio && mesiSet.has(c.dataTaglio.slice(0, 7)),
+  );
+  if (basi.length > 0) {
+    zip.file("Basi.xlsx", await bytesVistaCampate(basi));
+  }
   const indice = [
     "Backup rapportini taglio piante",
     `Estratto il ${formatDate(finoA)}`,
     `Mesi: ${mesi.map(etichettaMese).join(", ")}`,
     `Fogli nello zip: ${ok} di ${fogli.length}`,
+    basi.length > 0
+      ? `Basi pulite nei mesi scelti: ${basi.length} in Basi.xlsx`
+      : "Nessuna base pulita nei mesi scelti.",
     "Solo rapportini archiviati. Le bozze restano fuori.",
-    "Cartelle: mese / linea / PDF del foglio ufficiale.",
+    "Cartelle: mese / linea / PDF del foglio ufficiale. Le basi sono anche in Basi.xlsx.",
   ].join("\n");
   zip.file("backup.txt", indice);
 

@@ -24,6 +24,7 @@ import {
   messaggioCampateDaNonTagliare,
   messaggioCampateGiaTagliate,
 } from "@/lib/campate/guard";
+import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 
 const EMPTY_LINEE: Linea[] = [];
@@ -57,14 +58,14 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const ditte = useLiveQuery(() => db.ditte.toArray(), []) ?? EMPTY_DITTE;
   const prestazioniRaw = useLiveQuery(() => db.prestazioni.toArray(), []) ?? EMPTY_PREST;
   const prestazioni = useMemo(
-    () => [...prestazioniRaw].sort((a, b) => a.codice.localeCompare(b.codice, "it")),
+    () => [...prestazioniRaw].sort((a, b) => a.codice.localeCompare(b.codice, "it", { numeric: true })),
     [prestazioniRaw],
   );
   const operatoriRecord = useLiveQuery(() => db.operatori.orderBy("nome").toArray(), []) ?? EMPTY_OPERATORI;
   const operatori = useMemo(() => operatoriRecord.map((o) => o.nome), [operatoriRecord]);
 
   const [lineaId, setLineaId] = useState(existing?.lineaId ?? precompilatoLineaId ?? "");
-  const campateLinea =
+  const campateLineaRaw =
     useLiveQuery(
       () => (lineaId ? db.campateLavoro.where("lineaId").equals(lineaId).toArray() : Promise.resolve([] as CampataLavoro[])),
       [lineaId],
@@ -76,6 +77,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [campata, setCampata] = useState(existing?.campata ?? "");
   const [esiti, setEsiti] = useState<RapportinoCampata[]>(existing?.esitiCampate ?? []);
   const [dataLavoro, setDataLavoro] = useState(existing?.dataLavoro ?? todayIso());
+  const campateLinea = useMemo(
+    () => campateLineaRaw.filter((c) => annoDi(c) === annoDaDataLavoro(existing?.dataLavoro ?? dataLavoro)),
+    [campateLineaRaw, existing?.dataLavoro, dataLavoro],
+  );
   const [ditta, setDitta] = useState(existing?.ditta ?? "");
   const [rappresentanteDitta, setRappresentanteDitta] = useState(
     existing?.rappresentanteDitta || squadra?.rappresentanteDitta || "",
@@ -287,7 +292,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         }));
       const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
       const esitiSalvati = esitiClassificati(testoSorgente, { righe }, prestazioni, esiti);
-      const campateSulDb = await db.campateLavoro.where("lineaId").equals(effectiveLineaId).toArray();
+      const campateSulDb = (await db.campateLavoro.where("lineaId").equals(effectiveLineaId).toArray()).filter(
+        (c) => annoDi(c) === annoDaDataLavoro(dataLavoro),
+      );
       const bloccate = qtyHaBase
         ? []
         : esitiCheToccanoDaNonTagliare(

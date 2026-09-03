@@ -59,3 +59,34 @@ export async function resetOperativoPerImport() {
     localStorage.removeItem(LAST_PULL_KEY);
   }
 }
+
+/** Toglie solo il piano di un anno: rapportini e gli altri anni restano. */
+export async function eliminaPianoAnno(anno: number) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase non è configurato su questo dispositivo.");
+
+  for (;;) {
+    const { data, error } = await supabase.from("campate_lavoro").select("id").eq("anno", anno).limit(DELETE_PAGE);
+    if (error) throw new Error(messaggioErroreSupabase(error.message));
+    const ids = (data ?? []).map((row) => String((row as { id: string }).id));
+    if (ids.length === 0) break;
+    const { error: stoErr } = await supabase.from("campate_storico").delete().in("campata_id", ids);
+    if (stoErr) throw new Error(messaggioErroreSupabase(stoErr.message));
+    const { error: delErr } = await supabase.from("campate_lavoro").delete().in("id", ids);
+    if (delErr) throw new Error(messaggioErroreSupabase(delErr.message));
+    if (ids.length < DELETE_PAGE) break;
+  }
+
+  const { error: impErr } = await supabase.from("import_campate").delete().eq("anno", anno);
+  if (impErr) throw new Error(messaggioErroreSupabase(impErr.message));
+
+  const locali = (await db.campateLavoro.toArray()).filter((c) => (c.anno ?? 2026) === anno);
+  const idsLocali = locali.map((c) => c.id);
+  if (idsLocali.length > 0) {
+    const log = (await db.campateStorico.toArray()).filter((s) => idsLocali.includes(s.campataId));
+    if (log.length > 0) await db.campateStorico.bulkDelete(log.map((s) => s.id));
+    await db.campateLavoro.bulkDelete(idsLocali);
+  }
+  const imports = (await db.importCampate.toArray()).filter((i) => (i.anno ?? 2026) === anno);
+  if (imports.length > 0) await db.importCampate.bulkDelete(imports.map((i) => i.id));
+}

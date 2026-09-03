@@ -1,4 +1,5 @@
 import { chiaveCampata } from "./normalize";
+import { annoDi, anniTaglioPrecedenti, etichettaAnniTaglio } from "./anno";
 import type { CampataLavoro, CampataPriorita } from "@/lib/types";
 import type { RigaImportBruta, RigaImportScartata } from "./parse";
 
@@ -14,6 +15,7 @@ export type VoceAnteprimaImport = {
   distInt?: number;
   azione: AzioneImport;
   nota?: string;
+  anniTaglioPrecedenti?: number[];
 };
 
 export type AnteprimaImport = {
@@ -24,6 +26,7 @@ export type AnteprimaImport = {
   duplicati: number;
   doppiaPriorita: number;
   giaLavorate: number;
+  giaTagliateAnniScorsi: number;
   lineeNuove: string[];
 };
 
@@ -32,6 +35,7 @@ export function costruisciAnteprima(
   scartate: RigaImportScartata[],
   esistenti: CampataLavoro[],
   codiciLineaNoti: Set<string>,
+  annoPiano: number,
 ): AnteprimaImport {
   const listaRighe = Array.isArray(righe) ? righe : [];
   const listaEsistenti = Array.isArray(esistenti) ? esistenti : [];
@@ -81,26 +85,31 @@ export function costruisciAnteprima(
     voce.nota = "Stessa campata con l’altra priorità: restano due interventi distinti.";
   }
 
+  const delloStessoAnno = listaEsistenti.filter((c) => c.tipo !== "base" && annoDi(c) === annoPiano);
   const indiceEsistenti = new Map(
-    listaEsistenti
-      .filter((c) => c.tipo !== "base")
-      .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
+    delloStessoAnno.map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );
   const lineeNuove = new Set<string>();
 
   for (const voce of perChiave.values()) {
     if (!codiciLineaNoti.has(voce.codiceLinea)) lineeNuove.add(voce.codiceLinea);
     const presente = indiceEsistenti.get(voce.chiave);
-    if (!presente) continue;
-    if (presente.stato !== "da_tagliare") {
-      voce.azione = "gia_lavorata";
-      voce.nota = `Già ${presente.stato.replace("_", " ")}: stato e storico restano.`;
-    } else if (voce.distInt != null && presente.distInt !== voce.distInt) {
-      voce.azione = "invariata";
-      voce.nota = presente.distInt == null ? "Aggiorna la distanza interna dal file." : "Aggiorna distanza e dati dal file.";
-    } else {
-      voce.azione = "invariata";
+    if (presente) {
+      if (presente.stato !== "da_tagliare") {
+        voce.azione = "gia_lavorata";
+        voce.nota = `Già ${presente.stato.replace("_", " ")} in questo piano: stato e storico restano se aggiorni solo le distanze.`;
+      } else if (voce.distInt != null && presente.distInt !== voce.distInt) {
+        voce.azione = "invariata";
+        voce.nota = presente.distInt == null ? "Aggiorna la distanza interna dal file." : "Aggiorna distanza e dati dal file.";
+      } else {
+        voce.azione = "invariata";
+      }
     }
+    const anni = anniTaglioPrecedenti(listaEsistenti, voce.codiceLinea, voce.normalizzata, annoPiano);
+    if (anni.length === 0) continue;
+    voce.anniTaglioPrecedenti = anni;
+    const badge = `${etichettaAnniTaglio(anni)}: resta da tagliare in questo piano.`;
+    voce.nota = voce.nota ? `${voce.nota} ${badge}` : badge;
   }
 
   const voci = [...perChiave.values()].sort(
@@ -118,15 +127,20 @@ export function costruisciAnteprima(
     duplicati,
     doppiaPriorita: coppie.size,
     giaLavorate: voci.filter((v) => v.azione === "gia_lavorata").length,
+    giaTagliateAnniScorsi: voci.filter((v) => (v.anniTaglioPrecedenti?.length ?? 0) > 0).length,
     lineeNuove: [...lineeNuove].sort(),
   };
 }
 
 /** Campate già in elenco a cui il file può attaccare Dist int, senza reimportare. */
-export function conteggioDistanzeDaFile(voci: VoceAnteprimaImport[], esistenti: CampataLavoro[]) {
+export function conteggioDistanzeDaFile(
+  voci: VoceAnteprimaImport[],
+  esistenti: CampataLavoro[],
+  annoPiano: number,
+) {
   const indice = new Map(
     esistenti
-      .filter((c) => c.tipo !== "base")
+      .filter((c) => c.tipo !== "base" && annoDi(c) === annoPiano)
       .map((c) => [chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita), c]),
   );
   let nelFile = 0;

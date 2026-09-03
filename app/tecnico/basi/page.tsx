@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { isBaseLavoro } from "@/lib/campate/basi";
+import { scaricaVistaCampate } from "@/lib/campate/export";
 import type { CampataLavoro } from "@/lib/types";
 
 type Gruppo = {
@@ -42,7 +43,8 @@ export default function TecnicoBasiPage() {
       .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
   }, [campate]);
 
-  const totale = gruppi.reduce((s, g) => s + g.basi.length, 0);
+  const elenco = useMemo(() => gruppi.flatMap((g) => g.basi), [gruppi]);
+  const totale = elenco.length;
 
   return (
     <>
@@ -53,7 +55,17 @@ export default function TecnicoBasiPage() {
             Sostegni puliti quando i numeri nel box coincidono con 5.1–5.4. Tocca una linea per vedere i numeri.
           </p>
         </div>
-        <strong>{totale}</strong>
+        <div className="elenco-azioni">
+          <strong>{totale}</strong>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={elenco.length === 0}
+            onClick={() => void scaricaVistaCampate(elenco, { prefisso: "basi" })}
+          >
+            Scarica elenco
+          </button>
+        </div>
       </div>
 
       {gruppi.length === 0 ? (

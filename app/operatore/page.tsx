@@ -23,6 +23,11 @@ export default function OperatoreHome() {
           <h2>Campate</h2>
           <p className="muted">Pianificate e tagliate. Da qui parti col rapportino precompilato.</p>
         </Link>
+        <Link href="/operatore/rinvii" className="home-card">
+          <div className="kicker">Promemoria</div>
+          <h2>Da riprendere</h2>
+          <p className="muted">Campate su cui tornare in un mese preciso, con la nota del perché.</p>
+        </Link>
 
         {SEZIONI.map((sezione) => {
           const items = rapportiniDellaSezione(rapportini, sezione, session);

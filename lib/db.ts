@@ -230,7 +230,91 @@ class RapportiniDB extends Dexie {
         });
       }
     });
+    this.version(14).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro: "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt, anno",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    }).upgrade(async (tx) => {
+      const campate = await tx.table("campateLavoro").toArray();
+      for (const row of campate) {
+        if (row.anno != null) continue;
+        await tx.table("campateLavoro").update(row.id, { anno: 2026 });
+      }
+      const imports = await tx.table("importCampate").toArray();
+      for (const row of imports) {
+        if (row.anno != null) continue;
+        const y = Number(String(row.createdAt ?? "").slice(0, 4));
+        await tx.table("importCampate").update(row.id, {
+          anno: Number.isFinite(y) && y >= 2000 ? y : 2026,
+        });
+      }
+    });
+    this.version(15).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro: "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt, anno",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    }).upgrade(async (tx) => {
+      await allineaPrestazioniTabella(tx.table("prestazioni"));
+    });
+    this.version(16).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro",
+      campateLavoro:
+        "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rinvioMese, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt, anno",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    });
   }
+}
+
+async function allineaPrestazioniTabella(table: {
+  toArray: () => Promise<Prestazione[]>;
+  put: (row: Prestazione) => Promise<unknown>;
+}) {
+  const esistenti = await table.toArray();
+  const byCodice = new Map(esistenti.map((p) => [p.codice, p]));
+  for (const seed of SEED_PRESTAZIONI) {
+    const presente = byCodice.get(seed.codice);
+    if (presente) {
+      await table.put({
+        ...presente,
+        codice: seed.codice,
+        descrizione: seed.descrizione,
+        unitaMisura: seed.unitaMisura,
+      });
+    } else {
+      await table.put(seed);
+    }
+  }
+}
+
+export async function allineaPrestazioniLocali() {
+  await allineaPrestazioniTabella(db.prestazioni);
 }
 
 export const db = new RapportiniDB();
@@ -266,6 +350,13 @@ export function ensureSeeded() {
       for (const ditta of SEED_DITTE) {
         const exists = await db.ditte.get(ditta.id);
         if (!exists) await db.ditte.add(ditta);
+      }
+      await allineaPrestazioniLocali();
+      try {
+        const { upsertCatalogoPrestazioni, supabaseAutenticato } = await import("./supabase/remote");
+        if (await supabaseAutenticato()) await upsertCatalogoPrestazioni();
+      } catch {
+        // catalogo remoto: si ritenta al prossimo sync
       }
     })();
   }
