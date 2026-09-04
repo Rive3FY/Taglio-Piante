@@ -56,9 +56,13 @@ export type CampataLavoro = {
   dataTaglio?: string;
   operatore?: string;
   note?: string;
+  /** Promemoria «da attenzionare»: elenco parallelo come il rinvio, ma senza mese. */
   attenzionare?: boolean;
   /** Chi ha messo «da attenzionare» (userId): gli altri operatori non la tolgono. */
   attenzionareBy?: string;
+  /** Promemoria chiuso dal tecnico: la riga resta in elenco, le torte non si muovono. */
+  attenzionareFattaIl?: string;
+  attenzionareFattaBy?: string;
   /** Niente da tagliare: in elenco resta Tagliata (verde), senza rapportino. */
   daNonTagliare?: boolean;
   daNonTagliareBy?: string;
@@ -297,6 +301,34 @@ export function etichettaRinvio(c: Pick<CampataLavoro, "rinvioMese" | "rinvioAnn
   if (!campataDaRiprendere(c)) return "";
   const mese = meseLabel(c.rinvioMese);
   return c.rinvioAnno ? `${mese} ${c.rinvioAnno}` : mese;
+}
+
+export function campataDaAttenzionare(c: Pick<CampataLavoro, "attenzionare">) {
+  return Boolean(c.attenzionare);
+}
+
+export function attenzioneChiusa(c: Pick<CampataLavoro, "attenzionare" | "attenzionareFattaIl">) {
+  return campataDaAttenzionare(c) && Boolean(c.attenzionareFattaIl);
+}
+
+type CampiPromemoria = Pick<
+  CampataLavoro,
+  "rinvioMese" | "rinvioFattaIl" | "attenzionare" | "attenzionareFattaIl"
+>;
+
+/** Elenco parallelo: mese di ripresa o segnalazione da attenzionare, mai uno stato di taglio. */
+export function campataInElencoParallelo(c: Pick<CampataLavoro, "rinvioMese" | "attenzionare">) {
+  return campataDaRiprendere(c) || campataDaAttenzionare(c);
+}
+
+/** Aperto finché almeno uno dei due promemoria della riga è ancora da fare. */
+export function promemoriaAperto(c: CampiPromemoria) {
+  if (campataDaRiprendere(c) && !c.rinvioFattaIl) return true;
+  return campataDaAttenzionare(c) && !c.attenzionareFattaIl;
+}
+
+export function promemoriaChiuso(c: CampiPromemoria) {
+  return campataInElencoParallelo(c) && !promemoriaAperto(c);
 }
 
 /** Tecnico sempre; operatore solo se l’ha segnata lui o se nessuno l’ha ancora segnata. */

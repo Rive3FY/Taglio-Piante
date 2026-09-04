@@ -13,7 +13,7 @@ export const TECNICO_GRUPPI: TecnicoGruppo[] = [
     links: [
       { href: "/tecnico", label: "Linee" },
       { href: "/tecnico/campate", label: "Campate" },
-      { href: "/tecnico/rinvii", label: "Da riprendere" },
+      { href: "/tecnico/rinvii", label: "Promemoria" },
       { href: "/tecnico/basi", label: "Basi" },
     ],
   },

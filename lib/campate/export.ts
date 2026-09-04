@@ -45,11 +45,12 @@ const COLONNE: Colonna[] = [
   { w: 36, titolo: "Note" },
 ];
 
-/** Colonne in più solo nel file dell’elenco parallelo «Da riprendere». */
-const COLONNE_RINVIO: Colonna[] = [
+/** Colonne in più solo nel file dell’elenco parallelo «Da riprendere e attenzionare». */
+const COLONNE_PARALLELO: Colonna[] = [
   { w: 18, titolo: "Da riprendere" },
   { w: 14, titolo: "Ripresa fatta" },
   { w: 36, titolo: "Note ripresa" },
+  { w: 18, titolo: "Attenzione chiusa" },
 ];
 
 function letteraColonna(indice: number) {
@@ -181,11 +182,12 @@ export function nomeFileVistaCampate(filtri: {
   return `${parti.join("_")}.xlsx`;
 }
 
-function rigaRinvio(c: CampataLavoro) {
+function rigaParallelo(c: CampataLavoro) {
   return [
     etichettaRinvio(c),
     c.rinvioFattaIl ? formatDate(c.rinvioFattaIl.slice(0, 10)) : "",
     c.rinvioNote ?? "",
+    c.attenzionareFattaIl ? formatDate(c.attenzionareFattaIl.slice(0, 10)) : "",
   ];
 }
 
@@ -222,10 +224,10 @@ export function ordinaVistaExport(campate: CampataLavoro[]) {
   );
 }
 
-export async function bytesVistaCampate(campate: CampataLavoro[], opts?: { rinvio?: boolean }) {
-  const colonne = opts?.rinvio ? [...COLONNE, ...COLONNE_RINVIO] : COLONNE;
+export async function bytesVistaCampate(campate: CampataLavoro[], opts?: { parallelo?: boolean }) {
+  const colonne = opts?.parallelo ? [...COLONNE, ...COLONNE_PARALLELO] : COLONNE;
   const righe = ordinaVistaExport(campate).map((c) =>
-    opts?.rinvio ? [...rigaVista(c), ...rigaRinvio(c)] : rigaVista(c),
+    opts?.parallelo ? [...rigaVista(c), ...rigaParallelo(c)] : rigaVista(c),
   );
   return creaXlsx([colonne.map((c) => c.titolo), ...righe], colonne);
 }
@@ -239,10 +241,10 @@ export async function scaricaVistaCampate(
     origine?: CampataOrigine | "tutte";
     anno?: number;
     prefisso?: string;
-    rinvio?: boolean;
+    parallelo?: boolean;
   },
 ) {
-  const bytes = await bytesVistaCampate(campate, { rinvio: filtri.rinvio });
+  const bytes = await bytesVistaCampate(campate, { parallelo: filtri.parallelo });
   scaricaBlob(
     bytes,
     nomeFileVistaCampate(filtri),

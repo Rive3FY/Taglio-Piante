@@ -9,7 +9,13 @@ import { aggiornaDettagliCampata, type PatchRinvio } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
 import { chiaveCampata } from "@/lib/campate/normalize";
-import { readElencoVista, writeElencoVista, type OrdineElenco, type RipresaFiltro } from "@/lib/campate/elencoVista";
+import {
+  readElencoVista,
+  writeElencoVista,
+  type GenerePromemoria,
+  type OrdineElenco,
+  type RipresaFiltro,
+} from "@/lib/campate/elencoVista";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
@@ -21,10 +27,15 @@ import {
   CAMPATA_PRIORITA_LABEL,
   CAMPATA_STATO_LABEL,
   MESI_LABEL,
+  attenzioneChiusa,
+  campataDaAttenzionare,
   campataDaNonTagliare,
   campataDaRiprendere,
   campataETagliata,
+  campataInElencoParallelo,
   etichettaRinvio,
+  promemoriaAperto,
+  promemoriaChiuso,
   puoModificareSceltaCampata,
   rinvioRipreso,
   type CampataLavoro,
@@ -40,18 +51,18 @@ type StatoFiltro = CampataStatoLavoro | "tutte";
 type ModoElenco = "piano" | "rinvii";
 
 /** Una riga per span+priorità: se lo stesso promemoria è su due anni, resta quello aperto più recente. */
-function rinviiSenzaDoppioni(lista: CampataLavoro[]) {
+function promemoriaSenzaDoppioni(lista: CampataLavoro[]) {
   const scelte = new Map<string, CampataLavoro>();
   for (const c of lista) {
-    if (!campataDaRiprendere(c)) continue;
+    if (!campataInElencoParallelo(c)) continue;
     const chiave = chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita);
     const gia = scelte.get(chiave);
     if (!gia) {
       scelte.set(chiave, c);
       continue;
     }
-    const aperto = !rinvioRipreso(c);
-    const giaAperto = !rinvioRipreso(gia);
+    const aperto = promemoriaAperto(c);
+    const giaAperto = promemoriaAperto(gia);
     if (aperto !== giaAperto) {
       if (aperto) scelte.set(chiave, c);
       continue;
@@ -60,6 +71,12 @@ function rinviiSenzaDoppioni(lista: CampataLavoro[]) {
   }
   return [...scelte.values()];
 }
+
+const GENERE_LABEL: Record<GenerePromemoria, string> = {
+  tutti: "Da riprendere e attenzionare",
+  rinvio: "Da riprendere",
+  attenzione: "Da attenzionare",
+};
 
 const ORDINE_LABEL: Record<OrdineElenco, string> = {
   linea: "Linea",
@@ -92,6 +109,7 @@ export type PatchCampata = {
   daNonTagliare?: boolean;
   rinvio?: PatchRinvio | null;
   rinvioFatta?: boolean;
+  attenzionareFatta?: boolean;
 };
 
 function campiRicerca(c: CampataLavoro) {
@@ -162,12 +180,13 @@ export function CampateElenco({
   const [visibili, setVisibili] = useState(vistaSalvata?.visibili ?? 40);
   const [meseRinvio, setMeseRinvio] = useState<number | "tutti">(vistaSalvata?.meseRinvio ?? "tutti");
   const [ripresa, setRipresa] = useState<RipresaFiltro>(vistaSalvata?.ripresa ?? "tutte");
+  const [genere, setGenere] = useState<GenerePromemoria>(vistaSalvata?.genere ?? "tutti");
   const [ordine, setOrdine] = useState<OrdineElenco>(vistaSalvata?.ordine ?? "linea");
   const [suggAperti, setSuggAperti] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
-  // In «Da riprendere» l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
+  // Nell'elenco parallelo l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
   const universo = useMemo(
-    () => (soloRinvii ? rinviiSenzaDoppioni(campate) : campate),
+    () => (soloRinvii ? promemoriaSenzaDoppioni(campate) : campate),
     [campate, soloRinvii],
   );
   const anni = useMemo(() => anniPiani(universo), [universo]);
@@ -219,13 +238,15 @@ export function CampateElenco({
       .filter((c) => passaFiltriVista(c, { termini, kv, stato, linea, operatore, periodo }))
       .filter((c) => {
         if (priorita !== "tutte" && c.priorita !== priorita) return false;
-        if (soloAttenzione && !c.attenzionare) return false;
+        if (!soloRinvii && soloAttenzione && !c.attenzionare) return false;
         if (soloDaNonTagliare && !campataDaNonTagliare(c)) return false;
         if (origine !== "tutte" && c.origine !== origine) return false;
         if (soloRinvii) {
+          if (genere === "rinvio" && !campataDaRiprendere(c)) return false;
+          if (genere === "attenzione" && !campataDaAttenzionare(c)) return false;
           if (meseRinvio !== "tutti" && c.rinvioMese !== meseRinvio) return false;
-          if (ripresa === "da_fare" && rinvioRipreso(c)) return false;
-          if (ripresa === "fatte" && !rinvioRipreso(c)) return false;
+          if (ripresa === "da_fare" && !promemoriaAperto(c)) return false;
+          if (ripresa === "fatte" && promemoriaAperto(c)) return false;
         }
         return true;
       });
@@ -242,6 +263,7 @@ export function CampateElenco({
     soloAttenzione,
     soloDaNonTagliare,
     soloRinvii,
+    genere,
     meseRinvio,
     ripresa,
     ordine,
@@ -286,9 +308,11 @@ export function CampateElenco({
       tagliate: set.filter((c) => campataETagliata(c)).length,
       daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
       aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
-      attenzione: set.filter((c) => c.attenzionare).length,
+      attenzione: set.filter((c) => campataDaAttenzionare(c)).length,
       daRiprendere: set.filter((c) => campataDaRiprendere(c)).length,
-      riprese: set.filter((c) => rinvioRipreso(c)).length,
+      inElenco: set.filter((c) => campataInElencoParallelo(c)).length,
+      daFare: set.filter((c) => promemoriaAperto(c)).length,
+      fatte: set.filter((c) => promemoriaChiuso(c)).length,
     };
   }, [delPiano]);
 
@@ -316,6 +340,7 @@ export function CampateElenco({
       periodo,
       anno: annoEffettivo,
       visibili,
+      genere,
       meseRinvio,
       ripresa,
       ordine,
@@ -335,6 +360,7 @@ export function CampateElenco({
     periodo,
     annoEffettivo,
     visibili,
+    genere,
     meseRinvio,
     ripresa,
     ordine,
@@ -367,11 +393,13 @@ export function CampateElenco({
         {soloRinvii ? (
           <>
             <span className="muted">
-              {conteggi.daRiprendere} da riprendere
+              {conteggi.inElenco} in elenco
               {annoEffettivo == null ? " · tutti gli anni" : ` · piano ${annoEffettivo}`}
             </span>
-            <span className="badge">{conteggi.daRiprendere - conteggi.riprese} da fare</span>
-            <span className="badge badge-tagliata">{conteggi.riprese} riprese</span>
+            <span className="badge badge-rinvio">{conteggi.daRiprendere} da riprendere</span>
+            <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
+            <span className="badge">{conteggi.daFare} da fare</span>
+            <span className="badge badge-tagliata">{conteggi.fatte} fatte</span>
             <span className="badge badge-urgente">
               {delPiano.filter((c) => c.priorita === "urgente" && !campataETagliata(c)).length} ancora urgenti
             </span>
@@ -554,25 +582,27 @@ export function CampateElenco({
           ))}
         </FiltroGruppo>
 
-        <FiltroGruppo
-          titolo={soloAttenzione ? "Da attenzionare" : "Attenzione"}
-          attivo={soloAttenzione}
-        >
-          <button
-            type="button"
-            className={`chip ${!soloAttenzione ? "on" : ""}`}
-            onClick={() => setSoloAttenzione(false)}
+        {!soloRinvii ? (
+          <FiltroGruppo
+            titolo={soloAttenzione ? "Da attenzionare" : "Attenzione"}
+            attivo={soloAttenzione}
           >
-            Tutte
-          </button>
-          <button
-            type="button"
-            className={`chip ${soloAttenzione ? "on" : ""}`}
-            onClick={() => setSoloAttenzione(true)}
-          >
-            Da attenzionare
-          </button>
-        </FiltroGruppo>
+            <button
+              type="button"
+              className={`chip ${!soloAttenzione ? "on" : ""}`}
+              onClick={() => setSoloAttenzione(false)}
+            >
+              Tutte
+            </button>
+            <button
+              type="button"
+              className={`chip ${soloAttenzione ? "on" : ""}`}
+              onClick={() => setSoloAttenzione(true)}
+            >
+              Da attenzionare
+            </button>
+          </FiltroGruppo>
+        ) : null}
 
         <FiltroGruppo
           titolo={soloDaNonTagliare ? "Da non tagliare" : "Non tagliare"}
@@ -612,6 +642,22 @@ export function CampateElenco({
 
         {soloRinvii ? (
           <>
+            <FiltroGruppo titolo={GENERE_LABEL[genere]} attivo={genere !== "tutti"}>
+              {(["tutti", "rinvio", "attenzione"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={`chip ${genere === g ? "on" : ""}`}
+                  onClick={() => {
+                    setGenere(g);
+                    setVisibili(40);
+                  }}
+                >
+                  {g === "tutti" ? "Tutti" : GENERE_LABEL[g]}
+                </button>
+              ))}
+            </FiltroGruppo>
+
             <FiltroGruppo
               titolo={meseRinvio === "tutti" ? "Tutti i mesi" : MESI_LABEL[meseRinvio - 1]}
               attivo={meseRinvio !== "tutti"}
@@ -636,7 +682,7 @@ export function CampateElenco({
             </FiltroGruppo>
 
             <FiltroGruppo
-              titolo={ripresa === "tutte" ? "Da fare e riprese" : ripresa === "da_fare" ? "Da fare" : "Riprese"}
+              titolo={ripresa === "tutte" ? "Da fare e fatte" : ripresa === "da_fare" ? "Da fare" : "Fatte"}
               attivo={ripresa !== "tutte"}
             >
               {(["tutte", "da_fare", "fatte"] as const).map((r) => (
@@ -646,7 +692,7 @@ export function CampateElenco({
                   className={`chip ${ripresa === r ? "on" : ""}`}
                   onClick={() => setRipresa(r)}
                 >
-                  {r === "tutte" ? "Tutte" : r === "da_fare" ? "Da fare" : "Riprese"}
+                  {r === "tutte" ? "Tutte" : r === "da_fare" ? "Da fare" : "Fatte"}
                 </button>
               ))}
             </FiltroGruppo>
@@ -701,8 +747,8 @@ export function CampateElenco({
               priorita,
               origine,
               anno: annoEffettivo ?? undefined,
-              prefisso: soloRinvii ? "da-riprendere" : undefined,
-              rinvio: soloRinvii,
+              prefisso: soloRinvii ? "elenco-parallelo" : undefined,
+              parallelo: soloRinvii,
             })
           }
         >
@@ -721,8 +767,8 @@ export function CampateElenco({
 
       {filtrate.length === 0 ? (
         <p className="muted">
-          {soloRinvii && conteggi.daRiprendere === 0
-            ? "Nessuna campata da riprendere. Il promemoria si mette dall’elenco campate, spuntando «Da riprendere» sulla riga."
+          {soloRinvii && conteggi.inElenco === 0
+            ? "Nessuna campata in elenco. Il promemoria si mette dall’elenco campate, spuntando «Da riprendere» o «Da attenzionare» sulla riga."
             : "Nessuna campata corrisponde ai filtri."}
         </p>
       ) : (
@@ -852,6 +898,8 @@ function etichettaEvento(evento: string) {
   if (evento === "da_non_tagliare_off") return "Tolto da non tagliare";
   if (evento === "attenzionare") return "Da attenzionare";
   if (evento === "attenzionare_off") return "Tolto da attenzionare";
+  if (evento === "attenzione_chiusa") return "Attenzione chiusa";
+  if (evento === "attenzione_chiusa_off") return "Attenzione da chiudere";
   if (evento === "da_riprendere") return "Da riprendere";
   if (evento === "da_riprendere_off") return "Tolto da riprendere";
   if (evento === "ripresa_fatta") return "Ripresa fatta";
@@ -895,10 +943,12 @@ function CampataRiga({
   const nonTagliare = campataDaNonTagliare(c);
   const tagliata = campataETagliata(c);
   const daRiprendere = campataDaRiprendere(c);
+  const daAttenzionare = campataDaAttenzionare(c);
   const ripresa = rinvioRipreso(c);
+  const promemoriaFatto = promemoriaChiuso(c);
   const lockNonTagliare = nonTagliare && !puoModificareSceltaCampata(session, c.daNonTagliareBy);
   const lockRinvio = daRiprendere && !puoModificareSceltaCampata(session, c.rinvioBy);
-  const lockAttenzione = Boolean(c.attenzionare) && !puoModificareSceltaCampata(session, c.attenzionareBy);
+  const lockAttenzione = daAttenzionare && !puoModificareSceltaCampata(session, c.attenzionareBy);
   const daRapportino = Boolean(c.rapportinoId) && !nonTagliare;
   const mostraRapportino = Boolean(c.rapportinoId) || !nonTagliare;
   const tecnico = (sessionRuolo ?? ruolo) === "tecnico";
@@ -951,7 +1001,7 @@ function CampataRiga({
   return (
     <>
       <tr
-        className={`campata-row campata-${tagliata ? "tagliata" : c.stato}${c.attenzionare ? " campata-attenzionare" : ""}${ripresa ? " campata-ripresa" : ""}`}
+        className={`campata-row campata-${tagliata ? "tagliata" : c.stato}${c.attenzionare ? " campata-attenzionare" : ""}${promemoriaFatto ? " campata-ripresa" : ""}`}
         onClick={onToggle}
       >
         <td className="linea-codice">{c.codiceLinea}</td>
@@ -985,6 +1035,11 @@ function CampataRiga({
           {daRiprendere ? (
             <span className={`badge ${ripresa ? "badge-tagliata" : "badge-rinvio"}`}>
               {ripresa ? `Ripresa · ${etichettaRinvio(c)}` : `Da riprendere · ${etichettaRinvio(c)}`}
+            </span>
+          ) : null}
+          {daAttenzionare ? (
+            <span className={`badge ${attenzioneChiusa(c) ? "badge-tagliata" : "badge-attenzionare"}`}>
+              {attenzioneChiusa(c) ? "Attenzione chiusa" : "Da attenzionare"}
             </span>
           ) : null}
         </td>
@@ -1056,10 +1111,13 @@ function CampataRiga({
                 <input
                   type="checkbox"
                   checked={attenzione}
-                  disabled={lockAttenzione || !sessionUserId}
+                  disabled={lockAttenzione || !sessionUserId || (daAttenzionare && !soloRinvii)}
                   onChange={(e) => cambiaAttenzione(e.target.checked)}
                 />
                 Da attenzionare
+                {daAttenzionare && !soloRinvii ? (
+                  <span className="muted"> — si toglie dall’elenco «Da riprendere e attenzionare»</span>
+                ) : null}
                 {lockAttenzione ? (
                   <span className="muted"> — già segnato, non modificabile</span>
                 ) : null}
@@ -1089,7 +1147,7 @@ function CampataRiga({
                       {soloRinvii ? "Cambia o togli" : "Cambia mese"}
                     </button>
                     {!soloRinvii ? (
-                      <span className="muted"> — si toglie dall’elenco «Da riprendere»</span>
+                      <span className="muted"> — si toglie dall’elenco «Da riprendere e attenzionare»</span>
                     ) : null}
                   </>
                 ) : nonTagliare ? (
@@ -1097,30 +1155,31 @@ function CampataRiga({
                 ) : null}
                 {lockRinvio ? <span className="muted"> — segnato da un altro operatore</span> : null}
               </label>
-              {daRiprendere ? (
-                <>
-                  {c.rinvioNote?.trim() ? (
-                    <div className="campata-note-blocco">
-                      <span className="muted">Nota del promemoria</span>
-                      <p>{c.rinvioNote.trim()}</p>
-                    </div>
-                  ) : null}
-                  {soloRinvii && tecnico ? (
-                    <label className="check-line">
-                      <input
-                        type="checkbox"
-                        checked={ripresa}
-                        disabled={!sessionUserId}
-                        onChange={(e) => onPatch({ rinvioFatta: e.target.checked })}
-                      />
-                      Tagliata
-                      <span className="muted">
-                        {" "}
-                        — chiude il promemoria e resta in elenco; la torta la muove solo il rapportino
-                      </span>
-                    </label>
-                  ) : null}
-                </>
+              {daRiprendere && c.rinvioNote?.trim() ? (
+                <div className="campata-note-blocco">
+                  <span className="muted">Nota del promemoria</span>
+                  <p>{c.rinvioNote.trim()}</p>
+                </div>
+              ) : null}
+              {soloRinvii && tecnico && (daRiprendere || daAttenzionare) ? (
+                <label className="check-line">
+                  <input
+                    type="checkbox"
+                    checked={promemoriaFatto}
+                    disabled={!sessionUserId}
+                    onChange={(e) =>
+                      onPatch({
+                        rinvioFatta: daRiprendere ? e.target.checked : undefined,
+                        attenzionareFatta: daAttenzionare ? e.target.checked : undefined,
+                      })
+                    }
+                  />
+                  Tagliata
+                  <span className="muted">
+                    {" "}
+                    — chiude il promemoria e resta in elenco; la torta la muove solo il rapportino
+                  </span>
+                </label>
               ) : null}
               {c.note?.trim() ? (
                 <div className="campata-note-blocco">

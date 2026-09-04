@@ -52,6 +52,10 @@ Chi aggiorna un'installazione esistente deve rieseguire `supabase/schema.sql`: �
 
 Il tecnico carica un file nello stesso formato del fac-simile LIDAR (**Carica file campate**): il parser legge intestazione e righe, non i dati di un file specifico. Ogni file è un **piano di un anno** (Importa piano 20XX): gli anni precedenti e i rapportini restano. «Azzera tutto e riparti» cancella prove e riparte da zero. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_campate_anno.sql`. L'elenco è visibile a tecnico e operatori; solo il tecnico importa i file.
 
+## Da riprendere e attenzionare
+
+Elenco parallelo al piano: ci finiscono le campate con un mese di ripresa («da riprendere», col popup del mese) e quelle segnate «da attenzionare» (una spunta, senza popup). Non è uno stato di taglio: le torte restano legate a stato e «da non tagliare». Le due segnalazioni valgono sullo span (urgente e differibile insieme), compaiono una volta sola anche se il piano cambia anno, sopravvivono al reimport dello stesso anno e si tolgono da questo elenco. Il tecnico le chiude con «Tagliata»: la riga resta, barrata. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_attenzione_parallelo.sql`.
+
 Il primo accesso richiede la rete. Dopo, l'app si riapre anche offline usando l'ultimo accesso salvato sul dispositivo, così il lavoro sul campo non si blocca.
 
 ## Sincronizzazione

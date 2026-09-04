@@ -14,8 +14,10 @@ import type {
   Session,
 } from "@/lib/types";
 import {
+  campataDaAttenzionare,
   campataDaNonTagliare,
   campataDaRiprendere,
+  campataInElencoParallelo,
   esitoRapportinoToStato,
   etichettaRinvio,
   eventoStoricoDaEsito,
@@ -33,19 +35,28 @@ function eEventoAttenzione(evento: string) {
   return evento === "attenzionare" || evento === "attenzionare_off";
 }
 
-type CampiRinvio = Pick<
+type CampiPromemoria = Pick<
   CampataLavoro,
-  "rinvioMese" | "rinvioAnno" | "rinvioNote" | "rinvioBy" | "rinvioFattaIl" | "rinvioFattaBy"
+  | "rinvioMese"
+  | "rinvioAnno"
+  | "rinvioNote"
+  | "rinvioBy"
+  | "rinvioFattaIl"
+  | "rinvioFattaBy"
+  | "attenzionare"
+  | "attenzionareBy"
+  | "attenzionareFattaIl"
+  | "attenzionareFattaBy"
 >;
 
-type SnapRinvio = {
+type SnapPromemoria = {
   chiave: string;
-  campi: CampiRinvio;
+  campi: CampiPromemoria;
   annoOrigine: number;
   campata: CampataLavoro;
 };
 
-function campiRinvioDi(c: CampataLavoro): CampiRinvio {
+function campiPromemoriaDi(c: CampataLavoro): CampiPromemoria {
   return {
     rinvioMese: c.rinvioMese,
     rinvioAnno: c.rinvioAnno,
@@ -53,10 +64,14 @@ function campiRinvioDi(c: CampataLavoro): CampiRinvio {
     rinvioBy: c.rinvioBy,
     rinvioFattaIl: c.rinvioFattaIl,
     rinvioFattaBy: c.rinvioFattaBy,
+    attenzionare: c.attenzionare,
+    attenzionareBy: c.attenzionareBy,
+    attenzionareFattaIl: c.attenzionareFattaIl,
+    attenzionareFattaBy: c.attenzionareFattaBy,
   };
 }
 
-function conRinvio(c: CampataLavoro, r: CampiRinvio): CampataLavoro {
+function conPromemoria(c: CampataLavoro, r: CampiPromemoria): CampataLavoro {
   const out: CampataLavoro = { ...c };
   out.rinvioMese = r.rinvioMese;
   if (r.rinvioAnno != null) out.rinvioAnno = r.rinvioAnno;
@@ -69,6 +84,13 @@ function conRinvio(c: CampataLavoro, r: CampiRinvio): CampataLavoro {
   else delete out.rinvioFattaIl;
   if (r.rinvioFattaBy) out.rinvioFattaBy = r.rinvioFattaBy;
   else delete out.rinvioFattaBy;
+  out.attenzionare = Boolean(r.attenzionare);
+  if (r.attenzionareBy) out.attenzionareBy = r.attenzionareBy;
+  else delete out.attenzionareBy;
+  if (r.attenzionareFattaIl) out.attenzionareFattaIl = r.attenzionareFattaIl;
+  else delete out.attenzionareFattaIl;
+  if (r.attenzionareFattaBy) out.attenzionareFattaBy = r.attenzionareFattaBy;
+  else delete out.attenzionareFattaBy;
   return out;
 }
 
@@ -83,15 +105,24 @@ function senzaRinvio(c: CampataLavoro): CampataLavoro {
   return out;
 }
 
+function senzaAttenzione(c: CampataLavoro): CampataLavoro {
+  const out: CampataLavoro = { ...c };
+  out.attenzionare = false;
+  delete out.attenzionareBy;
+  delete out.attenzionareFattaIl;
+  delete out.attenzionareFattaBy;
+  return out;
+}
+
 /** Solo i promemoria dello stesso anno: il piano nuovo non eredita quelli degli anni scorsi. */
-function rinviiStessoAnno(tutte: CampataLavoro[], annoPiano: number): SnapRinvio[] {
-  const perChiave = new Map<string, SnapRinvio>();
+function promemoriaStessoAnno(tutte: CampataLavoro[], annoPiano: number): SnapPromemoria[] {
+  const perChiave = new Map<string, SnapPromemoria>();
   for (const c of tutte) {
     if (c.tipo === "base") continue;
-    if (!campataDaRiprendere(c)) continue;
+    if (!campataInElencoParallelo(c)) continue;
     if (annoDi(c) !== annoPiano) continue;
     const chiave = chiaveCampata(c.codiceLinea, c.normalizzata, c.priorita);
-    perChiave.set(chiave, { chiave, campi: campiRinvioDi(c), annoOrigine: annoPiano, campata: c });
+    perChiave.set(chiave, { chiave, campi: campiPromemoriaDi(c), annoOrigine: annoPiano, campata: c });
   }
   return [...perChiave.values()];
 }
@@ -120,7 +151,7 @@ export async function confermaImportCampate(opts: {
 }) {
   const supabase = richiediRete();
   const anno = opts.anno || new Date().getFullYear();
-  const rinvii = opts.azzera ? [] : rinviiStessoAnno(await db.campateLavoro.toArray(), anno);
+  const promemoria = opts.azzera ? [] : promemoriaStessoAnno(await db.campateLavoro.toArray(), anno);
   if (opts.azzera) await resetOperativoPerImport();
   else await eliminaPianoAnno(anno);
 
@@ -181,20 +212,33 @@ export async function confermaImportCampate(opts: {
 
   for (let i = 0; i < daScrivere.length; i++) {
     const riga = daScrivere[i];
-    const snap = rinvii.find(
+    const snap = promemoria.find(
       (s) => s.chiave === chiaveCampata(riga.codiceLinea, riga.normalizzata, riga.priorita),
     );
     if (!snap) continue;
-    daScrivere[i] = conRinvio(riga, snap.campi);
-    storico.push({
-      id: uid("sto"),
-      campataId: riga.id,
-      evento: "da_riprendere",
-      stato: riga.stato,
-      priorita: riga.priorita,
-      note: etichettaRinvio(daScrivere[i]),
-      createdAt: now,
-    });
+    const conPromemoriaRipreso = conPromemoria(riga, snap.campi);
+    daScrivere[i] = conPromemoriaRipreso;
+    if (campataDaRiprendere(conPromemoriaRipreso)) {
+      storico.push({
+        id: uid("sto"),
+        campataId: riga.id,
+        evento: "da_riprendere",
+        stato: riga.stato,
+        priorita: riga.priorita,
+        note: etichettaRinvio(conPromemoriaRipreso),
+        createdAt: now,
+      });
+    }
+    if (campataDaAttenzionare(conPromemoriaRipreso)) {
+      storico.push({
+        id: uid("sto"),
+        campataId: riga.id,
+        evento: "attenzionare",
+        stato: riga.stato,
+        priorita: riga.priorita,
+        createdAt: now,
+      });
+    }
   }
 
   const riepilogo: ImportCampate = {
@@ -218,7 +262,7 @@ export async function confermaImportCampate(opts: {
 
   if (daScrivere.length > 0) {
     await upsertCampateLavoro(daScrivere.map(campataLavoroToRow), {
-      vietatoOmettere: ["anno", "est_int", "rinvio_mese"],
+      vietatoOmettere: ["anno", "est_int", "rinvio_mese", "attenzionare"],
     });
     await db.campateLavoro.bulkPut(daScrivere);
   }
@@ -802,6 +846,7 @@ export type PatchRinvio = { mese: number; anno?: number; note?: string };
 export async function aggiornaDettagliCampata(
   id: string,
   patch: {
+    /** true = metti in elenco parallelo senza mese; false = toglila. */
     attenzionare?: boolean;
     note?: string;
     daNonTagliare?: boolean;
@@ -809,6 +854,8 @@ export async function aggiornaDettagliCampata(
     rinvio?: PatchRinvio | null;
     /** Spunta «Tagliata» dell’elenco parallelo: chiude il promemoria, non muove le torte. */
     rinvioFatta?: boolean;
+    /** Stessa spunta per «da attenzionare»: chiude la segnalazione, la riga resta in elenco. */
+    attenzionareFatta?: boolean;
   },
   session?: Session | null,
 ) {
@@ -847,6 +894,9 @@ export async function aggiornaDettagliCampata(
   if (patch.rinvioFatta !== undefined && session?.ruolo !== "tecnico") {
     throw new Error("Solo il tecnico può segnare come tagliata una campata da riprendere.");
   }
+  if (patch.attenzionareFatta !== undefined && session?.ruolo !== "tecnico") {
+    throw new Error("Solo il tecnico può segnare come tagliata una campata da attenzionare.");
+  }
   if (
     patch.attenzionare !== undefined &&
     presente.attenzionare &&
@@ -857,43 +907,71 @@ export async function aggiornaDettagliCampata(
 
   const now = new Date().toISOString();
   const nome = session?.nome;
-  const bersagli = [presente];
-  const toccaSpan =
-    patch.daNonTagliare !== undefined || patch.rinvio !== undefined || patch.rinvioFatta !== undefined;
+  const toccaNonTagliare = patch.daNonTagliare !== undefined;
+  const toccaRinvio = patch.rinvio !== undefined || patch.rinvioFatta !== undefined;
+  const toccaAttenzione = patch.attenzionare !== undefined || patch.attenzionareFatta !== undefined;
+  const toccaSpan = toccaNonTagliare || toccaRinvio || toccaAttenzione;
 
-  // Stessa campata fisica segnata sia urgente sia differibile: «da non tagliare» e
-  // «da riprendere» valgono sullo span, come il rapportino che le chiude insieme.
-  // Nota e «da attenzionare» restano invece sulla riga toccata.
+  // Stessa campata fisica segnata sia urgente sia differibile: «da non tagliare» e i due
+  // promemoria dell’elenco parallelo valgono sullo span, come il rapportino che le chiude
+  // insieme. La nota resta invece sulla riga toccata.
+  const gemelle: CampataLavoro[] = [];
   if (toccaSpan && !isBaseLavoro(presente) && presente.normalizzata) {
     const sullaLinea = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
     for (const gemella of sullaLinea) {
       if (gemella.id === presente.id) continue;
       if (annoDi(gemella) !== annoDi(presente)) continue;
       if (isBaseLavoro(gemella) || gemella.normalizzata !== presente.normalizzata) continue;
-      if (patch.daNonTagliare !== undefined) {
-        if (campataDaNonTagliare(gemella) === patch.daNonTagliare) continue;
-        // Già tagliata con un rapportino: quello è un fatto, non si riscrive.
-        if (patch.daNonTagliare && gemella.rapportinoId) continue;
-        if (!patch.daNonTagliare && !puoModificareSceltaCampata(session, gemella.daNonTagliareBy)) continue;
-      } else {
-        if (patch.rinvio && campataDaNonTagliare(gemella)) continue;
-        if (!puoModificareSceltaCampata(session, gemella.rinvioBy)) continue;
-      }
-      bersagli.push(gemella);
+      gemelle.push(gemella);
     }
+  }
+
+  function gemellaSegueNonTagliare(gemella: CampataLavoro) {
+    if (!toccaNonTagliare) return false;
+    if (campataDaNonTagliare(gemella) === patch.daNonTagliare) return false;
+    // Già tagliata con un rapportino: quello è un fatto, non si riscrive.
+    if (patch.daNonTagliare && gemella.rapportinoId) return false;
+    if (!patch.daNonTagliare && !puoModificareSceltaCampata(session, gemella.daNonTagliareBy)) return false;
+    return true;
+  }
+
+  function gemellaSegueRinvio(gemella: CampataLavoro) {
+    if (!toccaRinvio) return false;
+    if (patch.rinvio && campataDaNonTagliare(gemella)) return false;
+    return puoModificareSceltaCampata(session, gemella.rinvioBy);
+  }
+
+  function gemellaSegueAttenzione(gemella: CampataLavoro) {
+    if (!toccaAttenzione) return false;
+    return puoModificareSceltaCampata(session, gemella.attenzionareBy);
+  }
+
+  type Bersaglio = { riga: CampataLavoro; nonTagliare: boolean; rinvio: boolean; attenzione: boolean };
+  const bersagli: Bersaglio[] = [
+    { riga: presente, nonTagliare: true, rinvio: true, attenzione: true },
+  ];
+  for (const gemella of gemelle) {
+    const permessi = {
+      nonTagliare: gemellaSegueNonTagliare(gemella),
+      rinvio: gemellaSegueRinvio(gemella),
+      attenzione: gemellaSegueAttenzione(gemella),
+    };
+    if (!permessi.nonTagliare && !permessi.rinvio && !permessi.attenzione) continue;
+    bersagli.push({ riga: gemella, ...permessi });
   }
 
   const daScrivere: CampataLavoro[] = [];
   const storico: CampataStorico[] = [];
 
-  for (const riga of bersagli) {
+  for (const bersaglio of bersagli) {
+    const riga = bersaglio.riga;
     const aggiornata: CampataLavoro = {
       ...riga,
       syncStatus: "pending",
       updatedAt: now,
     };
 
-    if (patch.daNonTagliare !== undefined) {
+    if (patch.daNonTagliare !== undefined && bersaglio.nonTagliare) {
       if (patch.daNonTagliare) {
         aggiornata.daNonTagliare = true;
         aggiornata.daNonTagliareBy = session?.userId;
@@ -920,7 +998,7 @@ export async function aggiornaDettagliCampata(
       });
     }
 
-    if (patch.rinvio !== undefined) {
+    if (patch.rinvio !== undefined && bersaglio.rinvio) {
       if (patch.rinvio) {
         aggiornata.rinvioMese = patch.rinvio.mese;
         if (patch.rinvio.anno != null) aggiornata.rinvioAnno = patch.rinvio.anno;
@@ -954,7 +1032,7 @@ export async function aggiornaDettagliCampata(
       });
     }
 
-    if (patch.rinvioFatta !== undefined) {
+    if (patch.rinvioFatta !== undefined && bersaglio.rinvio && campataDaRiprendere(riga)) {
       if (patch.rinvioFatta) {
         aggiornata.rinvioFattaIl = now;
         aggiornata.rinvioFattaBy = session?.userId;
@@ -973,10 +1051,18 @@ export async function aggiornaDettagliCampata(
       });
     }
 
-    if (patch.attenzionare !== undefined && riga.id === presente.id) {
+    if (patch.attenzionare !== undefined && bersaglio.attenzione) {
       aggiornata.attenzionare = patch.attenzionare;
-      if (patch.attenzionare) aggiornata.attenzionareBy = session?.userId;
-      else delete aggiornata.attenzionareBy;
+      if (patch.attenzionare) {
+        aggiornata.attenzionareBy = session?.userId;
+        // Segnalazione rimessa: torna da fare, come il mese nuovo del rinvio.
+        delete aggiornata.attenzionareFattaIl;
+        delete aggiornata.attenzionareFattaBy;
+      } else {
+        delete aggiornata.attenzionareBy;
+        delete aggiornata.attenzionareFattaIl;
+        delete aggiornata.attenzionareFattaBy;
+      }
       const esistenti = await db.campateStorico.where("campataId").equals(riga.id).toArray();
       const limite = Date.now() - FINESTRA_ATTENZIONE_MS;
       const recenti = esistenti.filter(
@@ -990,6 +1076,25 @@ export async function aggiornaDettagliCampata(
         id: uid("sto"),
         campataId: riga.id,
         evento: patch.attenzionare ? "attenzionare" : "attenzionare_off",
+        stato: aggiornata.stato,
+        priorita: riga.priorita,
+        operatore: nome,
+        createdAt: now,
+      });
+    }
+
+    if (patch.attenzionareFatta !== undefined && bersaglio.attenzione && campataDaAttenzionare(riga)) {
+      if (patch.attenzionareFatta) {
+        aggiornata.attenzionareFattaIl = now;
+        aggiornata.attenzionareFattaBy = session?.userId;
+      } else {
+        delete aggiornata.attenzionareFattaIl;
+        delete aggiornata.attenzionareFattaBy;
+      }
+      storico.push({
+        id: uid("sto"),
+        campataId: riga.id,
+        evento: patch.attenzionareFatta ? "attenzione_chiusa" : "attenzione_chiusa_off",
         stato: aggiornata.stato,
         priorita: riga.priorita,
         operatore: nome,
@@ -1019,25 +1124,51 @@ export async function aggiornaDettagliCampata(
   }
 
   // Un solo promemoria per span: se la segni sul piano di quest’anno, togli il doppione dagli altri.
-  if (patch.rinvio && !isBaseLavoro(presente) && presente.normalizzata) {
+  const mettePromemoria = Boolean(patch.rinvio) || patch.attenzionare === true;
+  if (mettePromemoria && !isBaseLavoro(presente) && presente.normalizzata) {
     const sullaLinea = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
     const gia = new Set(daScrivere.map((c) => c.id));
+    const nota = "Un solo promemoria: aggiornato su quest’anno";
     for (const altra of sullaLinea) {
       if (gia.has(altra.id)) continue;
       if (isBaseLavoro(altra) || altra.normalizzata !== presente.normalizzata) continue;
-      if (!campataDaRiprendere(altra)) continue;
-      if (!puoModificareSceltaCampata(session, altra.rinvioBy)) continue;
-      daScrivere.push({ ...senzaRinvio(altra), syncStatus: "pending", updatedAt: now });
-      storico.push({
-        id: uid("sto"),
-        campataId: altra.id,
-        evento: "da_riprendere_off",
-        stato: altra.stato,
-        priorita: altra.priorita,
-        operatore: nome,
-        note: "Un solo promemoria: aggiornato su quest’anno",
-        createdAt: now,
-      });
+      let ripulita = altra;
+      if (
+        patch.rinvio &&
+        campataDaRiprendere(altra) &&
+        puoModificareSceltaCampata(session, altra.rinvioBy)
+      ) {
+        ripulita = senzaRinvio(ripulita);
+        storico.push({
+          id: uid("sto"),
+          campataId: altra.id,
+          evento: "da_riprendere_off",
+          stato: altra.stato,
+          priorita: altra.priorita,
+          operatore: nome,
+          note: nota,
+          createdAt: now,
+        });
+      }
+      if (
+        patch.attenzionare === true &&
+        campataDaAttenzionare(altra) &&
+        puoModificareSceltaCampata(session, altra.attenzionareBy)
+      ) {
+        ripulita = senzaAttenzione(ripulita);
+        storico.push({
+          id: uid("sto"),
+          campataId: altra.id,
+          evento: "attenzionare_off",
+          stato: altra.stato,
+          priorita: altra.priorita,
+          operatore: nome,
+          note: nota,
+          createdAt: now,
+        });
+      }
+      if (ripulita === altra) continue;
+      daScrivere.push({ ...ripulita, syncStatus: "pending", updatedAt: now });
     }
   }
 

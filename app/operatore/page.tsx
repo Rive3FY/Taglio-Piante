@@ -25,8 +25,10 @@ export default function OperatoreHome() {
         </Link>
         <Link href="/operatore/rinvii" className="home-card">
           <div className="kicker">Promemoria</div>
-          <h2>Da riprendere</h2>
-          <p className="muted">Campate su cui tornare in un mese preciso, con la nota del perché.</p>
+          <h2>Da riprendere e attenzionare</h2>
+          <p className="muted">
+            Campate su cui tornare in un mese preciso e campate da tenere d’occhio.
+          </p>
         </Link>
 
         {SEZIONI.map((sezione) => {

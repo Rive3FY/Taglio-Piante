@@ -3,6 +3,7 @@ import { PERIODO_VUOTO, type Periodo } from "@/components/FiltroPeriodo";
 import type { CampataOrigine, CampataPriorita, CampataStatoLavoro } from "@/lib/types";
 
 export type RipresaFiltro = "tutte" | "da_fare" | "fatte";
+export type GenerePromemoria = "tutti" | "rinvio" | "attenzione";
 export type OrdineElenco = "linea" | "dist_asc" | "dist_desc";
 
 export type VistaElencoCampate = {
@@ -18,7 +19,8 @@ export type VistaElencoCampate = {
   periodo: Periodo;
   anno: number | null;
   visibili: number;
-  /** Solo elenco «Da riprendere»: mese di ripresa e promemoria già chiusi. */
+  /** Solo elenco parallelo: genere di promemoria, mese di ripresa e promemoria già chiusi. */
+  genere: GenerePromemoria;
   meseRinvio: number | "tutti";
   ripresa: RipresaFiltro;
   ordine: OrdineElenco;
@@ -52,6 +54,7 @@ export function readElencoVista(userId: string | undefined | null, ruolo: string
     const meseRinvio =
       typeof p.meseRinvio === "number" && p.meseRinvio >= 1 && p.meseRinvio <= 12 ? p.meseRinvio : "tutti";
     const ripresa = p.ripresa === "da_fare" || p.ripresa === "fatte" ? p.ripresa : "tutte";
+    const genere = p.genere === "rinvio" || p.genere === "attenzione" ? p.genere : "tutti";
     const ordine = p.ordine === "dist_asc" || p.ordine === "dist_desc" ? p.ordine : "linea";
     const visibili = typeof p.visibili === "number" && p.visibili >= 40 ? Math.min(2000, Math.round(p.visibili)) : 40;
     return {
@@ -67,6 +70,7 @@ export function readElencoVista(userId: string | undefined | null, ruolo: string
       periodo,
       anno,
       visibili,
+      genere,
       meseRinvio,
       ripresa,
       ordine,

@@ -232,10 +232,11 @@ export async function pushCampatePending(rapportinoId?: string) {
     .toArray();
 
   if (rows.length > 0) {
-    // Senza da_non_tagliare il tecnico vedrebbe la campata come normale: meglio
+    // Senza da_non_tagliare il tecnico vedrebbe la campata come normale, senza
+    // rinvio_mese o attenzionare la riga sparirebbe dall'elenco parallelo: meglio
     // fallire con un messaggio chiaro che perdere il segno in silenzio.
     await upsertCampateLavoro(rows.map(campataLavoroToRow), {
-      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "est_int"],
+      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"],
     });
 
     const ids = new Set(rows.map((c) => c.id));

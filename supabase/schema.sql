@@ -229,6 +229,11 @@ alter table campate_lavoro add column if not exists da_non_tagliare boolean not 
 alter table campate_lavoro add column if not exists da_non_tagliare_by text;
 alter table campate_lavoro add column if not exists attenzionare_by text;
 
+-- «Da attenzionare» sta nello stesso elenco parallelo del rinvio: il tecnico lo chiude
+-- senza togliere la riga, come fa con la ripresa.
+alter table campate_lavoro add column if not exists attenzionare_fatta_il timestamptz;
+alter table campate_lavoro add column if not exists attenzionare_fatta_by text;
+
 -- Promemoria «da riprendere»: elenco parallelo, non è uno stato di taglio.
 -- Le torte restano legate a stato e da_non_tagliare.
 alter table campate_lavoro add column if not exists rinvio_mese integer;
