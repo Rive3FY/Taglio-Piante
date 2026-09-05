@@ -106,11 +106,6 @@ export default function PrezziPage() {
       <h2>Prezzi</h2>
       <section className="panel">
         <h2>Listino prestazioni</h2>
-        <p className="muted">
-          Qui cambi i prezzi usati in contabilità. Per le voci in 100 mq il prezzo è ogni 100 mq.
-          Restano su questo dispositivo; i rapportini già fatti non si toccano, cambiano solo i
-          totali calcolati.
-        </p>
         {righe.length === 0 ? (
           <p className="muted">Nessuna prestazione in anagrafica.</p>
         ) : (

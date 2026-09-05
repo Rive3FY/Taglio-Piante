@@ -148,11 +148,6 @@ export default function ImportaCampatePage() {
       <h2>Carica file campate</h2>
 
       <section className="panel">
-        <p className="muted">
-          Ogni file è un <strong>piano di un anno</strong>. Per il report nuovo usa{" "}
-          <strong>Importa piano</strong>: i rapportini e i tagli degli anni scorsi restano.
-          «Azzera tutto e riparti» serve solo a cancellare prove o ripartire da zero.
-        </p>
         <label>
           Anno del piano
           <input

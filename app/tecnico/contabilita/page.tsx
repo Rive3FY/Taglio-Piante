@@ -241,11 +241,6 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <h2>Report del mese</h2>
-        <p className="muted">
-          Un solo file Excel con dentro tutto {etichettaMese(meseEffettivo).toLowerCase()}: il
-          riepilogo per linea, il dettaglio delle prestazioni linea per linea e i totali del mese.
-          Le prestazioni dei fogli basi restano una sezione a parte, dentro la loro linea.
-        </p>
         <div className="contab-estrai">
           <p className="muted" style={{ margin: 0 }}>
             {reportMese.perLinea.length}{" "}
@@ -282,7 +277,6 @@ export default function ContabilitaPage() {
       </section>
 
       <h2>Avanzamento campate · piano {annoPianoEff}</h2>
-      <p className="muted">Le torte contano solo le campate urgenti e differibili, non le basi.</p>
       {anniCampate.length > 1 ? (
         <div className="chip-row" style={{ marginBottom: 12 }}>
           {anniCampate.map((a) => (
@@ -315,10 +309,6 @@ export default function ContabilitaPage() {
       />
       <section className="panel">
         <h2>Prestazioni sulle basi</h2>
-        <p className="muted">
-          Tutto ciò che sta su un foglio basi (5.1–5.4 e le altre chiamate messe insieme) resta
-          qui, fuori dalle torte e dal riepilogo per linea.
-        </p>
         <TabellaVoci
           key={`${meseEffettivo}-basi`}
           voci={aggregato.vociBasi}
@@ -354,7 +344,6 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <h2>Prestazioni del mese</h2>
-        <p className="muted">Solo i fogli campate. Le chiamate messe su un foglio basi stanno sopra, con le basi.</p>
         <TabellaVoci
           key={`${meseEffettivo}-mese`}
           voci={aggregato.voci}
@@ -387,12 +376,6 @@ export default function ContabilitaPage() {
             </label>
           ) : null}
         </div>
-        <p className="muted">
-          Totale delle prestazioni confermate sulla linea, dai rapportini archiviati fino a oggi
-          (le bozze restano fuori). Tocca una linea per le torte, la tabella e lo scarico Excel.
-          Nel file e in tabella ci sono anche le prestazioni dei fogli basi. Se ti serve solo il
-          mese, diviso per linea, scaricalo da «Report del mese» in cima alla pagina.
-        </p>
         {lineeEstraibili.length === 0 ? (
           <p className="muted">Nessun rapportino confermato da cui vedere le prestazioni.</p>
         ) : lineeFiltrate.length === 0 ? (
