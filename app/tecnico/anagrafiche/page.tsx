@@ -101,11 +101,9 @@ export default function AnagrafichePage() {
             {busy ? "Salvataggio…" : "Aggiungi"}
           </button>
         </div>
-        <p className="muted">
-          {tensioneNuova
-            ? `Con questo codice la linea risulta a ${tensioneLabel(tensioneNuova)}.`
-            : "La tensione si ricava dalle prime due cifre: 21 → 380 kV, 22 → 220 kV, 23 → 150 kV, 24 → 60 kV."}
-        </p>
+        {tensioneNuova ? (
+          <p className="muted">Con questo codice la linea risulta a {tensioneLabel(tensioneNuova)}.</p>
+        ) : null}
         {errore ? <p className="form-error">{errore}</p> : null}
       </section>
 

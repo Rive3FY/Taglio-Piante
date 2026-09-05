@@ -115,10 +115,6 @@ export default function TecnicoPerLineaPage() {
       <div className="elenco-head">
         <div>
           <h2>Rapportini per linea</h2>
-          <p className="muted">
-            Tocca una linea per vedere tutti i fogli. Puoi selezionarne più di uno ed eliminarli
-            insieme: le campate di quei fogli tornano da tagliare.
-          </p>
         </div>
         <strong>{rapportini.length}</strong>
       </div>

@@ -79,11 +79,6 @@ export default function TecnicoBasiPage() {
       <div className="elenco-head">
         <div>
           <h2>Basi</h2>
-          <p className="muted">
-            Sostegni puliti quando i numeri nel box coincidono con 5.1–5.4. Sul foglio puoi
-            aggiungere altre chiamate: restano in contabilità sulle basi. Tocca una linea per
-            vedere i numeri.
-          </p>
         </div>
         <div className="elenco-azioni">
           <strong>{totale}</strong>
