@@ -313,7 +313,7 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <div className="elenco-head">
-          <h2>Per linea</h2>
+          <h2>Estrazione prestazioni per linea</h2>
           {lineeEstraibili.length > 0 ? (
             <label className="contab-cerca-linea">
               Cerca linea
@@ -336,8 +336,9 @@ export default function ContabilitaPage() {
           ) : null}
         </div>
         <p className="muted">
-          Tocca una linea per le torte, il totale delle prestazioni confermate fino a oggi e lo
-          scarico Excel. Le basi restano nel riquadro Basi, non qui.
+          Totale delle prestazioni confermate sulla linea, dai rapportini archiviati fino a oggi
+          (le bozze restano fuori). Tocca una linea per le torte, la tabella e lo scarico Excel.
+          I fogli basi restano nel riquadro Basi, non qui e non nel file.
         </p>
         {lineeEstraibili.length === 0 ? (
           <p className="muted">Nessun rapportino confermato da cui vedere le prestazioni.</p>

@@ -5,6 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
 import { downloadOfficialScheda } from "@/lib/fillScheda";
+import { eLavoroBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "./MostraAltro";
@@ -16,33 +17,34 @@ type Gruppo = {
   items: Rapportino[];
 };
 
-function etichetteDaFogli(items: Rapportino[]) {
+function etichetteDaFogli(items: Rapportino[], prestazioni: Prestazione[]) {
   const campate: string[] = [];
   const basi: string[] = [];
   const vistiC = new Set<string>();
   const vistiB = new Set<string>();
+  const metti = (lista: string[], visti: Set<string>, nome: string) => {
+    if (!nome || visti.has(nome)) return;
+    visti.add(nome);
+    lista.push(nome);
+  };
   for (const r of items) {
+    const comeBasi = eLavoroBasi(r.campata ?? "", r, prestazioni);
     const esiti = r.esitiCampate ?? [];
     if (esiti.length > 0) {
       for (const e of esiti) {
         const nome = (e.normalizzata || e.originale || "").trim();
-        if (!nome) continue;
-        if (e.tipo === "base") {
-          if (vistiB.has(nome)) continue;
-          vistiB.add(nome);
-          basi.push(nome);
-        } else {
-          if (vistiC.has(nome)) continue;
-          vistiC.add(nome);
-          campate.push(nome);
-        }
+        if (e.tipo === "base" || comeBasi) metti(basi, vistiB, nome);
+        else metti(campate, vistiC, nome);
       }
       continue;
     }
     const testo = (r.campata ?? "").trim();
-    if (!testo || vistiC.has(testo)) continue;
-    vistiC.add(testo);
-    campate.push(testo);
+    if (!testo) continue;
+    if (comeBasi) {
+      for (const n of numeriDaTestoCampata(testo)) metti(basi, vistiB, n);
+    } else {
+      metti(campate, vistiC, testo);
+    }
   }
   return { campate, basi };
 }
@@ -168,7 +170,7 @@ export function ArchivioPerLinea({
         {items.length} {items.length === 1 ? "foglio" : "fogli"} su {gruppi.length}{" "}
         {gruppi.length === 1 ? "linea" : "linee"}. Tocca una linea per vedere cosa hai fatto.
       </p>
-      <label className="contab-cerca-linea" style={{ marginBottom: 12, display: "block" }}>
+      <label className="contab-cerca-linea">
         Cerca linea
         <LineaPicker
           linee={opzioni}
@@ -195,7 +197,7 @@ export function ArchivioPerLinea({
           {visibili.map((g) => {
             const open = aperta === g.lineaId;
             const fogli = open && !mostraTuttiFogli ? g.items.slice(0, ANTEPRIMA_ELENCO) : g.items;
-            const { campate, basi } = etichetteDaFogli(g.items);
+            const { campate, basi } = etichetteDaFogli(g.items, prestazioni);
             const voci = vociDaFogli(g.items, prestazioni);
             const ultima = g.items[0]?.dataLavoro;
             return (

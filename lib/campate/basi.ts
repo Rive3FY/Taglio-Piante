@@ -91,6 +91,28 @@ export function messaggioIncoerenzaBasi(
   return `Hai segnato ${qtyTxt} in 5.1–5.4 e ${n} ${n === 1 ? "sostegno" : "sostegni"} nel box. I numeri devono coincidere: correggi la quantità o i sostegni.`;
 }
 
+export function foglioEBasi(
+  item: Pick<Rapportino, "campata" | "esitiCampate" | "righe">,
+  prestazioni: Prestazione[] = [],
+) {
+  const esiti = item.esitiCampate ?? [];
+  if (esiti.length > 0 && esiti.every((e) => e.tipo === "base")) return true;
+  if (prestazioni.length > 0 && eLavoroBasi(item.campata ?? "", item, prestazioni)) return true;
+  return esiti.some((e) => e.tipo === "base");
+}
+
+/** «Base 82» se è un foglio basi, altrimenti «Campata 22-23». */
+export function etichettaOggettoFoglio(
+  item: Pick<Rapportino, "campata" | "esitiCampate" | "righe">,
+  prestazioni: Prestazione[] = [],
+) {
+  const testo = (item.campata ?? "").trim();
+  if (!testo) return "";
+  if (!foglioEBasi(item, prestazioni)) return `Campata ${testo}`;
+  const n = numeriDaTestoCampata(testo).length;
+  return `${n === 1 ? "Base" : "Basi"} ${testo}`;
+}
+
 export function esitiClassificati(
   testo: string,
   item: Pick<Rapportino, "righe">,
