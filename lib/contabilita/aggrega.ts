@@ -117,6 +117,35 @@ function vociDaRapportini(
       qty.set(riga.prestazioneId, (qty.get(riga.prestazioneId) ?? 0) + riga.quantita);
     }
   }
+  return vociDaQuantita(qty, prestazioni);
+}
+
+/**
+ * Divide le quantità in due mucchi senza perderne nessuna: sul mucchio basi finiscono
+ * i fogli basi interi e le chiamate 5.1–5.4 scritte per sbaglio su un foglio campate.
+ */
+function vociCampateEBasi(rapportini: Rapportino[], prestazioni: Prestazione[]) {
+  const byId = new Map(prestazioni.map((p) => [p.id, p]));
+  const qCampate = new Map<string, number>();
+  const qBasi = new Map<string, number>();
+  for (const r of rapportini) {
+    const foglioBasi = rapportinoELavoroBasi(r, prestazioni);
+    for (const riga of r.righe ?? []) {
+      if (!riga.quantita || riga.quantita <= 0) continue;
+      const p = byId.get(riga.prestazioneId);
+      const suBasi = foglioBasi || (p != null && CODICI_PULIZIA_BASE.has(p.codice));
+      const dove = suBasi ? qBasi : qCampate;
+      dove.set(riga.prestazioneId, (dove.get(riga.prestazioneId) ?? 0) + riga.quantita);
+    }
+  }
+  return {
+    voci: vociDaQuantita(qCampate, prestazioni),
+    vociBasi: vociDaQuantita(qBasi, prestazioni),
+  };
+}
+
+function vociDaQuantita(qty: Map<string, number>, prestazioni: Prestazione[]): VoceContabile[] {
+  const byId = new Map(prestazioni.map((p) => [p.id, p]));
   const voci: VoceContabile[] = [];
   for (const p of [...prestazioni].sort((a, b) => a.codice.localeCompare(b.codice, "it", { numeric: true }))) {
     const quantita = qty.get(p.id) ?? 0;
@@ -196,10 +225,7 @@ export function aggregaMese(
     };
   });
 
-  const fogliCampate = delMese.filter((r) => !rapportinoELavoroBasi(r, prestazioni));
-  const fogliBasi = delMese.filter((r) => rapportinoELavoroBasi(r, prestazioni));
-  const voci = vociDaRapportini(fogliCampate, prestazioni, { escludiBasi: true });
-  const vociBasi = vociDaRapportini(fogliBasi, prestazioni);
+  const { voci, vociBasi } = vociCampateEBasi(delMese, prestazioni);
   const importoCampate = sommaImporti(voci);
   const importoBasi = sommaImporti(vociBasi);
   const importo =
@@ -214,6 +240,81 @@ export function aggregaMese(
     perLinea,
     perGiorno,
     importo,
+  };
+}
+
+export type LineaMeseContabile = LineaContabile & {
+  rapportiniBasi: number;
+  vociBasi: VoceContabile[];
+  importoBasi: number | null;
+  importoTotale: number | null;
+};
+
+export type PrestazioniMese = {
+  mese: string;
+  rapportini: number;
+  perLinea: LineaMeseContabile[];
+  /** Totali del mese su tutte le linee: la somma delle linee, senza doppioni. */
+  voci: VoceContabile[];
+  vociBasi: VoceContabile[];
+  importo: number | null;
+};
+
+/**
+ * Il mese diviso linea per linea, campate e basi tenute distinte come a schermo.
+ * Serve allo scarico unico del tecnico: sommando le linee torna il totale del mese.
+ */
+export function prestazioniMesePerLinea(
+  rapportini: Rapportino[],
+  prestazioni: Prestazione[],
+  linee: Linea[],
+  mese: string,
+): PrestazioniMese {
+  const delMese = rapportiniDelMese(rapportini, mese);
+  const lineeById = new Map(linee.map((l) => [l.id, l]));
+  const perLineaMap = new Map<string, Rapportino[]>();
+  for (const r of delMese) {
+    const list = perLineaMap.get(r.lineaId) ?? [];
+    list.push(r);
+    perLineaMap.set(r.lineaId, list);
+  }
+
+  const perLinea = [...perLineaMap.entries()]
+    .map(([lineaId, items]) => {
+      const linea = lineeById.get(lineaId);
+      const { voci, vociBasi } = vociCampateEBasi(items, prestazioni);
+      const importo = sommaImporti(voci);
+      const importoBasi = sommaImporti(vociBasi);
+      return {
+        lineaId,
+        codiceLinea: linea?.codice ?? lineaId,
+        nomeLinea: linea?.nome ?? "Linea",
+        rapportini: items.filter((r) => !rapportinoELavoroBasi(r, prestazioni)).length,
+        rapportiniBasi: items.filter((r) => rapportinoELavoroBasi(r, prestazioni)).length,
+        voci,
+        vociBasi,
+        importo,
+        importoBasi,
+        importoTotale:
+          importo == null || importoBasi == null ? null : arrotondaEuro(importo + importoBasi),
+      };
+    })
+    .filter((l) => l.voci.length > 0 || l.vociBasi.length > 0)
+    .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
+
+  const totali = vociCampateEBasi(delMese, prestazioni);
+  const importoCampate = sommaImporti(totali.voci);
+  const importoBasi = sommaImporti(totali.vociBasi);
+  return {
+    mese,
+    rapportini: delMese.length,
+    perLinea,
+    voci: totali.voci,
+    vociBasi: totali.vociBasi,
+    importo:
+      importoCampate == null || importoBasi == null
+        ? null
+        : arrotondaEuro(importoCampate + importoBasi),
   };
 }
 
