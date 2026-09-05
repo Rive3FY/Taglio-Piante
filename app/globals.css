@@ -444,6 +444,9 @@ select.inline-field { width: auto; min-width: 160px; }
 .kv-60 { background: #15803d; }
 .kv-altro { background: #64748b; }
 
+.archivio-linea-dettaglio { display: grid; gap: 10px; padding-top: 8px; }
+.archivio-linea-dettaglio p { margin: 0; font-size: 14px; }
+
 .linee-gruppo { gap: 10px; }
 .linee-gruppo-head {
   display: flex;

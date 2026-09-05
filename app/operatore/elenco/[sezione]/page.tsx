@@ -4,6 +4,7 @@ import { use, useEffect } from "react";
 import { notFound, useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
+import { ArchivioPerLinea } from "@/components/ArchivioPerLinea";
 import { RapportiniCalendario } from "@/components/RapportiniCalendario";
 import { confermaECancellaRapportino } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
@@ -40,13 +41,23 @@ export default function ElencoSezionePage({
         <p className="muted">{config.descrizione}</p>
       </div>
 
-      <RapportiniCalendario
-        items={items}
-        linee={linee}
-        hrefFor={(item) => `/operatore/${item.id}`}
-        vuoto={config.vuoto}
-        onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
-      />
+      {config.key === "archiviati" ? (
+        <ArchivioPerLinea
+          items={items}
+          linee={linee}
+          hrefFor={(item) => `/operatore/${item.id}`}
+          vuoto={config.vuoto}
+          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
+        />
+      ) : (
+        <RapportiniCalendario
+          items={items}
+          linee={linee}
+          hrefFor={(item) => `/operatore/${item.id}`}
+          vuoto={config.vuoto}
+          onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
+        />
+      )}
     </>
   );
 }

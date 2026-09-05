@@ -25,6 +25,14 @@ export function quantitaVociBase(item: Pick<Rapportino, "righe">, prestazioni: P
   return [...qty.values()].filter((n) => n > 0);
 }
 
+function quantitaBasiArrotondate(item: Pick<Rapportino, "righe">, prestazioni: Prestazione[]) {
+  return quantitaVociBase(item, prestazioni).map((q) => Math.round(Number(q))).filter((q) => q > 0);
+}
+
+export function haVociBase(item: Pick<Rapportino, "righe">, prestazioni: Prestazione[]) {
+  return quantitaBasiArrotondate(item, prestazioni).length > 0;
+}
+
 /**
  * Quanti numeri distinti ci sono nel box: 22 → 1; 22-23 → 2; 22-23-24-25-26 → 5.
  * Non si espande l’intervallo: 22-26 sono due numeri, non cinque.
@@ -52,15 +60,35 @@ function numeriDiPezzo(pezzo: string) {
 
 /**
  * Basi solo se i numeri nel box coincidono con la quantità in 5.1–5.4
- * (una voce, o la somma). Altrimenti è campata e le basi non la chiudono.
+ * (una voce, o la somma). Si possono aggiungere altre chiamate: restano
+ * sul foglio basi e non chiudono campate.
  */
 export function eLavoroBasi(testo: string, item: Pick<Rapportino, "righe">, prestazioni: Prestazione[]) {
   const n = numeriDaTestoCampata(testo).length;
   if (n === 0) return false;
-  const voci = quantitaVociBase(item, prestazioni).map((q) => Math.round(Number(q)));
+  const voci = quantitaBasiArrotondate(item, prestazioni);
+  if (voci.length === 0) return false;
   if (voci.some((q) => q === n)) return true;
   const somma = voci.reduce((a, b) => a + b, 0);
   return somma === n;
+}
+
+/** 5.1–5.4 senza i numeri giusti nel box: non è né base né campata. */
+export function messaggioIncoerenzaBasi(
+  testo: string,
+  item: Pick<Rapportino, "righe">,
+  prestazioni: Prestazione[],
+) {
+  const voci = quantitaBasiArrotondate(item, prestazioni);
+  if (voci.length === 0) return null;
+  const n = numeriDaTestoCampata(testo).length;
+  if (eLavoroBasi(testo, item, prestazioni)) return null;
+  const somma = voci.reduce((a, b) => a + b, 0);
+  const qtyTxt = voci.length === 1 ? String(voci[0]) : `${voci.join(" + ")} = ${somma}`;
+  if (n === 0) {
+    return `Hai segnato ${qtyTxt} in 5.1–5.4 ma nel box non ci sono i numeri dei sostegni. Per le basi indica i numeri (es. 22) in quantità uguale alla chiamata.`;
+  }
+  return `Hai segnato ${qtyTxt} in 5.1–5.4 e ${n} ${n === 1 ? "sostegno" : "sostegni"} nel box. I numeri devono coincidere: correggi la quantità o i sostegni.`;
 }
 
 export function esitiClassificati(

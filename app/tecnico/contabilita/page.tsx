@@ -98,7 +98,6 @@ export default function ContabilitaPage() {
   const [mese, setMese] = useState(() => mesi[0] ?? oggi.slice(0, 7));
   const [giorno, setGiorno] = useState<string | null>(oggi);
   const [lineaAperta, setLineaAperta] = useState<string | null>(null);
-  const [lineaEstratta, setLineaEstratta] = useState("");
   const [cercaLinea, setCercaLinea] = useState("");
   const [lineaCercataId, setLineaCercataId] = useState("");
   const [mostraAltreLinee, setMostraAltreLinee] = useState(false);
@@ -132,41 +131,42 @@ export default function ContabilitaPage() {
     () => lineeConPrestazioni(rapportini, linee, oggi, prestazioni),
     [rapportini, linee, oggi, prestazioni],
   );
-  const lineaEstrattaId = lineeEstraibili.some((l) => l.lineaId === lineaEstratta)
-    ? lineaEstratta
-    : (lineeEstraibili[0]?.lineaId ?? "");
-  const estratto = useMemo(() => {
-    if (!lineaEstrattaId) return null;
+  const mesePerLinea = useMemo(
+    () => new Map(aggregato.perLinea.map((l) => [l.lineaId, l])),
+    [aggregato.perLinea],
+  );
+  const estrattoAperto = useMemo(() => {
+    if (!lineaAperta) return null;
     return aggregaPrestazioniLinea(
       rapportini,
       prestazioni,
-      linee.find((l) => l.id === lineaEstrattaId),
-      lineaEstrattaId,
+      linee.find((l) => l.id === lineaAperta),
+      lineaAperta,
       oggi,
     );
-  }, [rapportini, prestazioni, linee, lineaEstrattaId, oggi]);
+  }, [rapportini, prestazioni, linee, lineaAperta, oggi]);
 
   const opzioniLineaMese = useMemo(
     () =>
-      aggregato.perLinea.map((l) => ({
+      lineeEstraibili.map((l) => ({
         id: l.lineaId,
         codice: l.codiceLinea,
         nome: l.nomeLinea,
       })),
-    [aggregato.perLinea],
+    [lineeEstraibili],
   );
   const lineeFiltrate = useMemo(() => {
     if (lineaCercataId) {
-      return aggregato.perLinea.filter((l) => l.lineaId === lineaCercataId);
+      return lineeEstraibili.filter((l) => l.lineaId === lineaCercataId);
     }
     const term = cercaLinea.trim().toLowerCase();
-    if (!term) return aggregato.perLinea;
-    return aggregato.perLinea.filter(
+    if (!term) return lineeEstraibili;
+    return lineeEstraibili.filter(
       (l) =>
         l.codiceLinea.toLowerCase().includes(term) ||
         l.nomeLinea.toLowerCase().includes(term),
     );
-  }, [aggregato.perLinea, cercaLinea, lineaCercataId]);
+  }, [lineeEstraibili, cercaLinea, lineaCercataId]);
   const lineeVisibili =
     mostraAltreLinee || lineaCercataId
       ? lineeFiltrate
@@ -217,7 +217,7 @@ export default function ContabilitaPage() {
         </div>
         <div className="panel">
           <span className="muted">Prestazioni con quantità</span>
-          <strong>{aggregato.voci.length}</strong>
+          <strong>{aggregato.voci.length + aggregato.vociBasi.length}</strong>
         </div>
         <div className="panel">
           <span className="muted">Totale</span>
@@ -261,6 +261,19 @@ export default function ContabilitaPage() {
         totale={basiMese.totale}
         perLinea={basiMese.perLinea}
       />
+      <section className="panel">
+        <h2>Prestazioni sulle basi</h2>
+        <p className="muted">
+          Tutto ciò che sta su un foglio basi (5.1–5.4 e le altre chiamate messe insieme) resta
+          qui, fuori dalle torte e dal riepilogo per linea.
+        </p>
+        <TabellaVoci
+          key={`${meseEffettivo}-basi`}
+          voci={aggregato.vociBasi}
+          vuoto="Nessuna prestazione su fogli basi in questo mese."
+          totaleLabel="Totale basi"
+        />
+      </section>
 
       <section className="panel">
         <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>
@@ -289,22 +302,22 @@ export default function ContabilitaPage() {
 
       <section className="panel">
         <h2>Prestazioni del mese</h2>
+        <p className="muted">Solo i fogli campate. Le chiamate messe su un foglio basi stanno sopra, con le basi.</p>
         <TabellaVoci
           key={`${meseEffettivo}-mese`}
           voci={aggregato.voci}
-          vuoto="Nessuna quantità in questo mese."
-          totaleLabel="Totale mese"
+          vuoto="Nessuna quantità di campate in questo mese."
+          totaleLabel="Totale campate"
         />
       </section>
 
       <section className="panel">
         <div className="elenco-head">
           <h2>Per linea</h2>
-          {aggregato.perLinea.length > 0 ? (
+          {lineeEstraibili.length > 0 ? (
             <label className="contab-cerca-linea">
               Cerca linea
               <LineaPicker
-                key={meseEffettivo}
                 linee={opzioniLineaMese}
                 value={lineaCercataId}
                 campo="completa"
@@ -322,15 +335,19 @@ export default function ContabilitaPage() {
             </label>
           ) : null}
         </div>
-        <p className="muted">Le pulizie basi 5.1–5.4 stanno nel grafico Basi, non qui.</p>
-        {aggregato.perLinea.length === 0 ? (
-          <p className="muted">Nessuna linea con rapportini in questo mese.</p>
+        <p className="muted">
+          Tocca una linea per le torte, il totale delle prestazioni confermate fino a oggi e lo
+          scarico Excel. Le basi restano nel riquadro Basi, non qui.
+        </p>
+        {lineeEstraibili.length === 0 ? (
+          <p className="muted">Nessun rapportino confermato da cui vedere le prestazioni.</p>
         ) : lineeFiltrate.length === 0 ? (
           <p className="muted">Nessuna linea trovata.</p>
         ) : (
           <div className="contab-linee">
             {lineeVisibili.map((l) => {
               const aperta = lineaAperta === l.lineaId;
+              const delMese = mesePerLinea.get(l.lineaId);
               return (
                 <div key={l.lineaId}>
                   <button
@@ -347,10 +364,13 @@ export default function ContabilitaPage() {
                     </strong>
                     <span className="muted">
                       {l.rapportini} {l.rapportini === 1 ? "rapportino" : "rapportini"}
-                      {` · ${formatEuro(l.importo)}`}
+                      {l.ultimaData ? ` · ultimo ${formatDate(l.ultimaData)}` : ""}
+                      {delMese
+                        ? ` · ${delMese.rapportini} in ${etichettaMese(meseEffettivo)}`
+                        : ""}
                     </span>
                   </button>
-                  {aperta ? (
+                  {aperta && estrattoAperto?.lineaId === l.lineaId ? (
                     <>
                       <div className="contab-torte">
                         <TortaAvanzamento
@@ -368,10 +388,27 @@ export default function ContabilitaPage() {
                           )}
                         />
                       </div>
+                      <div className="contab-estrai">
+                        <p className="muted" style={{ margin: 0 }}>
+                          Prestazioni fino al {formatDate(oggi)}
+                          {estrattoAperto.importo != null
+                            ? ` · ${formatEuro(estrattoAperto.importo)}`
+                            : ""}
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={estrattoAperto.voci.length === 0}
+                          onClick={() => void scaricaPrestazioniLineaExcel(estrattoAperto, oggi)}
+                        >
+                          Scarica Excel
+                        </button>
+                      </div>
                       <TabellaVoci
-                        key={`${l.lineaId}-voci`}
-                        voci={l.voci}
-                        vuoto="Nessuna quantità su questa linea."
+                        key={`${l.lineaId}-estratto`}
+                        voci={estrattoAperto.voci}
+                        vuoto="Nessuna quantità confermata su questa linea."
+                        totaleLabel="Totale linea"
                       />
                     </>
                   ) : null}
@@ -386,57 +423,6 @@ export default function ContabilitaPage() {
               />
             ) : null}
           </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>Estrazione prestazioni per linea</h2>
-        <p className="muted">
-          Totale delle prestazioni confermate sulla linea scelta, dai rapportini archiviati
-          fino a oggi (i bozza restano fuori). Le pulizie basi 5.1–5.4 restano nel grafico
-          Basi, non in questo file. Il file Excel ha una riga per prestazione, ad esempio il
-          totale dei 2.1 segnati su quella linea.
-        </p>
-        {lineeEstraibili.length === 0 || !estratto ? (
-          <p className="muted">Nessun rapportino confermato da cui estrarre prestazioni.</p>
-        ) : (
-          <>
-            <div className="contab-estrai">
-              <label>
-                Linea
-                <select
-                  value={lineaEstrattaId}
-                  onChange={(e) => setLineaEstratta(e.target.value)}
-                >
-                  {lineeEstraibili.map((l) => (
-                    <option key={l.lineaId} value={l.lineaId}>
-                      {l.codiceLinea} · {l.nomeLinea}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={estratto.voci.length === 0}
-                onClick={() => void scaricaPrestazioniLineaExcel(estratto, oggi)}
-              >
-                Scarica Excel
-              </button>
-            </div>
-            <p className="muted">
-              {estratto.rapportini}{" "}
-              {estratto.rapportini === 1 ? "rapportino" : "rapportini"}
-              {estratto.ultimaData ? ` · ultimo ${formatDate(estratto.ultimaData)}` : ""}
-              {` · fino al ${formatDate(oggi)}`}
-            </p>
-            <TabellaVoci
-              key={`${lineaEstrattaId}-estratto`}
-              voci={estratto.voci}
-              vuoto="Nessuna quantità confermata su questa linea."
-              totaleLabel="Totale linea"
-            />
-          </>
         )}
       </section>
     </>

@@ -17,7 +17,7 @@ import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
-import { eLavoroBasi, esitiClassificati } from "@/lib/campate/basi";
+import { eLavoroBasi, esitiClassificati, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
 import {
   campateGiaTagliateDaFoglio,
   esitiCheToccanoDaNonTagliare,
@@ -178,47 +178,43 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   }, [existing?.id, existing?.rappresentanteDitta, existing?.nOperatori, existing?.updatedAt]);
 
   const testoBox = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata;
-  const qtyHaBase = useMemo(
+  const righeQty = useMemo(
     () =>
-      eLavoroBasi(
-        testoBox,
-        {
-          righe: prestazioni
-            .filter((p) => (qty[p.id] ?? 0) > 0)
-            .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] })),
-        },
-        prestazioni,
-      ),
-    [prestazioni, qty, testoBox],
+      prestazioni
+        .filter((p) => (qty[p.id] ?? 0) > 0)
+        .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] })),
+    [prestazioni, qty],
+  );
+  const qtyHaBase = useMemo(
+    () => eLavoroBasi(testoBox, { righe: righeQty }, prestazioni),
+    [prestazioni, righeQty, testoBox],
+  );
+  const erroreBasi = useMemo(
+    () => messaggioIncoerenzaBasi(testoBox, { righe: righeQty }, prestazioni),
+    [prestazioni, righeQty, testoBox],
   );
 
   const campateBloccate = useMemo(() => {
-    if (qtyHaBase) return [];
-    const righe = prestazioni
-      .filter((p) => (qty[p.id] ?? 0) > 0)
-      .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] }));
+    if (qtyHaBase || erroreBasi) return [];
     return esitiCheToccanoDaNonTagliare(
       campateLinea,
       testoBox,
-      { righe },
+      { righe: righeQty },
       prestazioni,
       esiti.length > 0 ? esiti : undefined,
     );
-  }, [campateLinea, testoBox, prestazioni, qty, esiti, qtyHaBase]);
+  }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi]);
   const erroreDaNonTagliare = messaggioCampateDaNonTagliare(campateBloccate);
   const campateGiaTagliate = useMemo(() => {
-    if (qtyHaBase) return [];
-    const righe = prestazioni
-      .filter((p) => (qty[p.id] ?? 0) > 0)
-      .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] }));
+    if (qtyHaBase || erroreBasi) return [];
     const classificati = esitiClassificati(
       testoBox,
-      { righe },
+      { righe: righeQty },
       prestazioni,
       esiti.length > 0 ? esiti : undefined,
     );
     return campateGiaTagliateDaFoglio(campateLinea, classificati, existing?.id);
-  }, [campateLinea, testoBox, prestazioni, qty, esiti, qtyHaBase, existing?.id]);
+  }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi, existing?.id]);
   const avvisoGiaTagliata = messaggioCampateGiaTagliate(campateGiaTagliate);
 
   const modoPrecompilato = Boolean(
@@ -277,6 +273,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
     if (!campata.trim() && esiti.length === 0) {
       setError("Indica la campata.");
+      return null;
+    }
+    if (erroreBasi) {
+      setError(erroreBasi);
       return null;
     }
     setSaving(true);
@@ -370,6 +370,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       setError("Indica la campata.");
       return;
     }
+    if (erroreBasi) {
+      setError(erroreBasi);
+      return;
+    }
 
     const completo =
       Boolean(dipendenteTerna.trim()) &&
@@ -404,6 +408,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
     if (!campata.trim() && esiti.length === 0) {
       setError("Indica la campata.");
+      return;
+    }
+    if (erroreBasi) {
+      setError(erroreBasi);
       return;
     }
     setPreviewBusy(true);
@@ -481,9 +489,12 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
                 placeholder="Es. 22-23 oppure 22"
               />
             )}
-            {qtyHaBase ? (
+            {erroreBasi ? (
+              <span className="form-error">{erroreBasi}</span>
+            ) : qtyHaBase ? (
               <span className="muted">
-                I numeri coincidono con 5.1–5.4: sono basi, la tabella campate non si tocca.
+                I numeri coincidono con 5.1–5.4: sono basi. Puoi aggiungere altre chiamate, restano
+                in contabilità sulle basi e non toccano le torte.
               </span>
             ) : erroreDaNonTagliare ? (
               <span className="form-error">{erroreDaNonTagliare}</span>
@@ -665,7 +676,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       {dockReady
         ? createPortal(
             <div className="form-actions-dock">
-              <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving || Boolean(erroreDaNonTagliare)}>
+              <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving || Boolean(erroreDaNonTagliare || erroreBasi)}>
                 {saving ? "Salvataggio…" : "Salva"}
               </button>
             </div>,

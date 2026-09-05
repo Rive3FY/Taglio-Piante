@@ -79,7 +79,8 @@ export default function TecnicoBasiPage() {
         <div>
           <h2>Basi</h2>
           <p className="muted">
-            Sostegni puliti quando i numeri nel box coincidono con 5.1–5.4. Tocca una linea per
+            Sostegni puliti quando i numeri nel box coincidono con 5.1–5.4. Sul foglio puoi
+            aggiungere altre chiamate: restano in contabilità sulle basi. Tocca una linea per
             vedere i numeri.
           </p>
         </div>
@@ -98,8 +99,8 @@ export default function TecnicoBasiPage() {
 
       {gruppi.length === 0 ? (
         <p className="muted">
-          Nessuna base tagliata. Compila un rapportino con 5.1–5.4 e lo stesso numero di sostegni nel
-          box.
+          Nessuna base tagliata. Compila un rapportino con 5.1–5.4 e lo stesso numero di sostegni
+          nel box (es. 22 e quantità 1, non 10).
         </p>
       ) : (
         <>

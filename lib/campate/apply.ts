@@ -25,7 +25,7 @@ import {
   rapportinoEChiuso,
 } from "@/lib/types";
 import { idCampataLavoro, chiaveCampata } from "./normalize";
-import { esitiClassificati, isBaseLavoro } from "./basi";
+import { eLavoroBasi, esitiClassificati, haVociBase, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import type { AnteprimaImport } from "./preview";
 import { eliminaPianoAnno, resetOperativoPerImport } from "./reset";
@@ -386,6 +386,8 @@ function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro
 export async function applicaEsitiDaRapportino(item: Rapportino, session: Session | null) {
   if (!rapportinoEChiuso(item.stato)) return;
   const prestazioni = await db.prestazioni.toArray();
+  const testo = testoEsiti(item);
+  if (haVociBase(item, prestazioni) && !eLavoroBasi(testo, item, prestazioni)) return;
   const classificati = esitiDaRapportino(item, prestazioni).filter((e) => e.normalizzata);
   const soloBasi = classificati.some((e) => e.tipo === "base");
   const esiti = soloBasi

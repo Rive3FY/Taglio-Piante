@@ -196,14 +196,24 @@ export function aggregaMese(
     };
   });
 
-  const voci = vociDaRapportini(delMese, prestazioni);
+  const fogliCampate = delMese.filter((r) => !rapportinoELavoroBasi(r, prestazioni));
+  const fogliBasi = delMese.filter((r) => rapportinoELavoroBasi(r, prestazioni));
+  const voci = vociDaRapportini(fogliCampate, prestazioni, { escludiBasi: true });
+  const vociBasi = vociDaRapportini(fogliBasi, prestazioni);
+  const importoCampate = sommaImporti(voci);
+  const importoBasi = sommaImporti(vociBasi);
+  const importo =
+    importoCampate == null || importoBasi == null
+      ? null
+      : arrotondaEuro(importoCampate + importoBasi);
   return {
     mese,
     rapportini: delMese.length,
     voci,
+    vociBasi,
     perLinea,
     perGiorno,
-    importo: sommaImporti(voci),
+    importo,
   };
 }
 

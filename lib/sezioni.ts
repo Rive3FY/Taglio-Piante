@@ -24,7 +24,7 @@ export const SEZIONI: Sezione[] = [
     key: "archiviati",
     kicker: "Chiusi",
     titolo: "Archiviati",
-    descrizione: "Completati e conservati sulla linea.",
+    descrizione: "Completati, raggruppati per linea.",
     vuoto: "Nessun rapportino archiviato.",
     stati: ["archiviato", "in_attesa"],
   },
