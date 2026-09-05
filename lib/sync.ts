@@ -1,6 +1,7 @@
 import { compattaCodaSync, db, enqueueSync, nextNumero } from "@/lib/db";
 import { rapportinoVisibile } from "@/lib/sezioni";
-import type { Session } from "@/lib/types";
+import { readSession } from "@/lib/session";
+import type { Rapportino, Session, SyncQueueItem } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   deleteRemoteRapportino,
@@ -36,13 +37,14 @@ async function allineaStatoSyncRapportino(rapportinoId: string) {
 }
 
 /** Badge «da inviare» senza voci in coda: di solito l’invio c’è già stato, manca solo la spunta. */
-async function riparaRapportiniSenzaCoda(autenticato: boolean) {
+async function riparaRapportiniSenzaCoda(autenticato: boolean, session: Session | null) {
   if (!autenticato) return;
   const inCoda = new Set((await db.syncQueue.toArray()).map((i) => i.rapportinoId));
   const tutti = await db.rapportini.toArray();
   for (const r of tutti) {
     if (r.syncStatus !== "pending" && r.syncStatus !== "error") continue;
     if (inCoda.has(r.id)) continue;
+    if (!rapportinoVisibile(r, session)) continue;
     try {
       await pushRapportino(r);
       await db.rapportini.update(r.id, { syncStatus: "synced" });
@@ -58,10 +60,10 @@ async function riparaRapportiniSenzaCoda(autenticato: boolean) {
  * Si rinumera solo quello non ancora arrivato sul server, così i fogli già
  * consegnati tengono il numero stampato.
  */
-async function risolviNumeriDuplicati(autenticato: boolean) {
-  const tutti = (await db.rapportini.toArray()).sort((a, b) =>
-    (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
-  );
+async function risolviNumeriDuplicati(autenticato: boolean, session: Session | null) {
+  const tutti = (await db.rapportini.toArray())
+    .filter((r) => rapportinoVisibile(r, session))
+    .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const visti = new Map<string, string>();
   let corretti = 0;
 
@@ -105,13 +107,20 @@ export async function processSyncQueue() {
 async function eseguiSyncQueue(): Promise<SyncResult> {
   await compattaCodaSync();
 
+  const profilo = readSession();
+  const fogliLocali = await db.rapportini.toArray();
+  const pendingDiQuestoAccount = async () => {
+    const resto = await db.syncQueue.toArray();
+    return resto.filter((i) => voceCodaDiQuestoAccount(i, profilo, fogliLocali)).length;
+  };
+
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return { processed: 0, pending: await db.syncQueue.count(), pulled: 0, pullError: null };
+    return { processed: 0, pending: await pendingDiQuestoAccount(), pulled: 0, pullError: null };
   }
 
   const autenticato = await supabaseAutenticato();
   if (isSupabaseConfigured() && !autenticato) {
-    const pending = await db.syncQueue.count();
+    const pending = await pendingDiQuestoAccount();
     return {
       processed: 0,
       pending,
@@ -123,18 +132,25 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
     };
   }
 
-  await risolviNumeriDuplicati(autenticato);
+  await risolviNumeriDuplicati(autenticato, profilo);
 
   const falliti = new Set<string>();
+  const saltati = new Set<string>();
   let processed = 0;
 
   while (true) {
-    const items = (await db.syncQueue.orderBy("createdAt").toArray()).filter((i) => !falliti.has(i.id));
+    const items = (await db.syncQueue.orderBy("createdAt").toArray()).filter(
+      (i) => !falliti.has(i.id) && !saltati.has(i.id),
+    );
     if (items.length === 0) break;
 
     for (const item of items) {
       try {
         if (autenticato) {
+          if (!voceCodaDiQuestoAccount(item, profilo, fogliLocali)) {
+            saltati.add(item.id);
+            continue;
+          }
           if (item.action === "delete") {
             await deleteRemoteRapportino(item.rapportinoId);
             await pushCampatePending(item.rapportinoId);
@@ -198,10 +214,22 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
     if (sistemateDopo > 0) await pushCampatePending();
   }
 
-  if (autenticato) await riparaRapportiniSenzaCoda(true);
+  if (autenticato) await riparaRapportiniSenzaCoda(true, profilo);
 
-  const pending = await db.syncQueue.count();
-  return { processed, pending, pulled, pullError };
+  return { processed, pending: await pendingDiQuestoAccount(), pulled, pullError };
+}
+
+/** Coda di un altro account sullo stesso telefono: non si invia e non si conta nel badge. */
+export function voceCodaDiQuestoAccount(
+  item: SyncQueueItem,
+  session: Session | null,
+  rapportini: Rapportino[],
+) {
+  if (item.action === "campate") return true;
+  if (!session || session.ruolo === "tecnico") return true;
+  const foglio = rapportini.find((r) => r.id === item.rapportinoId);
+  if (!foglio) return true;
+  return rapportinoVisibile(foglio, session);
 }
 
 /**

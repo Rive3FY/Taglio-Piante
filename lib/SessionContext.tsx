@@ -82,10 +82,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (annullato) return;
         let auth = data.session;
         if (!auth) {
-          const { data: refreshed } = await withTimeout(supabase.auth.refreshSession(), 3500);
-          auth = refreshed.session ?? null;
+          try {
+            const { data: refreshed } = await withTimeout(supabase.auth.refreshSession(), 3500);
+            auth = refreshed.session ?? null;
+          } catch {
+            auth = null;
+          }
         }
-        if (!auth) return;
+        if (!auth) {
+          // Profilo in locale ma token assente: da online non si sincronizza più.
+          clearSession();
+          setSessionState(null);
+          setOffline(false);
+          return;
+        }
         const profilo = await withTimeout(profiloDaSupabase(auth), 4000);
         if (annullato) return;
         writeSession(profilo);
@@ -136,29 +146,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       ? supabase.auth.onAuthStateChange((event) => {
           if (event !== "SIGNED_OUT") return;
           void (async () => {
-            if (!dispositivoOffline()) {
-              try {
-                const { data: refreshed } = await withTimeout(
-                  supabase.auth.refreshSession(),
-                  3500,
-                );
-                if (refreshed.session) {
-                  const profilo = await withTimeout(profiloDaSupabase(refreshed.session), 4000);
-                  writeSession(profilo);
-                  setSessionState(profilo);
-                  setOffline(false);
-                  return;
-                }
-              } catch {
-                // token non rinnovabile: si prosegue con la copia locale
+            if (dispositivoOffline()) {
+              const cache = readSession();
+              if (cache) {
+                setSessionState(cache);
+                setOffline(true);
               }
-            }
-            const cache = readSession();
-            if (cache) {
-              setSessionState(cache);
-              setOffline(true);
               return;
             }
+            try {
+              const { data: refreshed } = await withTimeout(
+                supabase.auth.refreshSession(),
+                3500,
+              );
+              if (refreshed.session) {
+                const profilo = await withTimeout(profiloDaSupabase(refreshed.session), 4000);
+                writeSession(profilo);
+                setSessionState(profilo);
+                setOffline(false);
+                return;
+              }
+            } catch {
+              // token non rinnovabile: con rete si torna al login, i dati Dexie restano
+            }
+            clearSession();
             setSessionState(null);
             setOffline(false);
           })();

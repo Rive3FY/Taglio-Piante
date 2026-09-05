@@ -12,14 +12,10 @@ import {
 export function TecnicoNav() {
   const pathname = usePathname();
   const da = useSearchParams().get("da");
-  const [aperto, setAperto] = useState<string | null>(
-    () => TECNICO_GRUPPI.find((g) => tecnicoGruppoAperto(g, pathname, da))?.id ?? null,
-  );
+  const [aperto, setAperto] = useState<string | null>(null);
 
   useEffect(() => {
-    const attivo = TECNICO_GRUPPI.find((g) => tecnicoGruppoAperto(g, pathname, da))?.id;
-    if (!attivo) return;
-    setAperto(attivo);
+    setAperto(null);
   }, [pathname, da]);
 
   function toggle(id: string) {

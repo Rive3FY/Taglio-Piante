@@ -1,5 +1,6 @@
+import { unisciCampataLocaleRemoto } from "@/lib/campate/merge";
 import { db } from "@/lib/db";
-import type { Rapportino } from "@/lib/types";
+import type { CampataLavoro, Rapportino } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
   campataLavoroToRow,
@@ -23,8 +24,11 @@ import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 const LAST_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
 const PULL_OVERLAP_MS = 5 * 60 * 1000;
+const PULL_PAGE = 1000;
+let lastReferencePullAt = 0;
 
 export function clearPullCursor() {
+  lastReferencePullAt = 0;
   if (typeof window !== "undefined") localStorage.removeItem(LAST_PULL_KEY);
 }
 
@@ -218,6 +222,35 @@ async function pushCampateEliminate() {
   await db.campateDeleteQueue.bulkDelete(ids);
 }
 
+async function fetchCampateRemoteByIds(ids: string[]) {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return new Map<string, CampataLavoro>();
+
+  const out = new Map<string, CampataLavoro>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const slice = ids.slice(i, i + 200);
+    const { data, error } = await supabase.from("campate_lavoro").select("*").in("id", slice);
+    if (error) throw new Error(messaggioErroreSupabase(error.message));
+    for (const row of data ?? []) {
+      const campata = rowToCampataLavoro(row as Parameters<typeof rowToCampataLavoro>[0]);
+      out.set(campata.id, campata);
+    }
+  }
+  return out;
+}
+
+async function fogliInCancellazione() {
+  const ids = new Set<string>();
+  try {
+    for (const q of await db.syncQueue.toArray()) {
+      if (q.action === "delete") ids.add(q.rapportinoId);
+    }
+  } catch {
+    // coda non disponibile: si unisce senza quel segnale
+  }
+  return ids;
+}
+
 export async function pushCampatePending(rapportinoId?: string) {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -232,14 +265,22 @@ export async function pushCampatePending(rapportinoId?: string) {
     .toArray();
 
   if (rows.length > 0) {
+    const remote = await fetchCampateRemoteByIds(rows.map((c) => c.id));
+    const fogliEliminati = await fogliInCancellazione();
+    if (rapportinoId) fogliEliminati.add(rapportinoId);
+    const daInviare = rows.map((locale) => {
+      const altro = remote.get(locale.id);
+      return altro ? unisciCampataLocaleRemoto(locale, altro, { fogliEliminati }) : locale;
+    });
+
     // Senza da_non_tagliare il tecnico vedrebbe la campata come normale, senza
     // rinvio_mese o attenzionare la riga sparirebbe dall'elenco parallelo: meglio
     // fallire con un messaggio chiaro che perdere il segno in silenzio.
-    await upsertCampateLavoro(rows.map(campataLavoroToRow), {
+    await upsertCampateLavoro(daInviare.map(campataLavoroToRow), {
       vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"],
     });
 
-    const ids = new Set(rows.map((c) => c.id));
+    const ids = new Set(daInviare.map((c) => c.id));
     const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
     if (storico.length > 0) {
       try {
@@ -254,8 +295,8 @@ export async function pushCampatePending(rapportinoId?: string) {
     }
 
     const now = new Date().toISOString();
-    for (const c of rows) {
-      await db.campateLavoro.update(c.id, { syncStatus: "synced", updatedAt: now });
+    for (const c of daInviare) {
+      await db.campateLavoro.put({ ...c, syncStatus: "synced", updatedAt: now });
     }
   }
 
@@ -274,20 +315,23 @@ export async function pullRapportini() {
   const lastPull =
     typeof window !== "undefined" ? localStorage.getItem(LAST_PULL_KEY) : null;
 
-  let query = supabase
-    .from("rapportini")
-    .select("*")
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: true });
-
-  if (lastPull) {
-    query = query.gte("updated_at", pullCursorWithOverlap(lastPull));
+  const rows: RapportinoRow[] = [];
+  for (let from = 0; ; from += PULL_PAGE) {
+    let query = supabase
+      .from("rapportini")
+      .select("*")
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: true })
+      .range(from, from + PULL_PAGE - 1);
+    if (lastPull) {
+      query = query.gte("updated_at", pullCursorWithOverlap(lastPull));
+    }
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as RapportinoRow[];
+    rows.push(...page);
+    if (page.length < PULL_PAGE) break;
   }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const rows = (data ?? []) as RapportinoRow[];
   let merged = 0;
   let newest = lastPull;
 
@@ -346,9 +390,6 @@ export async function pullDeletedRapportini() {
   await db.rapportini.bulkDelete(daTogliere);
   return daTogliere.length;
 }
-
-let lastReferencePullAt = 0;
-const PULL_PAGE = 1000;
 
 /** PostgREST restituisce al massimo ~1000 righe a chiamata: senza pagine si perdono campate. */
 async function fetchAllRows(tabella: string) {
@@ -451,15 +492,23 @@ export async function pullCampateLavoro() {
   if (remote.length > 0) {
     const idsRemoti = new Set(remote.map((c) => c.id));
     const locali = await db.campateLavoro.toArray();
+    const localiById = new Map(locali.map((c) => [c.id, c]));
     const daRimuovere = locali
       .filter((c) => c.syncStatus === "synced" && !idsRemoti.has(c.id) && !tombstones.has(c.id))
       .map((c) => c.id);
     if (daRimuovere.length > 0) await db.campateLavoro.bulkDelete(daRimuovere);
 
-    const pendingIds = new Set(
-      locali.filter((c) => c.syncStatus === "pending" || c.syncStatus === "error").map((c) => c.id),
-    );
-    const daScrivere = remote.filter((c) => !tombstones.has(c.id) && !pendingIds.has(c.id));
+    const fogliEliminati = await fogliInCancellazione();
+    const daScrivere: CampataLavoro[] = [];
+    for (const altra of remote) {
+      if (tombstones.has(altra.id)) continue;
+      const locale = localiById.get(altra.id);
+      if (locale && (locale.syncStatus === "pending" || locale.syncStatus === "error")) {
+        daScrivere.push(unisciCampataLocaleRemoto(locale, altra, { fogliEliminati }));
+        continue;
+      }
+      daScrivere.push(altra);
+    }
     if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
   }
 
@@ -536,5 +585,18 @@ export async function supabaseAutenticato() {
   const supabase = getSupabase();
   if (!supabase) return false;
   const { data } = await supabase.auth.getSession();
-  return Boolean(data.session);
+  let session = data.session;
+  const inScadenza =
+    !session || (session.expires_at != null && session.expires_at * 1000 < Date.now() + 60_000);
+  if (inScadenza) {
+    try {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      session = refreshed.session ?? session;
+    } catch {
+      // resta la sessione che c’è, se ancora valida
+    }
+  }
+  if (!session) return false;
+  if (session.expires_at != null && session.expires_at * 1000 < Date.now()) return false;
+  return true;
 }

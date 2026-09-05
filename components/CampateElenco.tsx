@@ -703,14 +703,34 @@ export function CampateElenco({
       <div className="grid-2">
         <label>
           Linea
-          <select value={linea} onChange={(e) => setLinea(e.target.value)}>
-            <option value="">Tutte le linee</option>
-            {lineeOpzioni.map(([cod, nome]) => (
-              <option key={cod} value={cod}>
-                {cod} · {nome}
-              </option>
-            ))}
-          </select>
+          <div className="filtro-linea-riga">
+            <select
+              value={linea}
+              onChange={(e) => {
+                setLinea(e.target.value);
+                setVisibili(40);
+              }}
+            >
+              <option value="">Tutte le linee</option>
+              {lineeOpzioni.map(([cod, nome]) => (
+                <option key={cod} value={cod}>
+                  {cod} · {nome}
+                </option>
+              ))}
+            </select>
+            {linea ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setLinea("");
+                  setVisibili(40);
+                }}
+              >
+                Togli
+              </button>
+            ) : null}
+          </div>
         </label>
         <label>
           Operatore
@@ -755,15 +775,6 @@ export function CampateElenco({
           Scarica vista
         </button>
       </div>
-
-      {ruolo === "operatore" && linea ? (
-        <Link
-          href={`/operatore/nuovo?linea=${encodeURIComponent(campate.find((c) => c.codiceLinea === linea)?.lineaId ?? "")}`}
-          className="btn btn-primary"
-        >
-          Rapportino precompilato su {linea}
-        </Link>
-      ) : null}
 
       {filtrate.length === 0 ? (
         <p className="muted">

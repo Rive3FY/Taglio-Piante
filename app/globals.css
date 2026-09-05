@@ -193,6 +193,13 @@ input[type="date"] { min-width: 0; }
 textarea { resize: vertical; }
 
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.filtro-linea-riga {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.filtro-linea-riga select { flex: 1 1 auto; min-width: 0; }
+.filtro-linea-riga .btn { flex: none; }
 .scheda-head, .scheda-foot, .scheda-print-head, .scheda-print-foot {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
@@ -318,6 +325,8 @@ select.inline-field { width: auto; min-width: 160px; }
   display: grid;
   gap: 10px;
   min-height: 0;
+  width: min(100%, 820px);
+  margin-inline: auto;
 }
 .scheda-pagine img {
   width: 100%;
@@ -596,12 +605,18 @@ select.inline-field { width: auto; min-width: 160px; }
 }
 .archivio-anteprima strong { font-size: 13px; }
 .archivio-anteprima span { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.sheet-wrap {
+  width: min(820px, 100%);
+  margin-inline: auto;
+}
 .scheda-overlay .sheet-wrap {
   min-height: 0;
   height: 100%;
   overflow: auto;
   display: grid;
   grid-template-rows: auto 1fr;
+  width: min(820px, 100%);
+  justify-self: center;
 }
 .scheda-overlay .scheda-frame { min-height: min(70vh, 780px); }
 
@@ -1304,6 +1319,17 @@ button.rap-card-link {
   .contab-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campate-table { min-width: 940px; }
   .campate-table th, .campate-table td { padding: 10px 8px; }
+}
+
+@media (min-width: 900px) {
+  .scheda-overlay {
+    padding: 20px 32px 28px;
+    justify-items: center;
+  }
+  .scheda-overlay-bar {
+    width: min(820px, 100%);
+    justify-self: center;
+  }
 }
 
 @media (min-width: 960px) {
