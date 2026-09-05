@@ -3,33 +3,9 @@
 import { fillOfficialScheda } from "./fillScheda";
 import type { Linea, Prestazione, Rapportino } from "./types";
 
-type PdfPage = {
-  getViewport: (opts: { scale: number }) => { width: number; height: number };
-  render: (opts: {
-    canvasContext: CanvasRenderingContext2D;
-    viewport: { width: number; height: number };
-  }) => { promise: Promise<void> };
-};
-
-type PdfDoc = {
-  numPages: number;
-  getPage: (n: number) => Promise<PdfPage>;
-};
-
-type PdfjsApi = {
-  getDocument?: (opts: { data: Uint8Array; useSystemFonts?: boolean }) => {
-    promise: Promise<PdfDoc>;
-  };
-  GlobalWorkerOptions?: { workerSrc: string };
-  default?: PdfjsApi;
-};
-
 async function loadPdfjs() {
-  const mod = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfjsApi;
-  const pdfjs = typeof mod.getDocument === "function" ? mod : (mod.default ?? mod);
-  if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-  }
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
   return pdfjs;
 }
 
@@ -51,13 +27,9 @@ function canvasToBlobUrl(canvas: HTMLCanvasElement) {
 
 export async function pagineDaPdf(bytes: Uint8Array) {
   const pdfjs = await loadPdfjs();
-  const getDocument = pdfjs.getDocument;
-  if (typeof getDocument !== "function") {
-    throw new Error("Lettore PDF non disponibile. Aggiorna l’app e riprova.");
-  }
   const data = new Uint8Array(bytes.byteLength);
   data.set(bytes);
-  const doc = await getDocument({ data, useSystemFonts: true }).promise;
+  const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
   const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1.5;
   const targetCssWidth =
     typeof window !== "undefined" ? Math.min(window.innerWidth - 24, 820) : 820;
