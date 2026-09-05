@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, enqueueSync, nextNumero } from "@/lib/db";
 import { formatDate, todayIso, uid } from "@/lib/format";
-import { officialSchedaObjectUrl } from "@/lib/fillScheda";
+import { RapportinoSheet } from "./RapportinoSheet";
 import { matchOperatore } from "@/lib/operatori";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
@@ -108,11 +108,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Rapportino | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
-  useDialogBack(Boolean(previewUrl), () => setPreviewUrl(null));
+  useDialogBack(Boolean(preview), () => setPreview(null));
   const [dockReady, setDockReady] = useState(false);
-  const previewBlobRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!chiedeFirma) return;
@@ -128,19 +127,16 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
 
   useEffect(() => {
     setDockReady(true);
-    return () => {
-      if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
-    };
   }, []);
 
   useEffect(() => {
-    if (!previewUrl) return;
+    if (!preview) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPreviewUrl(null);
+      if (e.key === "Escape") setPreview(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [previewUrl]);
+  }, [preview]);
 
   // La firma TERNA arriva dal profilo di chi è indicato come dipendente.
   const firmaProfilo = useMemo(
@@ -457,22 +453,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
-    try {
-      const url = await officialSchedaObjectUrl({ item: draft, linea, prestazioni });
-      if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
-      previewBlobRef.current = url;
-      const opened = window.open(url, "_blank");
-      if (opened) {
-        setPreviewUrl(null);
-        opened.focus();
-      } else {
-        setPreviewUrl(url);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossibile preparare il foglio.");
-    } finally {
-      setPreviewBusy(false);
-    }
+    setPreview(draft);
+    setPreviewBusy(false);
   }
 
   return (
@@ -707,7 +689,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           )
         : null}
 
-      {dockReady && previewUrl
+      {dockReady && preview
         ? createPortal(
             <div
               className="scheda-overlay"
@@ -716,11 +698,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               aria-label="Foglio ufficiale"
             >
               <div className="scheda-overlay-bar">
-                <button type="button" className="btn btn-secondary" onClick={() => setPreviewUrl(null)}>
+                <button type="button" className="btn btn-secondary" onClick={() => setPreview(null)}>
                   Chiudi
                 </button>
               </div>
-              <iframe title="Foglio ufficiale scheda taglio piante" src={previewUrl} />
+              <RapportinoSheet item={preview} linea={linea} prestazioni={prestazioni} />
             </div>,
             document.body,
           )

@@ -2,8 +2,30 @@
 
 import { useEffect, useState } from "react";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
-import { downloadOfficialScheda, officialSchedaObjectUrl } from "@/lib/fillScheda";
+import { downloadOfficialScheda } from "@/lib/fillScheda";
+import { officialSchedaPagine } from "@/lib/renderScheda";
 import { StatoBadge } from "./StatusBadge";
+
+function chiaveScheda(item: Rapportino, linea?: Linea, prestazioni: Prestazione[] = []) {
+  const qty = (item.righe ?? []).map((r) => `${r.prestazioneId}:${r.quantita}`).join(",");
+  return [
+    item.id,
+    item.updatedAt,
+    item.numero,
+    item.campata,
+    item.dataLavoro,
+    item.ditta,
+    item.rappresentanteDitta,
+    item.dipendenteTerna,
+    item.nOperatori,
+    item.stato,
+    item.firmaOperatore?.length ?? 0,
+    item.firmaTerna?.length ?? 0,
+    linea?.id ?? "",
+    prestazioni.length,
+    qty,
+  ].join("|");
+}
 
 export function RapportinoSheet({
   item,
@@ -14,32 +36,35 @@ export function RapportinoSheet({
   linea?: Linea;
   prestazioni: Prestazione[];
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [pagine, setPagine] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const chiave = chiaveScheda(item, linea, prestazioni);
 
   useEffect(() => {
-    let revoked: string | null = null;
+    let revoked: string[] = [];
     let cancelled = false;
+    setError(null);
     (async () => {
       try {
-        const next = await officialSchedaObjectUrl({ item, linea, prestazioni });
+        const next = await officialSchedaPagine({ item, linea, prestazioni });
         if (cancelled) {
-          URL.revokeObjectURL(next);
+          next.forEach((u) => URL.revokeObjectURL(u));
           return;
         }
         revoked = next;
-        setUrl(next);
-        setError(null);
+        setPagine(next);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Errore nel foglio.");
       }
     })();
     return () => {
       cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
+      revoked.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [item, linea, prestazioni]);
+    // item/linea/prestazioni si rileggono da Dexie: la chiave evita di rifare il PDF a ogni render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chiave]);
 
   async function download() {
     setBusy(true);
@@ -59,11 +84,12 @@ export function RapportinoSheet({
         </button>
       </div>
       {error ? <p className="form-error">{error}</p> : null}
-      {url ? (
-        <iframe title="Foglio ufficiale scheda taglio piante" className="scheda-frame" src={url} />
-      ) : (
-        <p className="muted">Preparazione foglio ufficiale…</p>
-      )}
+      {pagine.length === 0 && !error ? <p className="muted">Preparazione anteprima…</p> : null}
+      <div className="scheda-pagine">
+        {pagine.map((src, i) => (
+          <img key={src} src={src} alt={`Foglio ufficiale pagina ${i + 1}`} />
+        ))}
+      </div>
     </div>
   );
 }
