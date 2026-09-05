@@ -4,7 +4,11 @@
  * Voci in mq (1.1 / 1.2 / 1.3 / 1.5): sul rapportino si indicano i metri quadri,
  * il prezzo è ogni 100 mq → importo = (mq / 100) × prezzo, arrotondato a 2 decimali.
  * 1.4: prezzo al metro. 6.1 / 6.2: prezzo al metro cubo.
+ * I prezzi si possono cambiare da Report → Prezzi; restano su questo dispositivo.
  */
+const KEY = "rt.listino";
+const EVENTO = "listino-aggiornato";
+
 export const LISTINO: Record<string, number> = {
   "1.1": 20.8,
   "1.2": 16.64,
@@ -36,9 +40,55 @@ export const LISTINO: Record<string, number> = {
   "6.3": 0.15,
 };
 
+function leggiSovrascritte(): Record<string, number> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const [codice, valore] of Object.entries(parsed)) {
+      const n = typeof valore === "number" ? valore : Number(valore);
+      if (Number.isFinite(n) && n >= 0) out[codice] = arrotondaEuro(n);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function listinoEffettivo(): Record<string, number> {
+  return { ...LISTINO, ...leggiSovrascritte() };
+}
+
 export function prezzoChiamata(codice: string) {
-  const n = LISTINO[codice];
+  const n = listinoEffettivo()[codice];
   return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+export function parsePrezzo(raw: string) {
+  const n = Number(raw.trim().replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return arrotondaEuro(n);
+}
+
+export function salvaListino(prezzi: Record<string, number>) {
+  const puliti: Record<string, number> = {};
+  for (const [codice, n] of Object.entries(prezzi)) {
+    if (typeof n === "number" && Number.isFinite(n) && n >= 0) puliti[codice] = arrotondaEuro(n);
+  }
+  localStorage.setItem(KEY, JSON.stringify(puliti));
+  window.dispatchEvent(new Event(EVENTO));
+}
+
+export function ripristinaListinoContratto() {
+  localStorage.removeItem(KEY);
+  window.dispatchEvent(new Event(EVENTO));
+}
+
+export function listinoDiversoDalContratto() {
+  const attuale = listinoEffettivo();
+  return Object.keys({ ...LISTINO, ...attuale }).some((codice) => attuale[codice] !== LISTINO[codice]);
 }
 
 export function arrotondaEuro(n: number) {

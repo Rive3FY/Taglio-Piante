@@ -12,24 +12,24 @@ import {
 export function TecnicoNav() {
   const pathname = usePathname();
   const da = useSearchParams().get("da");
-  const [aperti, setAperti] = useState<string[]>(() =>
-    TECNICO_GRUPPI.filter((g) => tecnicoGruppoAperto(g, pathname, da)).map((g) => g.id),
+  const [aperto, setAperto] = useState<string | null>(
+    () => TECNICO_GRUPPI.find((g) => tecnicoGruppoAperto(g, pathname, da))?.id ?? null,
   );
 
   useEffect(() => {
     const attivo = TECNICO_GRUPPI.find((g) => tecnicoGruppoAperto(g, pathname, da))?.id;
     if (!attivo) return;
-    setAperti((cur) => (cur.includes(attivo) ? cur : [...cur, attivo]));
+    setAperto(attivo);
   }, [pathname, da]);
 
   function toggle(id: string) {
-    setAperti((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setAperto((cur) => (cur === id ? null : id));
   }
 
   return (
     <nav className="tech-nav" aria-label="Sezioni area tecnico">
       {TECNICO_GRUPPI.map((gruppo) => {
-        const open = aperti.includes(gruppo.id);
+        const open = aperto === gruppo.id;
         const nelGruppo = tecnicoGruppoAperto(gruppo, pathname, da);
         return (
           <div key={gruppo.id} className="tech-nav-gruppo">

@@ -906,6 +906,18 @@ button.rap-card-link {
 }
 .contab-kpi .panel { gap: 4px; }
 .contab-kpi strong { font-size: 22px; }
+.prezzo-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.prezzo-input {
+  width: 7.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.prezzo-riga-mod td { background: #fff7ed; }
 .contab-cal {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

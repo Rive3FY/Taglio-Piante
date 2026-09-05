@@ -28,7 +28,7 @@ export default function TecnicoFogliPage() {
 
   return (
     <>
-      <h2>Fogli</h2>
+      <h2>Rapportini</h2>
       <div className="chip-row">
         <button
           type="button"
