@@ -282,7 +282,7 @@ export function lineeConPrestazioni(
   rapportini: Rapportino[],
   linee: Linea[],
   finoA: string,
-  prestazioni: Prestazione[] = [],
+  _prestazioni: Prestazione[] = [],
 ) {
   const usati = rapportiniContabiliFinoA(rapportini, finoA);
   const lineeById = new Map(linee.map((l) => [l.id, l]));
@@ -290,9 +290,7 @@ export function lineeConPrestazioni(
   return ids
     .map((id) => {
       const linea = lineeById.get(id);
-      const dellaLinea = usati.filter(
-        (r) => r.lineaId === id && !rapportinoELavoroBasi(r, prestazioni),
-      );
+      const dellaLinea = usati.filter((r) => r.lineaId === id);
       if (dellaLinea.length === 0) return null;
       const ultima = dellaLinea.reduce(
         (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
@@ -317,10 +315,8 @@ export function aggregaPrestazioniLinea(
   lineaId: string,
   finoA: string,
 ): LineaContabile & { ultimaData: string } {
-  const items = rapportiniContabiliFinoA(rapportini, finoA).filter(
-    (r) => r.lineaId === lineaId && !rapportinoELavoroBasi(r, prestazioni),
-  );
-  const voci = vociDaRapportini(items, prestazioni, { escludiBasi: true });
+  const items = rapportiniContabiliFinoA(rapportini, finoA).filter((r) => r.lineaId === lineaId);
+  const voci = vociDaRapportini(items, prestazioni);
   const ultimaData = items.reduce(
     (max, r) => (r.dataLavoro > max ? r.dataLavoro : max),
     items[0]?.dataLavoro ?? "",

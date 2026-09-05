@@ -22,7 +22,6 @@ export const TECNICO_GRUPPI: TecnicoGruppo[] = [
     label: "Rapportini",
     links: [
       { href: "/tecnico/fogli", label: "Archivio" },
-      { href: "/tecnico/per-linea", label: "Per linea" },
     ],
   },
   {
@@ -56,18 +55,12 @@ export function tecnicoLinkAttivo(href: string, pathname: string, da?: string | 
     );
   }
   if (href === "/tecnico/fogli") {
-    if (pathname.startsWith("/tecnico/rapportini/")) return da !== "per-linea";
     return (
       pathname.startsWith("/tecnico/fogli") ||
       pathname.startsWith("/tecnico/bozze") ||
-      pathname.startsWith("/tecnico/archiviati")
-    );
-  }
-  if (href === "/tecnico/per-linea") {
-    return (
+      pathname.startsWith("/tecnico/archiviati") ||
       pathname.startsWith("/tecnico/per-linea") ||
-      pathname.startsWith("/tecnico/linee/") ||
-      (pathname.startsWith("/tecnico/rapportini/") && da === "per-linea")
+      pathname.startsWith("/tecnico/rapportini/")
     );
   }
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -80,7 +73,6 @@ export function tecnicoGruppoAperto(gruppo: TecnicoGruppo, pathname: string, da?
 export function tecnicoBackHref(pathname: string, da?: string | null) {
   if (pathname === "/tecnico") return undefined;
   if (pathname.startsWith("/tecnico/rapportini/")) {
-    if (da === "per-linea") return "/tecnico/per-linea";
     if (da === "bozze") return "/tecnico/fogli?s=bozze";
     return "/tecnico/fogli?s=archiviati";
   }

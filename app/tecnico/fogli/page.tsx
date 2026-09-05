@@ -51,11 +51,7 @@ export default function TecnicoFogliPage() {
         linee={linee}
         hrefFor={(item) => `/tecnico/rapportini/${item.id}?da=${key}`}
         vuoto={config.vuoto}
-        onDelete={
-          key === "bozze"
-            ? (item) => void confermaECancellaRapportino(item.id, item.numero)
-            : undefined
-        }
+        onDelete={(item) => void confermaECancellaRapportino(item.id, item.numero)}
       />
     </>
   );

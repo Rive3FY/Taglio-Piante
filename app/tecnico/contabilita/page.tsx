@@ -338,7 +338,7 @@ export default function ContabilitaPage() {
         <p className="muted">
           Totale delle prestazioni confermate sulla linea, dai rapportini archiviati fino a oggi
           (le bozze restano fuori). Tocca una linea per le torte, la tabella e lo scarico Excel.
-          I fogli basi restano nel riquadro Basi, non qui e non nel file.
+          Nel file e in tabella ci sono anche le prestazioni dei fogli basi.
         </p>
         {lineeEstraibili.length === 0 ? (
           <p className="muted">Nessun rapportino confermato da cui vedere le prestazioni.</p>
