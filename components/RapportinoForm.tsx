@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, enqueueSync, nextNumero } from "@/lib/db";
 import { formatDate, todayIso, uid } from "@/lib/format";
@@ -12,6 +12,7 @@ import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import type { CampataLavoro, Ditta, Linea, Operatore, Prestazione, Rapportino, RapportinoCampata, RapportinoRiga } from "@/lib/types";
 import { rapportinoEChiuso } from "@/lib/types";
+import { haFirmaDitta } from "@/lib/rapportinoFirma";
 import { LineaPicker } from "./LineaPicker";
 import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
@@ -43,6 +44,9 @@ type Props = {
 
 export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCampataId }: Props) {
   const router = useRouter();
+  const search = useSearchParams();
+  const chiedeFirma = search.get("firma") === "ditta";
+  const firmaBloccoRef = useRef<HTMLElement | null>(null);
   const { session } = useSession();
   const { syncNow } = useSync();
   const [squadraTick, setSquadraTick] = useState(0);
@@ -109,6 +113,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   useDialogBack(Boolean(previewUrl), () => setPreviewUrl(null));
   const [dockReady, setDockReady] = useState(false);
   const previewBlobRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!chiedeFirma) return;
+    firmaBloccoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [chiedeFirma]);
 
   useEffect(() => {
     if (operatori.length === 0) return;
@@ -335,7 +344,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         presoDa: extra.presoDa ?? existing?.presoDa ?? session?.nome,
         presoAt: extra.presoAt ?? existing?.presoAt,
         inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,
-        archiviatoAt: extra.archiviatoAt ?? existing?.archiviatoAt,
+        archiviatoAt: stato === "bozza" ? undefined : extra.archiviatoAt ?? existing?.archiviatoAt,
       };
       await db.rapportini.put(record);
       await enqueueSync(
@@ -375,13 +384,16 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       return;
     }
 
-    const completo =
+    const campiBase =
       Boolean(dipendenteTerna.trim()) &&
       Boolean(effectiveDitta.trim()) &&
       prestazioni.some((p) => (qty[p.id] ?? 0) > 0);
+    const conFirma = campiBase && haFirmaDitta(firmaOperatore);
 
-    if (!completo) {
-      const stato = rapportinoEChiuso(existing?.stato) ? "archiviato" : "bozza";
+    if (!conFirma) {
+      const stato = rapportinoEChiuso(existing?.stato) && haFirmaDitta(existing?.firmaOperatore)
+        ? "archiviato"
+        : "bozza";
       const saved = await persist(stato);
       if (!saved) return;
       if (!existing) {
@@ -389,7 +401,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`,
         );
       }
-      setOkMsg("Salvato in locale. Completa ditta, dipendente TERNA e almeno una quantità per inviarlo.");
+      setOkMsg(
+        campiBase
+          ? "Salvato in bozza: manca la firma della ditta. Senza quella il foglio non va in archivio."
+          : "Salvato in locale. Completa ditta, dipendente TERNA, la firma della ditta e almeno una quantità per archiviarlo.",
+      );
       return;
     }
 
@@ -633,6 +649,12 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
                 </label>
               )}
             </div>
+            <div
+              ref={(el) => {
+                firmaBloccoRef.current = el;
+              }}
+              className={chiedeFirma ? "firma-ditta-focus" : undefined}
+            >
             {dipendenteTerna && !firmaProfilo ? (
               <p className="muted">
                 Manca la firma nel profilo di {dipendenteTerna}: sul foglio ufficiale non comparirà.
@@ -640,16 +662,17 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               </p>
             ) : (
               <p className="muted">
-                La firma TERNA si mette da sola dal profilo dell’operatore. Qui serve solo quella della
-                ditta.
+                La firma TERNA si mette da sola dal profilo dell’operatore. Qui serve quella della
+                ditta: senza non si archivia, resta in bozza.
               </p>
             )}
             <SignaturePad
               label="Il Designato Ditta"
-              hint="Compare sul foglio ufficiale."
+              hint="Obbligatoria per archiviare. Compare sul foglio ufficiale."
               value={firmaOperatore}
               onChange={setFirmaOperatore}
             />
+            </div>
             <button
               type="button"
               className="btn btn-ghost"

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { RapportiniCalendario } from "@/components/RapportiniCalendario";
+import { ArchivioPerLinea } from "@/components/ArchivioPerLinea";
 import { confermaECancellaRapportino } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
 import { rapportiniDellaSezione, sezioneDa, type SezioneKey } from "@/lib/sezioni";
@@ -45,7 +45,7 @@ export default function TecnicoFogliPage() {
           Archiviati <span className="chip-count">{conteggi.archiviati}</span>
         </button>
       </div>
-      <RapportiniCalendario
+      <ArchivioPerLinea
         key={key}
         items={items}
         linee={linee}

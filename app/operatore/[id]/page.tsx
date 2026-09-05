@@ -11,6 +11,7 @@ import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
 import { useSession } from "@/lib/SessionContext";
 import { rapportinoVisibile } from "@/lib/sezioni";
 import { rapportinoEChiuso } from "@/lib/types";
+import { haFirmaDitta, riportaInBozzaSeMancaFirma } from "@/lib/rapportinoFirma";
 
 export default function OperatoreRapportinoPage({
   params,
@@ -24,6 +25,11 @@ export default function OperatoreRapportinoPage({
   const item = useLiveQuery(() => db.rapportini.get(id), [id]);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
+
+  useEffect(() => {
+    if (!item || !rapportinoEChiuso(item.stato) || haFirmaDitta(item.firmaOperatore)) return;
+    void riportaInBozzaSeMancaFirma(item).then(() => syncNow());
+  }, [item, syncNow]);
 
   useEffect(() => {
     if (!item || item.stato !== "da_prendere" || !session) return;
@@ -43,7 +49,7 @@ export default function OperatoreRapportinoPage({
     return <p className="muted">Questo rapportino è di un altro operatore.</p>;
   }
 
-  const readOnly = rapportinoEChiuso(item.stato);
+  const readOnly = rapportinoEChiuso(item.stato) && haFirmaDitta(item.firmaOperatore);
 
   return (
     <>

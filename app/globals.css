@@ -295,6 +295,35 @@ select.inline-field { width: auto; min-width: 160px; }
 .scheda-overlay-bar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.firma-ditta-overlay {
+  grid-template-rows: auto 1fr auto;
+}
+.firma-ditta-overlay .sheet-wrap {
+  min-height: 0;
+}
+.firma-ditta-overlay .scheda-frame {
+  min-height: min(38vh, 360px);
+}
+.firma-ditta-dock {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+}
+.firma-ditta-dock .sign-frame { height: 140px; }
+.firma-ditta-dock .btn-primary { width: 100%; }
+.firma-ditta-focus {
+  border-radius: 12px;
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+}
+.rap-card-manca-firma {
+  color: #b45309;
+  font-weight: 700;
 }
 .scheda-overlay iframe {
   width: 100%;
@@ -446,6 +475,62 @@ select.inline-field { width: auto; min-width: 160px; }
 
 .archivio-linea-dettaglio { display: grid; gap: 10px; padding-top: 8px; }
 .archivio-linea-dettaglio p { margin: 0; font-size: 14px; }
+.archivio-azioni {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.archivio-riga {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 148px;
+  gap: 10px;
+  align-items: stretch;
+}
+.archivio-riga > input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin-top: 16px;
+  accent-color: var(--accent);
+}
+.archivio-anteprima {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #eef3f0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.archivio-anteprima:hover { border-color: #b7cfc2; }
+.archivio-anteprima-kicker {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.archivio-anteprima strong { font-size: 13px; }
+.archivio-anteprima span { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.scheda-overlay .sheet-wrap {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.scheda-overlay .scheda-frame { min-height: min(70vh, 780px); }
+
+@media (max-width: 720px) {
+  .archivio-riga { grid-template-columns: auto minmax(0, 1fr); }
+  .archivio-anteprima { grid-column: 2; }
+}
 
 .linee-gruppo { gap: 10px; }
 .linee-gruppo-head {
@@ -687,6 +772,13 @@ select.inline-field { width: auto; min-width: 160px; }
   gap: 6px;
   color: inherit;
   text-decoration: none;
+}
+button.rap-card,
+button.rap-card-link {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .rap-card-azioni { display: flex; gap: 8px; flex-wrap: wrap; }
 .elenco-head h2 {

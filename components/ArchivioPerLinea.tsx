@@ -1,15 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
-import { downloadOfficialScheda } from "@/lib/fillScheda";
-import { eLavoroBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
+import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
+import { eLavoroBasi, etichettaOggettoFoglio, numeriDaTestoCampata } from "@/lib/campate/basi";
+import { useDialogBack } from "@/lib/useDialogBack";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "./MostraAltro";
+import { haFirmaDitta } from "@/lib/rapportinoFirma";
+import { FirmaDittaOverlay } from "./FirmaDittaOverlay";
 import { RapportinoCard } from "./RapportinoCard";
+import { RapportinoSheet } from "./RapportinoSheet";
 
 type Gruppo = {
   lineaId: string;
@@ -75,6 +80,17 @@ function elenca(nomi: string[], max = 8) {
   return `${nomi.slice(0, max).join(", ")} +${nomi.length - max}`;
 }
 
+function vociAnteprima(item: Rapportino, prestazioni: Prestazione[]) {
+  const byId = new Map(prestazioni.map((p) => [p.id, p]));
+  return (item.righe ?? [])
+    .filter((r) => r.quantita)
+    .map((r) => {
+      const p = byId.get(r.prestazioneId);
+      return `${p?.codice ?? "?"} × ${r.quantita}`;
+    })
+    .slice(0, 4);
+}
+
 export function ArchivioPerLinea({
   items,
   linee,
@@ -96,6 +112,10 @@ export function ArchivioPerLinea({
   const [mostraTuttiFogli, setMostraTuttiFogli] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
+  const [scelti, setScelti] = useState<string[]>([]);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [firmaId, setFirmaId] = useState<string | null>(null);
+  const [dockReady, setDockReady] = useState(false);
 
   const gruppi = useMemo(() => {
     const byId = new Map(linee.map((l) => [l.id, l]));
@@ -144,10 +164,34 @@ export function ArchivioPerLinea({
 
   const visibili = mostraAltreLinee || cercataId ? filtrati : filtrati.slice(0, ANTEPRIMA_ELENCO);
 
+  useEffect(() => setDockReady(true), []);
+  useDialogBack(Boolean(previewId), () => setPreviewId(null));
+
+  const gruppoAperto = gruppi.find((g) => g.lineaId === aperta);
+  const preview = gruppoAperto?.items.find((r) => r.id === previewId)
+    ?? items.find((r) => r.id === previewId);
+  const previewLinea = preview
+    ? linee.find((l) => l.id === preview.lineaId) ?? gruppoAperto?.linea
+    : undefined;
+  const daFirmare = gruppoAperto?.items.find((r) => r.id === firmaId)
+    ?? items.find((r) => r.id === firmaId);
+  const daFirmareLinea = daFirmare
+    ? linee.find((l) => l.id === daFirmare.lineaId) ?? gruppoAperto?.linea
+    : undefined;
+
   function apri(lineaId: string) {
     setAperta((cur) => (cur === lineaId ? null : lineaId));
     setMostraTuttiFogli(false);
+    setScelti([]);
     setErrore(null);
+  }
+
+  function toggleScelto(id: string) {
+    setScelti((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  function chiudiPreview() {
+    setPreviewId(null);
   }
 
   async function scaricaUno(item: Rapportino, linea?: Linea) {
@@ -155,6 +199,24 @@ export function ArchivioPerLinea({
     setBusy(item.id);
     try {
       await downloadOfficialScheda({ item, linea, prestazioni });
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Download non riuscito.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function scaricaInsieme(lista: Rapportino[], linea?: Linea) {
+    if (lista.length === 0) return;
+    setErrore(null);
+    setBusy("insieme");
+    try {
+      const codice = linea?.codice ?? "linea";
+      await downloadOfficialSchede(
+        lista.map((item) => ({ item, linea })),
+        `Schede_${codice}_${lista.length}fogli.pdf`,
+        prestazioni,
+      );
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");
     } finally {
@@ -186,6 +248,7 @@ export function ArchivioPerLinea({
             setCercataId(id);
             setAperta(id || null);
             setMostraTuttiFogli(false);
+            setScelti([]);
             if (!id) setMostraAltreLinee(false);
           }}
         />
@@ -242,18 +305,84 @@ export function ArchivioPerLinea({
                     {campate.length === 0 && basi.length === 0 && voci.length === 0 ? (
                       <p className="muted">Nessun dettaglio sulle quantità di questi fogli.</p>
                     ) : null}
-                    <div className="form-stack">
-                      {fogli.map((item) => (
-                        <RapportinoCard
-                          key={item.id}
-                          item={item}
-                          linea={g.linea}
-                          href={hrefFor(item)}
-                          onDelete={onDelete}
-                          onDownload={() => void scaricaUno(item, g.linea)}
-                          downloadBusy={busy === item.id}
+                    <div className="archivio-azioni">
+                      <label className="check-line">
+                        <input
+                          type="checkbox"
+                          checked={g.items.length > 0 && g.items.every((r) => scelti.includes(r.id))}
+                          onChange={() =>
+                            setScelti(
+                              g.items.every((r) => scelti.includes(r.id))
+                                ? []
+                                : g.items.map((r) => r.id),
+                            )
+                          }
                         />
-                      ))}
+                        {g.items.every((r) => scelti.includes(r.id))
+                          ? "Togli selezione"
+                          : "Seleziona tutti"}
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={busy !== null || scelti.length === 0}
+                        onClick={() =>
+                          void scaricaInsieme(
+                            g.items.filter((r) => scelti.includes(r.id)),
+                            g.linea,
+                          )
+                        }
+                      >
+                        {busy === "insieme"
+                          ? "Preparazione PDF…"
+                          : scelti.length === 0
+                            ? "Scarica selezionati"
+                            : `Scarica selezionati (${scelti.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={busy !== null || g.items.length === 0}
+                        onClick={() => void scaricaInsieme(g.items, g.linea)}
+                      >
+                        {busy === "insieme" ? "Preparazione PDF…" : `Scarica tutti (${g.items.length})`}
+                      </button>
+                    </div>
+                    <div className="form-stack">
+                      {fogli.map((item) => {
+                        const anteprime = vociAnteprima(item, prestazioni);
+                        const oggetto = etichettaOggettoFoglio(item, prestazioni);
+                        return (
+                          <div key={item.id} className="archivio-riga">
+                            <input
+                              type="checkbox"
+                              checked={scelti.includes(item.id)}
+                              onChange={() => toggleScelto(item.id)}
+                              aria-label={`Seleziona ${item.numero}`}
+                            />
+                            <RapportinoCard
+                              item={item}
+                              linea={g.linea}
+                              href={hrefFor(item)}
+                              onApri={() => setPreviewId(item.id)}
+                              onDelete={onDelete}
+                              onDownload={() => void scaricaUno(item, g.linea)}
+                              downloadBusy={busy === item.id}
+                            />
+                            <button
+                              type="button"
+                              className="archivio-anteprima"
+                              onClick={() => setPreviewId(item.id)}
+                            >
+                              <span className="archivio-anteprima-kicker">Anteprima</span>
+                              <strong>{item.numero}</strong>
+                              <span>{formatDate(item.dataLavoro)}</span>
+                              {oggetto ? <span>{oggetto}</span> : null}
+                              {anteprime.length > 0 ? <span>{anteprime.join(" · ")}</span> : null}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                     <MostraAltro
                       aperto={mostraTuttiFogli}
@@ -275,6 +404,43 @@ export function ArchivioPerLinea({
         </div>
       )}
       </div>
+      {dockReady && preview
+        ? createPortal(
+            <div
+              className="scheda-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Rapportino ${preview.numero}`}
+            >
+              <div className="scheda-overlay-bar">
+                {haFirmaDitta(preview.firmaOperatore) ? null : (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setFirmaId(preview.id);
+                      setPreviewId(null);
+                    }}
+                  >
+                    Firma ditta
+                  </button>
+                )}
+                <button type="button" className="btn btn-secondary" onClick={chiudiPreview}>
+                  Chiudi
+                </button>
+              </div>
+              <RapportinoSheet item={preview} linea={previewLinea} prestazioni={prestazioni} />
+            </div>,
+            document.body,
+          )
+        : null}
+      {dockReady && daFirmare ? (
+        <FirmaDittaOverlay
+          item={daFirmare}
+          linea={daFirmareLinea}
+          onChiudi={() => setFirmaId(null)}
+        />
+      ) : null}
     </>
   );
 }
