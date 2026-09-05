@@ -170,6 +170,7 @@ export function ArchivioPerLinea({
         {items.length} {items.length === 1 ? "foglio" : "fogli"} su {gruppi.length}{" "}
         {gruppi.length === 1 ? "linea" : "linee"}. Tocca una linea per vedere cosa hai fatto.
       </p>
+      <div className="cerca-e-linee">
       <label className="contab-cerca-linea">
         Cerca linea
         <LineaPicker
@@ -273,6 +274,7 @@ export function ArchivioPerLinea({
           ) : null}
         </div>
       )}
+      </div>
     </>
   );
 }

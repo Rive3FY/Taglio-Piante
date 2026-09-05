@@ -127,7 +127,8 @@ export default function TecnicoPerLineaPage() {
         <p className="muted">Nessun rapportino. Quando ne chiudi o ne salvi uno, la linea compare qui.</p>
       ) : (
         <>
-          <label className="contab-cerca-linea" style={{ marginBottom: 12, display: "block" }}>
+          <div className="cerca-e-linee">
+          <label className="contab-cerca-linea">
             Cerca linea
             <LineaPicker
               linee={opzioni}
@@ -237,6 +238,7 @@ export default function TecnicoPerLineaPage() {
               ) : null}
             </div>
           )}
+          </div>
         </>
       )}
     </>

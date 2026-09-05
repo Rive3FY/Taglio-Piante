@@ -104,6 +104,7 @@ export default function TecnicoBasiPage() {
         </p>
       ) : (
         <>
+          <div className="cerca-e-linee">
           <label className="contab-cerca-linea">
             Cerca linea
             <LineaPicker
@@ -202,6 +203,7 @@ export default function TecnicoBasiPage() {
               ) : null}
             </div>
           )}
+          </div>
         </>
       )}
     </>

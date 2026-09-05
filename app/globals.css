@@ -852,11 +852,20 @@ select.inline-field { width: auto; min-width: 160px; }
 .contab-giorno { display: grid; gap: 10px; }
 .contab-giorno h3 { margin: 0; font-size: 16px; }
 .contab-linee { display: grid; gap: 8px; }
+.cerca-e-linee {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  width: 100%;
+}
 .contab-cerca-linea {
-  flex: 0 1 320px;
+  display: grid;
+  align-content: start;
   align-self: start;
+  flex: none;
   width: min(100%, 320px);
   max-width: 320px;
+  height: auto;
   margin: 0;
   font-size: 13px;
   font-weight: 700;
