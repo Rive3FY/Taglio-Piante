@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSync } from "@/lib/SyncContext";
 import { useSession } from "@/lib/SessionContext";
+import { TemaToggle } from "./TemaToggle";
 
 export function AppHeader({
   title,
@@ -65,6 +66,7 @@ export function AppHeader({
         <h1>{title}</h1>
       </div>
       <div className="app-header-right">
+        <TemaToggle />
         <button
           type="button"
           className={pillClass}
