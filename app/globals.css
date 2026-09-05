@@ -371,6 +371,73 @@ select.inline-field { width: auto; min-width: 160px; }
   max-height: 90vh;
   overflow: auto;
 }
+.esito-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(12, 31, 24, 0.55);
+}
+.esito-card {
+  width: min(400px, 100%);
+  justify-items: center;
+  text-align: center;
+}
+.esito-card h2 { font-size: 22px; }
+.esito-card .muted { margin: 0; }
+.esito-card .btn { width: 100%; }
+.esito-mark {
+  width: 88px;
+  height: 88px;
+  animation: esito-pop 0.55s ease both;
+}
+.esito-mark svg { width: 100%; height: 100%; }
+.esito-ring {
+  fill: none;
+  stroke: #16a34a;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 214;
+  stroke-dashoffset: 214;
+  transform-origin: 40px 40px;
+  transform: rotate(-90deg);
+  animation: esito-ring 0.7s ease forwards;
+}
+.esito-tick {
+  fill: none;
+  stroke: #16a34a;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: esito-tick 0.35s 0.55s ease forwards;
+}
+.esito-ok {
+  opacity: 0;
+  animation: esito-ok 0.25s 0.85s ease forwards;
+}
+@keyframes esito-ring {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes esito-tick {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes esito-pop {
+  0% { transform: scale(0.82); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes esito-ok {
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .esito-mark, .esito-ring, .esito-tick, .esito-ok { animation: none; }
+  .esito-ring, .esito-tick { stroke-dashoffset: 0; }
+  .esito-ok { opacity: 1; }
+}
 .preview-head {
   display: flex;
   align-items: center;

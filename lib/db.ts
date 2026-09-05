@@ -410,6 +410,18 @@ export async function enqueueSync(
   rapportinoId: string,
   action: SyncQueueItem["action"],
 ) {
+  const esistenti = await db.syncQueue.where("rapportinoId").equals(rapportinoId).toArray();
+  if (action === "delete") {
+    for (const q of esistenti) {
+      if (q.action !== "delete") await db.syncQueue.delete(q.id);
+    }
+    if (esistenti.some((q) => q.action === "delete")) return;
+  } else if (esistenti.some((q) => q.action === "delete")) {
+    return;
+  } else if (esistenti.some((q) => q.action === action)) {
+    return;
+  }
+
   await db.syncQueue.add({
     id: `q_${crypto.randomUUID?.() ?? Date.now()}`,
     rapportinoId,
@@ -422,17 +434,40 @@ export async function enqueueSync(
   }
 }
 
+/** Toglie doppioni in coda (stesso foglio + stessa azione, o campate già coperte da un delete). */
+export async function compattaCodaSync() {
+  const items = await db.syncQueue.toArray();
+  if (items.length === 0) return 0;
+  const deletes = new Set(items.filter((i) => i.action === "delete").map((i) => i.rapportinoId));
+  const visti = new Set<string>();
+  const junk: string[] = [];
+  const ordinati = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  for (const i of ordinati) {
+    if (i.action === "campate" && deletes.has(i.rapportinoId)) {
+      junk.push(i.id);
+      continue;
+    }
+    const key = `${i.action}|${i.rapportinoId}`;
+    if (visti.has(key)) {
+      junk.push(i.id);
+      continue;
+    }
+    visti.add(key);
+  }
+  const unici = [...new Set(junk)];
+  if (unici.length > 0) await db.syncQueue.bulkDelete(unici);
+  return unici.length;
+}
+
 export async function deleteRapportino(id: string) {
   const { annullaEsitiDaRapportino } = await import("./campate/apply");
   const item = await db.rapportini.get(id);
-  await annullaEsitiDaRapportino(id, item);
+  await annullaEsitiDaRapportino(id, item, false);
   await enqueueSync(id, "delete");
   await db.transaction("rw", [db.rapportini, db.syncQueue], async () => {
     const pending = await db.syncQueue.where("rapportinoId").equals(id).toArray();
     for (const queueItem of pending) {
-      if (queueItem.action !== "delete" && queueItem.action !== "campate") {
-        await db.syncQueue.delete(queueItem.id);
-      }
+      if (queueItem.action !== "delete") await db.syncQueue.delete(queueItem.id);
     }
     await db.rapportini.delete(id);
   });

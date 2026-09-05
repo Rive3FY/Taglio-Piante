@@ -1,4 +1,4 @@
-import { db, enqueueSync, nextNumero } from "@/lib/db";
+import { compattaCodaSync, db, enqueueSync, nextNumero } from "@/lib/db";
 import { rapportinoVisibile } from "@/lib/sezioni";
 import type { Session } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -103,6 +103,8 @@ export async function processSyncQueue() {
 }
 
 async function eseguiSyncQueue(): Promise<SyncResult> {
+  await compattaCodaSync();
+
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { processed: 0, pending: await db.syncQueue.count(), pulled: 0, pullError: null };
   }
@@ -135,6 +137,7 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
         if (autenticato) {
           if (item.action === "delete") {
             await deleteRemoteRapportino(item.rapportinoId);
+            await pushCampatePending(item.rapportinoId);
           } else if (item.action === "campate") {
             await pushCampatePending(item.rapportinoId);
           } else {

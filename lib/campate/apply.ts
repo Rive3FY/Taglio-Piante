@@ -769,7 +769,11 @@ export async function unisciCampateDoppie() {
  * Quando si cancella un rapportino, le campate che aveva chiuso tornano da tagliare.
  * Si cancellano solo quelle nate da quel foglio, mai una campata importata dal file.
  */
-export async function annullaEsitiDaRapportino(rapportinoId: string, item?: Rapportino | null) {
+export async function annullaEsitiDaRapportino(
+  rapportinoId: string,
+  item?: Rapportino | null,
+  accoda = true,
+) {
   // Prima si cercano le campate (il log serve a trovarle), poi si pulisce il log.
   const legate = await campateCollegateAlRapportino(rapportinoId, item);
   const logDelFoglio = (await db.campateStorico.toArray()).filter((s) => s.rapportinoId === rapportinoId);
@@ -778,7 +782,7 @@ export async function annullaEsitiDaRapportino(rapportinoId: string, item?: Rapp
   }
 
   if (legate.length === 0) {
-    if (logDelFoglio.length > 0) await enqueueSync(rapportinoId, "campate");
+    if (accoda && logDelFoglio.length > 0) await enqueueSync(rapportinoId, "campate");
     return;
   }
 
@@ -839,7 +843,7 @@ export async function annullaEsitiDaRapportino(rapportinoId: string, item?: Rapp
     const logCampate = (await db.campateStorico.toArray()).filter((s) => daEliminare.includes(s.campataId));
     if (logCampate.length > 0) await db.campateStorico.bulkDelete(logCampate.map((s) => s.id));
   }
-  await enqueueSync(rapportinoId, "campate");
+  if (accoda) await enqueueSync(rapportinoId, "campate");
 }
 
 export type PatchRinvio = { mese: number; anno?: number; note?: string };

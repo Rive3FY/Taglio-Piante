@@ -28,6 +28,7 @@ import {
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 import { useDialogBack } from "@/lib/useDialogBack";
+import { PopupEsitoSalvataggio, type EsitoSalvataggio } from "./PopupEsitoSalvataggio";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
@@ -107,7 +108,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [firmaOperatore, setFirmaOperatore] = useState(existing?.firmaOperatore);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [esito, setEsito] = useState<EsitoSalvataggio | null>(null);
+  const [idLocale, setIdLocale] = useState(existing?.id);
+  const [numeroLocale, setNumeroLocale] = useState(existing?.numero);
   const [preview, setPreview] = useState<Rapportino | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   useDialogBack(Boolean(preview), () => setPreview(null));
@@ -288,8 +291,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     setError(null);
     try {
       const now = new Date().toISOString();
-      const id = existing?.id ?? uid("rap");
-      const numero = existing?.numero ?? (await nextNumero());
+      const id = existing?.id ?? idLocale ?? uid("rap");
+      const numero = existing?.numero ?? numeroLocale ?? (await nextNumero());
       const righe: RapportinoRiga[] = prestazioni
         .filter((p) => (qty[p.id] ?? 0) > 0)
         .map((p) => ({
@@ -351,6 +354,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         await applicaEsitiDaRapportino(record, session);
       }
       void syncNow();
+      setIdLocale(record.id);
+      setNumeroLocale(record.numero);
       return record;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Salvataggio non riuscito.");
@@ -365,8 +370,22 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     return "/operatore";
   }
 
+  function confermaEsito() {
+    const dopo = esito?.dopo;
+    const id = idLocale;
+    setEsito(null);
+    if (dopo === "home") {
+      router.replace(homeDopoInvio());
+      return;
+    }
+    if (!existing && id) {
+      router.replace(
+        session?.ruolo === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`,
+      );
+    }
+  }
+
   async function salva() {
-    setOkMsg(null);
     if (!effectiveLineaId) {
       setError("Seleziona la linea.");
       return;
@@ -392,15 +411,18 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         : "bozza";
       const saved = await persist(stato);
       if (!saved) return;
-      if (!existing) {
-        router.replace(
-          session?.ruolo === "tecnico" ? `/tecnico/rapportini/${saved.id}` : `/operatore/${saved.id}`,
-        );
-      }
-      setOkMsg(
+      setEsito(
         campiBase
-          ? "Salvato in bozza: manca la firma della ditta. Senza quella il foglio non va in archivio."
-          : "Salvato in locale. Completa ditta, dipendente TERNA, la firma della ditta e almeno una quantità per archiviarlo.",
+          ? {
+              titolo: "Inviato in bozza",
+              testo: "Manca la firma della ditta. Il foglio resta in bozza: senza quella non va in archivio.",
+              dopo: "resta",
+            }
+          : {
+              titolo: "Salvato in bozza",
+              testo: "Completa ditta, dipendente TERNA, la firma della ditta e almeno una quantità per archiviarlo.",
+              dopo: "resta",
+            },
       );
       return;
     }
@@ -410,7 +432,12 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       inviatoAt: existing?.inviatoAt ?? now,
       archiviatoAt: now,
     });
-    if (saved) router.push(homeDopoInvio());
+    if (!saved) return;
+    setEsito({
+      titolo: "Rapportino archiviato",
+      testo: "Tutto a posto: foglio firmato e messo in archivio.",
+      dopo: "home",
+    });
   }
 
   async function previewSheet() {
@@ -676,7 +703,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
-      {okMsg ? <p className="muted">{okMsg}</p> : null}
+
+      {esito ? <PopupEsitoSalvataggio esito={esito} onOk={confermaEsito} /> : null}
 
       {dockReady
         ? createPortal(
