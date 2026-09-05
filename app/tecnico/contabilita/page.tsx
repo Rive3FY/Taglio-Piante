@@ -14,10 +14,14 @@ import {
   giorniAllaChiusura,
   lineeConPrestazioni,
   mesiDisponibili,
+  prestazioniMesePerLinea,
   type VoceContabile,
 } from "@/lib/contabilita/aggrega";
 import { arrotondaEuro, etichettaUnita } from "@/lib/contabilita/listino";
-import { scaricaPrestazioniLineaExcel } from "@/lib/contabilita/export";
+import {
+  scaricaPrestazioniLineaExcel,
+  scaricaPrestazioniMeseExcel,
+} from "@/lib/contabilita/export";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
@@ -102,6 +106,7 @@ export default function ContabilitaPage() {
   const [cercaLinea, setCercaLinea] = useState("");
   const [lineaCercataId, setLineaCercataId] = useState("");
   const [mostraAltreLinee, setMostraAltreLinee] = useState(false);
+  const [scaricoMese, setScaricoMese] = useState(false);
   const anniCampate = useMemo(() => anniPiani(campate), [campate]);
   const [annoPiano, setAnnoPiano] = useState<number | null>(null);
   const annoPianoEff =
@@ -113,6 +118,10 @@ export default function ContabilitaPage() {
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
   const aggregato = useMemo(
     () => aggregaMese(rapportini, prestazioni, linee, meseEffettivo),
+    [rapportini, prestazioni, linee, meseEffettivo],
+  );
+  const reportMese = useMemo(
+    () => prestazioniMesePerLinea(rapportini, prestazioni, linee, meseEffettivo),
     [rapportini, prestazioni, linee, meseEffettivo],
   );
   const restano = giorniAllaChiusura(meseEffettivo, oggi);
@@ -230,6 +239,48 @@ export default function ContabilitaPage() {
         </div>
       </div>
 
+      <section className="panel">
+        <h2>Report del mese</h2>
+        <p className="muted">
+          Un solo file Excel con dentro tutto {etichettaMese(meseEffettivo).toLowerCase()}: il
+          riepilogo per linea, il dettaglio delle prestazioni linea per linea e i totali del mese.
+          Le prestazioni dei fogli basi restano una sezione a parte, dentro la loro linea.
+        </p>
+        <div className="contab-estrai">
+          <p className="muted" style={{ margin: 0 }}>
+            {reportMese.perLinea.length}{" "}
+            {reportMese.perLinea.length === 1 ? "linea" : "linee"} · {reportMese.rapportini}{" "}
+            {reportMese.rapportini === 1 ? "rapportino" : "rapportini"}
+            {reportMese.importo != null ? ` · ${formatEuro(reportMese.importo)}` : ""}
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={scaricoMese || reportMese.perLinea.length === 0}
+            onClick={() => {
+              setScaricoMese(true);
+              void (async () => {
+                try {
+                  await scaricaPrestazioniMeseExcel(reportMese, oggi);
+                  mostraEsito({
+                    titolo: "Excel scaricato",
+                    testo: `Prestazioni di ${etichettaMese(meseEffettivo).toLowerCase()} divise per linea, con i totali del mese.`,
+                    dopo: "resta",
+                  });
+                } finally {
+                  setScaricoMese(false);
+                }
+              })();
+            }}
+          >
+            {scaricoMese ? "Preparo…" : `Scarica Excel · ${etichettaMese(meseEffettivo)}`}
+          </button>
+        </div>
+        {reportMese.perLinea.length === 0 ? (
+          <p className="muted">Nessun rapportino confermato in questo mese: non c’è niente da scaricare.</p>
+        ) : null}
+      </section>
+
       <h2>Avanzamento campate · piano {annoPianoEff}</h2>
       <p className="muted">Le torte contano solo le campate urgenti e differibili, non le basi.</p>
       {anniCampate.length > 1 ? (
@@ -339,7 +390,8 @@ export default function ContabilitaPage() {
         <p className="muted">
           Totale delle prestazioni confermate sulla linea, dai rapportini archiviati fino a oggi
           (le bozze restano fuori). Tocca una linea per le torte, la tabella e lo scarico Excel.
-          Nel file e in tabella ci sono anche le prestazioni dei fogli basi.
+          Nel file e in tabella ci sono anche le prestazioni dei fogli basi. Se ti serve solo il
+          mese, diviso per linea, scaricalo da «Report del mese» in cima alla pagina.
         </p>
         {lineeEstraibili.length === 0 ? (
           <p className="muted">Nessun rapportino confermato da cui vedere le prestazioni.</p>

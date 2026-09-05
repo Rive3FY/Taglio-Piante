@@ -58,6 +58,10 @@ Elenco parallelo al piano: ci finiscono le campate con un mese di ripresa («da 
 
 Il primo accesso richiede la rete. Dopo, l'app si riapre anche offline usando l'ultimo accesso salvato sul dispositivo, così il lavoro sul campo non si blocca.
 
+## Contabilità
+
+Report → Contabilità lavora sul mese scelto (di default quello in corso) e conta solo i rapportini archiviati. **Report del mese** scarica un unico Excel con tre fogli: *Riepilogo* (una riga per linea con rapportini e importi), *Per linea* (le prestazioni linea per linea, sezione Campate e sezione Basi, con il totale della linea) e *Totale mese* (le stesse prestazioni sommate su tutte le linee). Sommando le linee viene il totale del mese, quindi il file quadra con quello che si vede a schermo. Resta anche lo scarico per singola linea, che invece è cumulativo fino a oggi. I prezzi sono quelli di Report → Prezzi.
+
 ## Sincronizzazione
 
 | Stato in alto | Significato |
