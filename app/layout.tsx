@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import { SCRIPT_TEMA } from "@/lib/tema";
 
 const sans = Source_Sans_3({
   subsets: ["latin"],
@@ -36,11 +34,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="it" className={`${sans.variable} h-full`} suppressHydrationWarning>
+    <html lang="it" className={`${sans.variable} h-full`}>
       <body className="app-root">
-        <Script id="tema-iniziale" strategy="beforeInteractive">
-          {SCRIPT_TEMA}
-        </Script>
         <Providers>{children}</Providers>
       </body>
     </html>

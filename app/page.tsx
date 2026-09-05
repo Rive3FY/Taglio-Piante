@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/SessionContext";
-import { TemaToggle } from "@/components/TemaToggle";
 
 export default function HomePage() {
   const { session, ready, configurato, login } = useSession();
@@ -36,9 +35,6 @@ export default function HomePage() {
 
   return (
     <main className="page">
-      <div className="login-tema">
-        <TemaToggle />
-      </div>
       <div className="hero">
         <div className="kicker">Area riservata</div>
         <h1>Rapportini Taglio</h1>
