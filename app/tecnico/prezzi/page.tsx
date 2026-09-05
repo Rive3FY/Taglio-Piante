@@ -13,6 +13,7 @@ import {
   ripristinaListinoContratto,
   salvaListino,
 } from "@/lib/contabilita/listino";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export default function PrezziPage() {
   const prestazioni =
@@ -26,7 +27,6 @@ export default function PrezziPage() {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -69,7 +69,6 @@ export default function PrezziPage() {
   function salva() {
     setBusy(true);
     setErrore(null);
-    setOkMsg(null);
     try {
       const prezzi: Record<string, number> = {};
       for (const [codice, raw] of Object.entries(draft)) {
@@ -81,7 +80,11 @@ export default function PrezziPage() {
         prezzi[codice] = n;
       }
       salvaListino(prezzi);
-      setOkMsg("Prezzi salvati. La contabilità usa subito i nuovi importi.");
+      mostraEsito({
+        titolo: "Prezzi salvati",
+        testo: "La contabilità usa subito i nuovi importi.",
+        dopo: "resta",
+      });
     } finally {
       setBusy(false);
     }
@@ -91,7 +94,11 @@ export default function PrezziPage() {
     if (!window.confirm("Ripristinare i prezzi di contratto su tutte le voci?")) return;
     setErrore(null);
     ripristinaListinoContratto();
-    setOkMsg("Ripristinato il listino di contratto.");
+    mostraEsito({
+      titolo: "Listino ripristinato",
+      testo: "Tornano i prezzi di contratto su tutte le voci.",
+      dopo: "resta",
+    });
   }
 
   return (
@@ -139,7 +146,6 @@ export default function PrezziPage() {
                             if (v === "" || /^[0-9]*[.,]?[0-9]{0,2}$/.test(v)) {
                               setDraft((cur) => ({ ...cur, [r.codice]: v }));
                               setErrore(null);
-                              setOkMsg(null);
                             }
                           }}
                         />
@@ -153,7 +159,6 @@ export default function PrezziPage() {
           </div>
         )}
         {errore ? <p className="form-error">{errore}</p> : null}
-        {okMsg ? <p className="muted">{okMsg}</p> : null}
         <div className="archivio-azioni">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={salva}>
             {busy ? "Salvataggio…" : "Salva prezzi"}

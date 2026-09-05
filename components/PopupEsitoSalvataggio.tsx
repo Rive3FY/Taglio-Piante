@@ -6,7 +6,12 @@ import { useDialogBack } from "@/lib/useDialogBack";
 export type EsitoSalvataggio = {
   titolo: string;
   testo: string;
-  dopo: "resta" | "home";
+  /**
+   * `resta` = chiudi e resta dove sei.
+   * `home` = area tecnico/operatore.
+   * altrimenti un path (es. `/tecnico/campate`).
+   */
+  dopo: "resta" | "home" | (string & {});
 };
 
 export function PopupEsitoSalvataggio({
@@ -20,7 +25,7 @@ export function PopupEsitoSalvataggio({
 
   return createPortal(
     <div className="esito-overlay" role="dialog" aria-modal="true" aria-labelledby="esito-titolo">
-      <div className="login-card esito-card">
+      <div className="login-card esito-salvataggio-card">
         <div className="esito-mark" aria-hidden="true">
           <svg viewBox="0 0 80 80">
             <circle className="esito-ring" cx="40" cy="40" r="34" />

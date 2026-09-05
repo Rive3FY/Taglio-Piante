@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { SessionProvider, useSession } from "@/lib/SessionContext";
 import { SyncProvider, useSync } from "@/lib/SyncContext";
 import { PwaRegister } from "@/components/PwaRegister";
+import { EsitoSalvataggioHost } from "@/components/EsitoSalvataggioHost";
 import { riportaBozzeRecentiSenzaFirma } from "@/lib/rapportinoFirma";
 
 function RiportaBozzeSenzaFirma() {
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SyncProvider>
         <PwaRegister />
         <RiportaBozzeSenzaFirma />
+        <EsitoSalvataggioHost />
         {children}
       </SyncProvider>
     </SessionProvider>

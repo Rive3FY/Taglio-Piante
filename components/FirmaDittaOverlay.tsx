@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { applicaFirmaDitta, haFirmaDitta } from "@/lib/rapportinoFirma";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 import type { Linea, Rapportino } from "@/lib/types";
 import { RapportinoSheet } from "./RapportinoSheet";
@@ -40,6 +41,11 @@ export function FirmaDittaOverlay({
       await applicaFirmaDitta(item, firma!, session);
       void syncNow();
       onChiudi();
+      mostraEsito({
+        titolo: "Firma salvata",
+        testo: "Il foglio è firmato dalla ditta e va in archivio.",
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Firma non salvata.");
     } finally {

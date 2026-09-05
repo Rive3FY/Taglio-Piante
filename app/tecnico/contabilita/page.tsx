@@ -18,6 +18,7 @@ import {
 } from "@/lib/contabilita/aggrega";
 import { arrotondaEuro, etichettaUnita } from "@/lib/contabilita/listino";
 import { scaricaPrestazioniLineaExcel } from "@/lib/contabilita/export";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
@@ -400,7 +401,16 @@ export default function ContabilitaPage() {
                           type="button"
                           className="btn btn-primary"
                           disabled={estrattoAperto.voci.length === 0}
-                          onClick={() => void scaricaPrestazioniLineaExcel(estrattoAperto, oggi)}
+                          onClick={() => {
+                            void (async () => {
+                              await scaricaPrestazioniLineaExcel(estrattoAperto, oggi);
+                              mostraEsito({
+                                titolo: "Excel scaricato",
+                                testo: `Prestazioni della linea ${estrattoAperto.codiceLinea} fino al ${formatDate(oggi)}.`,
+                                dopo: "resta",
+                              });
+                            })();
+                          }}
                         >
                           Scarica Excel
                         </button>

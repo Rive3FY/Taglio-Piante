@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { formatDate, formatDistInt, TENSIONI, tensioneLabel } from "@/lib/format";
 import { aggiornaDettagliCampata, type PatchRinvio } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
 import { chiaveCampata } from "@/lib/campate/normalize";
 import {
@@ -760,17 +761,25 @@ export function CampateElenco({
           type="button"
           className="btn btn-secondary"
           disabled={(ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate).length === 0}
-          onClick={() =>
-            void scaricaVistaCampate(ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate, {
-              linea: linea || undefined,
-              stato,
-              priorita,
-              origine,
-              anno: annoEffettivo ?? undefined,
-              prefisso: soloRinvii ? "elenco-parallelo" : undefined,
-              parallelo: soloRinvii,
-            })
-          }
+          onClick={() => {
+            const lista = ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate;
+            void (async () => {
+              await scaricaVistaCampate(lista, {
+                linea: linea || undefined,
+                stato,
+                priorita,
+                origine,
+                anno: annoEffettivo ?? undefined,
+                prefisso: soloRinvii ? "elenco-parallelo" : undefined,
+                parallelo: soloRinvii,
+              });
+              mostraEsito({
+                titolo: "Excel scaricato",
+                testo: `Vista con ${lista.length} ${lista.length === 1 ? "riga" : "righe"}.`,
+                dopo: "resta",
+              });
+            })();
+          }}
         >
           Scarica vista
         </button>

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { isBaseLavoro } from "@/lib/campate/basi";
 import { scaricaVistaCampate } from "@/lib/campate/export";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { LineaPicker } from "@/components/LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "@/components/MostraAltro";
 import type { CampataLavoro } from "@/lib/types";
@@ -90,7 +91,16 @@ export default function TecnicoBasiPage() {
             type="button"
             className="btn btn-secondary"
             disabled={elenco.length === 0}
-            onClick={() => void scaricaVistaCampate(elenco, { prefisso: "basi" })}
+            onClick={() => {
+              void (async () => {
+                await scaricaVistaCampate(elenco, { prefisso: "basi" });
+                mostraEsito({
+                  titolo: "Excel scaricato",
+                  testo: `Elenco con ${elenco.length} ${elenco.length === 1 ? "base" : "basi"}.`,
+                  dopo: "resta",
+                });
+              })();
+            }}
           >
             Scarica elenco
           </button>

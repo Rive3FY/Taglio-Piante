@@ -12,6 +12,7 @@ import {
 } from "@/lib/operatori";
 import { normalizzaFirma } from "@/lib/firma";
 import { useSession } from "@/lib/SessionContext";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 type Azione = { tipo: "rinomina" | "password"; id: string } | null;
 
@@ -25,15 +26,13 @@ export default function OperatoriPage() {
   const [valore, setValore] = useState("");
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
-  async function esegui(action: () => Promise<void>, messaggio: string) {
+  async function esegui(action: () => Promise<void>, esito: { titolo: string; testo: string }) {
     setBusy(true);
     setErrore(null);
-    setInfo(null);
     try {
       await action();
-      setInfo(messaggio);
+      mostraEsito({ ...esito, dopo: "resta" });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Operazione non riuscita.");
     } finally {
@@ -80,13 +79,15 @@ export default function OperatoriPage() {
               setNome("");
               setEmail("");
               setPassword("");
-            }, "Account creato: l’operatore può accedere subito.")
+            }, {
+              titolo: "Account creato",
+              testo: "L’operatore può accedere subito con email e password.",
+            })
           }
         >
           {busy ? "Creazione…" : "Crea account"}
         </button>
         {errore ? <p className="form-error">{errore}</p> : null}
-        {info ? <p className="muted">{info}</p> : null}
       </section>
 
       <section className="panel">
@@ -125,7 +126,10 @@ export default function OperatoriPage() {
                             void esegui(async () => {
                               const dataUrl = await normalizzaFirma(file);
                               await setFirmaOperatore(op.id, dataUrl);
-                            }, `Firma di ${op.nome} salvata.`);
+                            }, {
+                              titolo: "Firma salvata",
+                              testo: `La firma di ${op.nome} è sul profilo.`,
+                            });
                           }}
                         />
                       </label>
@@ -135,7 +139,10 @@ export default function OperatoriPage() {
                           className="btn btn-ghost btn-sm"
                           disabled={busy}
                           onClick={() =>
-                            void esegui(() => setFirmaOperatore(op.id, null), "Firma rimossa.")
+                            void esegui(() => setFirmaOperatore(op.id, null), {
+                              titolo: "Firma rimossa",
+                              testo: `La firma di ${op.nome} non è più sul profilo.`,
+                            })
                           }
                         >
                           Rimuovi firma
@@ -166,7 +173,9 @@ export default function OperatoriPage() {
                             }
                             setAzione(null);
                             setValore("");
-                          }, azione?.tipo === "password" ? "Password aggiornata." : "Nome aggiornato.")
+                          }, azione?.tipo === "password"
+                            ? { titolo: "Password aggiornata", testo: `${op.nome} può entrare con la nuova password.` }
+                            : { titolo: "Nome aggiornato", testo: "Il nome dell’operatore è stato cambiato." })
                         }
                       >
                         Salva
@@ -214,7 +223,10 @@ export default function OperatoriPage() {
                               `Eliminare l’account di ${op.nome}? Non potrà più accedere. I rapportini già inviati restano in archivio.`,
                             );
                             if (!ok) return;
-                            void esegui(() => removeOperatore(op.id), "Account eliminato.");
+                            void esegui(() => removeOperatore(op.id), {
+                              titolo: "Account eliminato",
+                              testo: `${op.nome} non può più accedere. I rapportini già inviati restano.`,
+                            });
                           }}
                         >
                           Elimina

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, enqueueSync, nextNumero } from "@/lib/db";
 import { formatDate, todayIso, uid } from "@/lib/format";
@@ -27,8 +27,8 @@ import {
 } from "@/lib/campate/guard";
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
-import { PopupEsitoSalvataggio, type EsitoSalvataggio } from "./PopupEsitoSalvataggio";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
@@ -44,7 +44,6 @@ type Props = {
 };
 
 export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCampataId }: Props) {
-  const router = useRouter();
   const search = useSearchParams();
   const chiedeFirma = search.get("firma") === "ditta";
   const firmaBloccoRef = useRef<HTMLElement | null>(null);
@@ -108,7 +107,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [firmaOperatore, setFirmaOperatore] = useState(existing?.firmaOperatore);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [esito, setEsito] = useState<EsitoSalvataggio | null>(null);
   const [idLocale, setIdLocale] = useState(existing?.id);
   const [numeroLocale, setNumeroLocale] = useState(existing?.numero);
   const [preview, setPreview] = useState<Rapportino | null>(null);
@@ -365,24 +363,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
   }
 
-  function homeDopoInvio() {
-    if (session?.ruolo === "tecnico") return "/tecnico";
-    return "/operatore";
-  }
-
-  function confermaEsito() {
-    const dopo = esito?.dopo;
-    const id = idLocale;
-    setEsito(null);
-    if (dopo === "home") {
-      router.replace(homeDopoInvio());
-      return;
-    }
-    if (!existing && id) {
-      router.replace(
-        session?.ruolo === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`,
-      );
-    }
+  function percorsoDopoBozza(id: string) {
+    if (existing) return "resta" as const;
+    return session?.ruolo === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`;
   }
 
   async function salva() {
@@ -411,17 +394,17 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         : "bozza";
       const saved = await persist(stato);
       if (!saved) return;
-      setEsito(
+      mostraEsito(
         campiBase
           ? {
               titolo: "Inviato in bozza",
               testo: "Manca la firma della ditta. Il foglio resta in bozza: senza quella non va in archivio.",
-              dopo: "resta",
+              dopo: percorsoDopoBozza(saved.id),
             }
           : {
               titolo: "Salvato in bozza",
               testo: "Completa ditta, dipendente TERNA, la firma della ditta e almeno una quantità per archiviarlo.",
-              dopo: "resta",
+              dopo: percorsoDopoBozza(saved.id),
             },
       );
       return;
@@ -433,7 +416,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       archiviatoAt: now,
     });
     if (!saved) return;
-    setEsito({
+    mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
       dopo: "home",
@@ -703,8 +686,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
-
-      {esito ? <PopupEsitoSalvataggio esito={esito} onOk={confermaEsito} /> : null}
 
       {dockReady
         ? createPortal(

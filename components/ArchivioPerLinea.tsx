@@ -12,6 +12,7 @@ import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "./MostraAltro";
 import { haFirmaDitta } from "@/lib/rapportinoFirma";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { FirmaDittaOverlay } from "./FirmaDittaOverlay";
 import { RapportinoCard } from "./RapportinoCard";
 import { RapportinoSheet } from "./RapportinoSheet";
@@ -217,6 +218,14 @@ export function ArchivioPerLinea({
         `Schede_${codice}_${lista.length}fogli.pdf`,
         prestazioni,
       );
+      mostraEsito({
+        titolo: "PDF pronto",
+        testo:
+          lista.length === 1
+            ? "Il foglio ufficiale è stato scaricato."
+            : `Scaricati ${lista.length} fogli in un unico PDF.`,
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");
     } finally {

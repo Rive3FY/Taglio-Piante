@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { applicaSquadraAiRapportini, readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export function SquadraDialog() {
   const { session } = useSession();
@@ -60,6 +61,11 @@ export function SquadraDialog() {
       void syncNow();
       setAperto(false);
       setForzato(false);
+      mostraEsito({
+        titolo: "Squadra aggiornata",
+        testo: "Sig. e numero operatori sono impostati per i rapportini di oggi.",
+        dopo: "resta",
+      });
     } finally {
       setBusy(false);
     }

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { etichettaMese, mesiDisponibili } from "@/lib/contabilita/aggrega";
 import { formatDate, todayIso } from "@/lib/format";
 import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { CalendarioMese } from "./CalendarioMese";
 import { RapportinoCard } from "./RapportinoCard";
 import type { Linea, Rapportino } from "@/lib/types";
@@ -81,6 +82,11 @@ export function RapportiniCalendario({
         `Schede_taglio_${giorno}.pdf`,
         prestazioni,
       );
+      mostraEsito({
+        titolo: "PDF pronto",
+        testo: `Scaricati ${delGiorno.length} fogli del ${formatDate(giorno)}.`,
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");
     } finally {

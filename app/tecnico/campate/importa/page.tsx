@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { parseFileCampate } from "@/lib/campate/file";
@@ -11,10 +10,10 @@ import { annoDi, anniPiani } from "@/lib/campate/anno";
 import { useSession } from "@/lib/SessionContext";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 import { formatDistInt } from "@/lib/format";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import type { RigaImportBruta, RigaImportScartata } from "@/lib/campate/parse";
 
 export default function ImportaCampatePage() {
-  const router = useRouter();
   const { session } = useSession();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const esistenti = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
@@ -75,7 +74,11 @@ export default function ImportaCampatePage() {
         setErrore("Nessuna distanza da attaccare: nel file non c’è Dist int oppure le campate non coincidono con questo anno.");
         return;
       }
-      router.push("/tecnico/campate");
+      mostraEsito({
+        titolo: "Distanze aggiornate",
+        testo: `Coordinate e Dist int attaccate su ${aggiornate} campate del piano ${anno}.`,
+        dopo: "/tecnico/campate",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Aggiornamento distanze non riuscito.");
     } finally {
@@ -96,7 +99,11 @@ export default function ImportaCampatePage() {
     setErrore(null);
     try {
       await confermaImportCampate({ fileName, anteprima, session, anno, azzera: false });
-      router.push("/tecnico/campate");
+      mostraEsito({
+        titolo: haPianoAnno ? `Piano ${anno} sostituito` : `Piano ${anno} importato`,
+        testo: "Le campate del file sono in elenco. Puoi aprirle da Campate.",
+        dopo: "/tecnico/campate",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Importazione non riuscita.");
     } finally {
@@ -120,7 +127,11 @@ export default function ImportaCampatePage() {
     setErrore(null);
     try {
       await confermaImportCampate({ fileName, anteprima, session, anno, azzera: true });
-      router.push("/tecnico/campate");
+      mostraEsito({
+        titolo: "Azzerato e ripartito",
+        testo: `Tutto cancellato. Ora c’è solo il piano ${anno} di questo file.`,
+        dopo: "/tecnico/campate",
+      });
     } catch (e) {
       setErrore(
         e instanceof Error

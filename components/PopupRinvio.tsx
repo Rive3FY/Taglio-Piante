@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MESI_LABEL, campataDaRiprendere, type CampataLavoro } from "@/lib/types";
 import type { PatchRinvio } from "@/lib/campate/apply";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 
 export function PopupRinvio({
@@ -42,6 +43,13 @@ export function PopupRinvio({
     try {
       await onSalva({ mese: m, anno: a, note: note.trim() || undefined });
       onChiudi();
+      mostraEsito({
+        titolo: giaInElenco ? "Promemoria aggiornato" : "Messo in «Da riprendere»",
+        testo: giaInElenco
+          ? "Mese e note del promemoria sono stati aggiornati."
+          : "La campata è nell’elenco parallelo. Lo stato di taglio non cambia.",
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Non è stato possibile salvare.");
     } finally {
@@ -55,6 +63,11 @@ export function PopupRinvio({
     try {
       await onTogli();
       onChiudi();
+      mostraEsito({
+        titolo: "Tolto da «Da riprendere»",
+        testo: "Il promemoria non compare più nell’elenco parallelo.",
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Non è stato possibile togliere il promemoria.");
     } finally {

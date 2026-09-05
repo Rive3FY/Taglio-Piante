@@ -5,6 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { addLinea, removeLinea } from "@/lib/linee";
 import { tensioneLabel, tensioneLinea } from "@/lib/format";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export default function AnagrafichePage() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
@@ -22,7 +23,6 @@ export default function AnagrafichePage() {
   const [cerca, setCerca] = useState("");
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const usoPerLinea = useMemo(() => {
     const mappa = new Map<string, number>();
@@ -45,13 +45,12 @@ export default function AnagrafichePage() {
     return tensioneLinea({ id: "", codice: pulito, nome: "" });
   }, [codice]);
 
-  async function esegui(action: () => Promise<void>, messaggio: string) {
+  async function esegui(action: () => Promise<void>, esito: { titolo: string; testo: string }) {
     setBusy(true);
     setErrore(null);
-    setInfo(null);
     try {
       await action();
-      setInfo(messaggio);
+      mostraEsito({ ...esito, dopo: "resta" });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Operazione non riuscita.");
     } finally {
@@ -93,7 +92,10 @@ export default function AnagrafichePage() {
                 await addLinea({ codice, nome });
                 setCodice("");
                 setNome("");
-              }, "Linea aggiunta.")
+              }, {
+                titolo: "Linea aggiunta",
+                testo: "La nuova linea è in elenco e disponibile nei rapportini.",
+              })
             }
           >
             {busy ? "Salvataggio…" : "Aggiungi"}
@@ -105,7 +107,6 @@ export default function AnagrafichePage() {
             : "La tensione si ricava dalle prime due cifre: 21 → 380 kV, 22 → 220 kV, 23 → 150 kV, 24 → 60 kV."}
         </p>
         {errore ? <p className="form-error">{errore}</p> : null}
-        {info ? <p className="muted">{info}</p> : null}
       </section>
 
       <section className="panel">
@@ -137,7 +138,10 @@ export default function AnagrafichePage() {
                         onClick={() => {
                           const ok = window.confirm(`Eliminare la linea ${l.codice}?`);
                           if (!ok) return;
-                          void esegui(() => removeLinea(l.id), `Linea ${l.codice} eliminata.`);
+                          void esegui(() => removeLinea(l.id), {
+                            titolo: "Linea eliminata",
+                            testo: `La linea ${l.codice} non è più in elenco.`,
+                          });
                         }}
                       >
                         Elimina

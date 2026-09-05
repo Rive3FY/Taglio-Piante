@@ -10,6 +10,7 @@ import {
   fogliPerBackup,
   scaricaBackupZip,
 } from "@/lib/backup/zipRapportini";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export default function TecnicoBackupPage() {
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
@@ -21,7 +22,6 @@ export default function TecnicoBackupPage() {
   const [busy, setBusy] = useState(false);
   const [progresso, setProgresso] = useState("");
   const [errore, setErrore] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const mesiEffettivi = (scelti === "init" ? (mesi[0] ? [mesi[0]] : []) : scelti).filter((m) =>
     mesi.includes(m),
@@ -44,7 +44,6 @@ export default function TecnicoBackupPage() {
       return base.includes(mese) ? base.filter((m) => m !== mese) : [...base, mese];
     });
     setErrore(null);
-    setOkMsg(null);
   }
 
   async function scarica() {
@@ -54,7 +53,6 @@ export default function TecnicoBackupPage() {
     }
     setBusy(true);
     setErrore(null);
-    setOkMsg(null);
     setProgresso("Preparazione fogli…");
     try {
       const esito = await scaricaBackupZip(fogli, prestazioni, {
@@ -66,7 +64,11 @@ export default function TecnicoBackupPage() {
       });
       const extra =
         esito.ok < esito.totale ? ` (${esito.totale - esito.ok} non compilati)` : "";
-      setOkMsg(`Zip scaricato: ${esito.ok} fogli${extra}.`);
+      mostraEsito({
+        titolo: "Backup scaricato",
+        testo: `Zip pronto: ${esito.ok} fogli${extra}.`,
+        dopo: "resta",
+      });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Backup non riuscito.");
     } finally {
@@ -153,7 +155,6 @@ export default function TecnicoBackupPage() {
             </button>
             {progresso ? <p className="muted">{progresso}</p> : null}
             {errore ? <p className="form-error">{errore}</p> : null}
-            {okMsg ? <p className="muted">{okMsg}</p> : null}
           </>
         )}
       </section>
