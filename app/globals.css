@@ -1113,21 +1113,57 @@ button.rap-card-link {
   gap: 16px;
   align-items: center;
 }
-.torta {
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
+.torta-svg {
+  width: 146px;
+  height: 146px;
   flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+  overflow: visible;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 8px 16px rgba(12, 31, 24, 0.16));
+  animation: torta-entra 0.5s cubic-bezier(0.22, 0.72, 0.32, 1) both;
 }
-.torta.is-empty { background: #e8eee9; }
+.torta-fetta { transition: filter 0.18s ease; }
+.torta-fetta:hover { filter: brightness(1.08); }
+.torta-etichetta {
+  fill: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(12, 31, 24, 0.24);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.torta-etichetta-n { font-size: 9px; font-weight: 600; }
+.torta-vuota { fill: #e8eee9; }
+.torta-vuota-testo {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+@keyframes torta-entra {
+  from { opacity: 0; transform: scale(0.88) rotate(-10deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .torta-svg { animation: none; }
+}
 .torta-leggenda { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .torta-leggenda li {
   display: grid;
-  grid-template-columns: 10px 1fr auto;
+  grid-template-columns: 10px 1fr auto auto;
   gap: 8px;
   align-items: center;
   font-size: 13px;
+}
+.torta-quota {
+  color: var(--muted);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
 }
 .basi-barre { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 8px; }
 .basi-barre li {
