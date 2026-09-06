@@ -832,7 +832,6 @@ export function CampateElenco({
                   ruolo={ruolo}
                   soloRinvii={soloRinvii}
                   sessionUserId={session?.userId}
-                  sessionRuolo={session?.ruolo}
                   storico={storicoPer.get(c.id) ?? []}
                   anniPrecedenti={anniTaglioPrecedenti(campate, c.codiceLinea, c.normalizzata, annoRiferimento)}
                   aperta={aperta === c.id}
@@ -934,7 +933,6 @@ function CampataRiga({
   ruolo,
   soloRinvii,
   sessionUserId,
-  sessionRuolo,
   storico,
   anniPrecedenti,
   aperta,
@@ -946,7 +944,6 @@ function CampataRiga({
   ruolo: "tecnico" | "operatore";
   soloRinvii: boolean;
   sessionUserId?: string;
-  sessionRuolo?: "tecnico" | "operatore";
   storico: CampataStorico[];
   anniPrecedenti: number[];
   aperta: boolean;
@@ -957,9 +954,8 @@ function CampataRiga({
   const [nota, setNota] = useState("");
   const [attenzione, setAttenzione] = useState(Boolean(c.attenzionare));
   const attenzioneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const session = sessionUserId
-    ? { userId: sessionUserId, ruolo: sessionRuolo ?? ruolo, nome: "", email: "" }
-    : null;
+  // Conta l'area, non il ruolo: il tecnico passato sul campo lavora con i tasti dell'operatore.
+  const session = sessionUserId ? { userId: sessionUserId, ruolo, nome: "", email: "" } : null;
   const nonTagliare = campataDaNonTagliare(c);
   const tagliata = campataETagliata(c);
   const daRiprendere = campataDaRiprendere(c);
@@ -971,7 +967,7 @@ function CampataRiga({
   const lockAttenzione = daAttenzionare && !puoModificareSceltaCampata(session, c.attenzionareBy);
   const daRapportino = Boolean(c.rapportinoId) && !nonTagliare;
   const mostraRapportino = Boolean(c.rapportinoId) || !nonTagliare;
-  const tecnico = (sessionRuolo ?? ruolo) === "tecnico";
+  const tecnico = ruolo === "tecnico";
 
   useEffect(() => {
     setNota("");

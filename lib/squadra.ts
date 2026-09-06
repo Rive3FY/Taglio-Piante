@@ -33,11 +33,11 @@ export function writeSquadra(userId: string, prefs: PrefsSquadra) {
   }
 }
 
-/** Aggiorna Sig. e n. operatori su tutti i rapportini visibili di questo account. */
+/** Aggiorna Sig. e n. operatori sui rapportini di questo account, mai su quelli altrui. */
 export async function applicaSquadraAiRapportini(session: Session, prefs: PrefsSquadra) {
   writeSquadra(session.userId, prefs);
   const tutti = await db.rapportini.toArray();
-  const miei = tutti.filter((r) => rapportinoVisibile(r, session));
+  const miei = tutti.filter((r) => rapportinoVisibile(r, session, "operatore"));
   const now = new Date().toISOString();
   for (const r of miei) {
     await db.rapportini.update(r.id, {

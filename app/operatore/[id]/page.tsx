@@ -45,7 +45,7 @@ export default function OperatoreRapportinoPage({
 
   if (item === undefined) return <p className="muted">Caricamento…</p>;
   if (!item) return <p className="muted">Rapportino non trovato sul dispositivo.</p>;
-  if (!rapportinoVisibile(item, session)) {
+  if (!rapportinoVisibile(item, session, "operatore")) {
     return <p className="muted">Questo rapportino è di un altro operatore.</p>;
   }
 

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/SessionContext";
+import { homeArea, useArea } from "@/lib/area";
 import { chiudiEsito, iscriviEsito } from "@/lib/esitoSalvataggio";
 import { PopupEsitoSalvataggio, type EsitoSalvataggio } from "./PopupEsitoSalvataggio";
 
 export function EsitoSalvataggioHost() {
   const router = useRouter();
-  const { session } = useSession();
+  const area = useArea();
   const [esito, setEsito] = useState<EsitoSalvataggio | null>(null);
 
   useEffect(() => iscriviEsito(setEsito), []);
@@ -23,7 +23,7 @@ export function EsitoSalvataggioHost() {
         chiudiEsito();
         if (!dopo || dopo === "resta") return;
         if (dopo === "home") {
-          router.replace(session?.ruolo === "tecnico" ? "/tecnico" : "/operatore");
+          router.replace(homeArea(area));
           return;
         }
         router.replace(dopo);

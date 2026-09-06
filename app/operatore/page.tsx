@@ -32,7 +32,7 @@ export default function OperatoreHome() {
         </Link>
 
         {SEZIONI.map((sezione) => {
-          const items = rapportiniDellaSezione(rapportini, sezione, session);
+          const items = rapportiniDellaSezione(rapportini, sezione, session, "operatore");
           return (
             <Link key={sezione.key} href={`/operatore/elenco/${sezione.key}`} className="home-card">
               <div className="kicker">{sezione.kicker}</div>
