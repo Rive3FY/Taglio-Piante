@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { accessToken } from "./supabase/client";
+import type { Ruolo } from "./types";
 
 export function matchOperatore(nome: string | null | undefined, operatori: string[]) {
   const n = nome?.trim().toLowerCase();
@@ -67,6 +68,14 @@ export async function renameOperatore(userId: string, nome: string) {
 
 export async function resetPasswordOperatore(userId: string, password: string) {
   await chiamaApi("PATCH", { userId, password });
+}
+
+export async function cambiaRuoloOperatore(userId: string, ruolo: Ruolo) {
+  await chiamaApi("PATCH", { userId, ruolo });
+  const attuale = await db.operatori.get(userId);
+  if (attuale) {
+    await db.operatori.put({ ...attuale, ruolo, updatedAt: new Date().toISOString() });
+  }
 }
 
 export async function setFirmaOperatore(userId: string, firma: string | null) {

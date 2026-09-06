@@ -5,6 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import {
   addOperatore,
+  cambiaRuoloOperatore,
   removeOperatore,
   renameOperatore,
   resetPasswordOperatore,
@@ -213,6 +214,43 @@ export default function OperatoriPage() {
                       >
                         Nuova password
                       </button>
+                      {op.id === session?.userId ? null : isTecnico ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Riportare ${op.nome} a operatore? Perde l’area tecnico e torna a vedere solo i propri rapportini.`,
+                            );
+                            if (!ok) return;
+                            void esegui(() => cambiaRuoloOperatore(op.id, "operatore"), {
+                              titolo: "Ora è operatore",
+                              testo: `${op.nome} rientra come operatore al prossimo avvio dell’app.`,
+                            });
+                          }}
+                        >
+                          Riporta a operatore
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Promuovere ${op.nome} a tecnico? Vedrà tutti i rapportini e potrà gestire campate, prezzi e account.`,
+                            );
+                            if (!ok) return;
+                            void esegui(() => cambiaRuoloOperatore(op.id, "tecnico"), {
+                              titolo: "Ora è tecnico",
+                              testo: `${op.nome} entra nell’area tecnico al prossimo avvio dell’app.`,
+                            });
+                          }}
+                        >
+                          Promuovi a tecnico
+                        </button>
+                      )}
                       {isTecnico || op.id === session?.userId ? null : (
                         <button
                           type="button"

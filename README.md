@@ -32,10 +32,10 @@ Le stesse tre variabili vanno su **Vercel → Settings → Environment Variables
 
 | Ruolo | Come nasce |
 |-------|------------|
-| Tecnico | Creato a mano in Supabase + `supabase/tecnico.sql` |
+| Tecnico | Il primo a mano in Supabase + `supabase/tecnico.sql`, gli altri promossi in **Tecnico → Operatori** |
 | Operatore | Creato dal tecnico in **Tecnico → Operatori** |
 
-Il tecnico può rinominare un operatore, assegnargli una nuova password o eliminarne l'account.
+Il tecnico può rinominare un operatore, assegnargli una nuova password o eliminarne l'account. Con **Promuovi a tecnico** un operatore passa all'area tecnico (e con **Riporta a operatore** torna indietro): il nuovo ruolo vale dal successivo avvio dell'app sul suo dispositivo. Nessuno può cambiare il ruolo del proprio account, così resta sempre almeno un tecnico.
 
 ## Chi vede cosa
 
