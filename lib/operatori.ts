@@ -66,6 +66,17 @@ export async function renameOperatore(userId: string, nome: string) {
   }
 }
 
+export async function cambiaEmailOperatore(userId: string, email: string) {
+  const pulita = email.trim().toLowerCase();
+  if (!pulita.includes("@")) throw new Error("Indica un indirizzo email valido.");
+
+  await chiamaApi("PATCH", { userId, email: pulita });
+  const attuale = await db.operatori.get(userId);
+  if (attuale) {
+    await db.operatori.put({ ...attuale, email: pulita, updatedAt: new Date().toISOString() });
+  }
+}
+
 export async function resetPasswordOperatore(userId: string, password: string) {
   await chiamaApi("PATCH", { userId, password });
 }

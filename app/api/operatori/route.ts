@@ -61,11 +61,19 @@ export async function PATCH(request: Request) {
   if (!auth.ok) return errore(auth.message, auth.status);
 
   const body = (await request.json().catch(() => null)) as
-    | { userId?: string; nome?: string; password?: string; firma?: string | null; ruolo?: string }
+    | {
+        userId?: string;
+        nome?: string;
+        email?: string;
+        password?: string;
+        firma?: string | null;
+        ruolo?: string;
+      }
     | null;
 
   const userId = normalizza(body?.userId);
   const nome = normalizza(body?.nome);
+  const email = normalizza(body?.email).toLowerCase();
   const password = typeof body?.password === "string" ? body.password : "";
   const cambiaFirma = Boolean(body && "firma" in body);
   const firma = typeof body?.firma === "string" ? body.firma : null;
@@ -73,7 +81,10 @@ export async function PATCH(request: Request) {
   const ruolo = body?.ruolo === "tecnico" || body?.ruolo === "operatore" ? body.ruolo : null;
 
   if (!userId) return errore("Operatore non indicato.", 400);
-  if (!nome && !password && !cambiaFirma && !cambiaRuolo) return errore("Niente da aggiornare.", 400);
+  if (!nome && !email && !password && !cambiaFirma && !cambiaRuolo) {
+    return errore("Niente da aggiornare.", 400);
+  }
+  if (email && !email.includes("@")) return errore("Indica un indirizzo email valido.", 400);
   if (password && password.length < 8) {
     return errore("La password deve avere almeno 8 caratteri.", 400);
   }
@@ -99,6 +110,41 @@ export async function PATCH(request: Request) {
       user_metadata: { nome },
     });
     if (metaError) return errore(metaError.message, 400);
+  }
+
+  if (email) {
+    const { data: prima } = await auth.admin
+      .from("profili")
+      .select("email")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    // Prima l'account, che è quello che può rifiutare l'email perché già presa.
+    const { error: authError } = await auth.admin.auth.admin.updateUserById(userId, {
+      email,
+      email_confirm: true,
+    });
+    if (authError) {
+      const conflitto = /already|registered|exists/i.test(authError.message);
+      return errore(
+        conflitto ? "Esiste già un account con questa email." : authError.message,
+        conflitto ? 409 : 400,
+      );
+    }
+
+    const { error: profiloError } = await auth.admin
+      .from("profili")
+      .update({ email, updated_at: new Date().toISOString() })
+      .eq("user_id", userId);
+    if (profiloError) {
+      if (prima?.email) {
+        await auth.admin.auth.admin.updateUserById(userId, {
+          email: prima.email as string,
+          email_confirm: true,
+        });
+      }
+      return errore(profiloError.message, 400);
+    }
   }
 
   if (password) {
