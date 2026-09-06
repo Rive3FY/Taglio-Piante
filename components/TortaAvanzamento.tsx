@@ -9,23 +9,47 @@ const FETTE = [
   { key: "daTagliare" as const, label: "Da tagliare", da: "#f59e0b", a: "#b45309" },
 ];
 
-const CENTRO = 60;
-const RAGGIO = 52;
+const LARGHEZZA = 300;
+const CX = 150;
+const CY = 132;
+const RAGGIO_EST = 70;
+const RAGGIO_INT = 40;
+/** Spazio che serve alla scritta più lunga: i richiami non escono mai dal riquadro. */
+const LARGHEZZA_ETICHETTA = 70;
 /** Stacco tra le fette, in gradi: è quello che dà l'aria moderna alla torta. */
-const STACCO = 3;
+const STACCO = 2;
 
 function punto(raggio: number, gradi: number) {
   const rad = ((gradi - 90) * Math.PI) / 180;
-  return [CENTRO + raggio * Math.cos(rad), CENTRO + raggio * Math.sin(rad)] as const;
+  return [CX + raggio * Math.cos(rad), CY + raggio * Math.sin(rad)] as const;
+}
+
+/** Mezza torta: si parte da sinistra e si gira in senso orario fino a destra. */
+function angolo(frazione: number) {
+  return 270 + frazione * 180;
+}
+
+function n(valore: number) {
+  return valore.toFixed(2);
 }
 
 /** Lo stacco si stringe sulle fette sottili, se no una fetta di un grado si girerebbe. */
-function spicchio(da: number, a: number) {
-  const stacco = Math.min(STACCO, (a - da) * 0.35);
-  const [x1, y1] = punto(RAGGIO, da + stacco / 2);
-  const [x2, y2] = punto(RAGGIO, a - stacco / 2);
-  const grande = a - da > 180 ? 1 : 0;
-  return `M ${CENTRO} ${CENTRO} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${RAGGIO} ${RAGGIO} 0 ${grande} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+function fetta(da: number, a: number, stacco: number) {
+  const s = Math.min(stacco, (a - da) * 0.35);
+  const inizio = da + s / 2;
+  const fine = a - s / 2;
+  const [xe1, ye1] = punto(RAGGIO_EST, inizio);
+  const [xe2, ye2] = punto(RAGGIO_EST, fine);
+  const [xi2, yi2] = punto(RAGGIO_INT, fine);
+  const [xi1, yi1] = punto(RAGGIO_INT, inizio);
+  const grande = fine - inizio > 180 ? 1 : 0;
+  return [
+    `M ${n(xe1)} ${n(ye1)}`,
+    `A ${RAGGIO_EST} ${RAGGIO_EST} 0 ${grande} 1 ${n(xe2)} ${n(ye2)}`,
+    `L ${n(xi2)} ${n(yi2)}`,
+    `A ${RAGGIO_INT} ${RAGGIO_INT} 0 ${grande} 0 ${n(xi1)} ${n(yi1)}`,
+    "Z",
+  ].join(" ");
 }
 
 /** Percentuali intere che sommano sempre a 100: il resto va alla fetta più grande. */
@@ -33,13 +57,13 @@ function percentuali(valori: number[], totale: number) {
   if (totale <= 0) return valori.map(() => 0);
   const grezze = valori.map((v) => (v / totale) * 100);
   const tonde = grezze.map((v, i) => {
-    const n = Math.round(v);
+    const arrotondata = Math.round(v);
     // Una campata che c'è non sparisce a zero, e finché ne resta una non è 100%.
-    if (valori[i] > 0 && n === 0) return 1;
-    if (valori[i] < totale && n === 100) return 99;
-    return n;
+    if (valori[i] > 0 && arrotondata === 0) return 1;
+    if (valori[i] < totale && arrotondata === 100) return 99;
+    return arrotondata;
   });
-  const resto = 100 - tonde.reduce((s, n) => s + n, 0);
+  const resto = 100 - tonde.reduce((s, v) => s + v, 0);
   if (resto !== 0) {
     const piuGrande = grezze.indexOf(Math.max(...grezze));
     tonde[piuGrande] += resto;
@@ -56,16 +80,20 @@ export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
     dati.totale,
   );
 
-  let acc = 0;
+  const intero = Math.max(dati.totale, 1);
   const fette = FETTE.map((f, i) => {
     const quantita = dati[f.key];
-    const da = (acc / Math.max(dati.totale, 1)) * 360;
-    acc += quantita;
-    const a = (acc / Math.max(dati.totale, 1)) * 360;
-    return { ...f, quantita, quota: quote[i], da, a };
+    const prima = FETTE.slice(0, i).reduce((s, g) => s + dati[g.key], 0);
+    return {
+      ...f,
+      quantita,
+      quota: quote[i],
+      inizio: angolo(prima / intero),
+      fine: angolo((prima + quantita) / intero),
+    };
   });
   const disegnate = fette.filter((f) => f.quantita > 0);
-  const unaSola = disegnate.length === 1;
+  const stacco = disegnate.length > 1 ? STACCO : 0;
 
   return (
     <section className="panel torta-card">
@@ -76,7 +104,7 @@ export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
       <div className="torta-layout">
         <svg
           className="torta-svg"
-          viewBox="0 0 120 120"
+          viewBox={`0 0 ${LARGHEZZA} 152`}
           role="img"
           aria-label={
             vuoto
@@ -86,50 +114,51 @@ export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
         >
           <defs>
             {FETTE.map((f) => (
-              <linearGradient key={f.key} id={`${uid}-${f.key}`} x1="0" y1="0" x2="1" y2="1">
+              <linearGradient key={f.key} id={`${uid}-${f.key}`} x1="0" y1="1" x2="1" y2="0">
                 <stop offset="0%" stopColor={f.da} />
                 <stop offset="100%" stopColor={f.a} />
               </linearGradient>
             ))}
           </defs>
           {vuoto ? (
-            <>
-              <circle className="torta-vuota" cx={CENTRO} cy={CENTRO} r={RAGGIO} />
-              <text className="torta-vuota-testo" x={CENTRO} y={CENTRO + 4}>
-                0%
-              </text>
-            </>
+            <path className="torta-vuota" d={fetta(270, 450, 0)} />
           ) : (
             disegnate.map((f) => {
-              const [lx, ly] = unaSola
-                ? [CENTRO, CENTRO]
-                : punto(RAGGIO * 0.62, (f.da + f.a) / 2);
+              const meta = f.inizio + (f.fine - f.inizio) / 2;
+              const [xg1, yg1] = punto(RAGGIO_EST + 4, meta);
+              const [xg2, yg2] = punto(RAGGIO_EST + 14, meta);
+              const sinistra = xg2 < CX;
+              const xg3 = sinistra
+                ? Math.max(xg2 - 12, LARGHEZZA_ETICHETTA)
+                : Math.min(xg2 + 12, LARGHEZZA - LARGHEZZA_ETICHETTA);
+              const xt = xg3 + (sinistra ? -4 : 4);
               return (
-                <g key={f.key} className="torta-fetta">
-                  {unaSola ? (
-                    <circle cx={CENTRO} cy={CENTRO} r={RAGGIO} fill={`url(#${uid}-${f.key})`} />
-                  ) : (
-                    <path d={spicchio(f.da, f.a)} fill={`url(#${uid}-${f.key})`} />
-                  )}
-                  {f.quota >= 8 ? (
-                    <text className="torta-etichetta" x={lx} y={ly}>
-                      <tspan x={lx} dy={f.quota >= 20 ? "-0.15em" : "0.35em"}>
-                        {f.quota}%
-                      </tspan>
-                      {f.quota >= 20 ? (
-                        <tspan className="torta-etichetta-n" x={lx} dy="1.25em">
-                          {f.quantita}
-                        </tspan>
-                      ) : null}
-                    </text>
-                  ) : null}
+                <g key={f.key}>
+                  <path
+                    className="torta-fetta"
+                    d={fetta(f.inizio, f.fine, stacco)}
+                    fill={`url(#${uid}-${f.key})`}
+                  />
+                  <path
+                    className="torta-guida"
+                    d={`M ${n(xg1)} ${n(yg1)} L ${n(xg2)} ${n(yg2)} L ${n(xg3)} ${n(yg2)}`}
+                    stroke={f.a}
+                  />
+                  <text x={xt} y={yg2} textAnchor={sinistra ? "end" : "start"}>
+                    <tspan className="torta-callout-nome" x={xt} dy="-0.25em">
+                      {f.label}
+                    </tspan>
+                    <tspan className="torta-callout-quota" x={xt} dy="1.2em">
+                      {f.quota}%
+                    </tspan>
+                  </text>
                 </g>
               );
             })
           )}
         </svg>
         <ul className="torta-leggenda">
-          {FETTE.map((f, i) => (
+          {FETTE.map((f) => (
             <li key={f.key}>
               <span
                 className="torta-dot"
@@ -137,7 +166,6 @@ export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
               />
               {f.label}
               <strong>{dati[f.key]}</strong>
-              <span className="torta-quota">{vuoto ? "—" : `${quote[i]}%`}</span>
             </li>
           ))}
         </ul>
