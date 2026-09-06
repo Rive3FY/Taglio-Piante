@@ -1,5 +1,11 @@
 export type Ruolo = "operatore" | "tecnico";
 
+/**
+ * Metà dell'app in cui si sta lavorando adesso. Per l'operatore coincide con il ruolo,
+ * mentre il tecnico può passare in area operatore e lì lavora come tale.
+ */
+export type Area = Ruolo;
+
 export type CampataTipo = "campata" | "base";
 
 export type CampataPriorita = "urgente" | "differibile";

@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/SessionContext";
+import { homeArea, readArea } from "@/lib/area";
+import type { Session } from "@/lib/types";
+
+/** Il tecnico riparte dall'area dove aveva scelto di lavorare, l'operatore dalla sua. */
+function destinazione(profilo: Session) {
+  if (profilo.ruolo !== "tecnico") return homeArea("operatore");
+  return homeArea(readArea(profilo.userId) ?? "tecnico");
+}
 
 export default function HomePage() {
   const { session, ready, configurato, login } = useSession();
@@ -14,7 +22,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!ready || !session) return;
-    router.replace(session.ruolo === "tecnico" ? "/tecnico" : "/operatore");
+    router.replace(destinazione(session));
   }, [ready, session, router]);
 
   async function entra() {
@@ -22,7 +30,7 @@ export default function HomePage() {
     setErrore(null);
     try {
       const profilo = await login(email, password);
-      router.replace(profilo.ruolo === "tecnico" ? "/tecnico" : "/operatore");
+      router.replace(destinazione(profilo));
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Accesso non riuscito.");
     } finally {

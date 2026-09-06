@@ -3,17 +3,25 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/SessionContext";
-import type { Ruolo } from "@/lib/types";
+import { homeArea } from "@/lib/area";
+import type { Area, Session } from "@/lib/types";
+
+/** Il tecnico entra anche in area operatore; l'operatore resta fuori da quella tecnica. */
+function puoEntrare(session: Session | null, area: Area) {
+  if (!session) return false;
+  return area === "operatore" || session.ruolo === "tecnico";
+}
 
 export function RoleGuard({
   ruolo,
   children,
 }: {
-  ruolo: Ruolo;
+  ruolo: Area;
   children: React.ReactNode;
 }) {
   const { session, ready } = useSession();
   const router = useRouter();
+  const ammesso = puoEntrare(session, ruolo);
 
   useEffect(() => {
     if (!ready) return;
@@ -21,13 +29,11 @@ export function RoleGuard({
       router.replace("/");
       return;
     }
-    if (session.ruolo !== ruolo) {
-      router.replace(session.ruolo === "tecnico" ? "/tecnico" : "/operatore");
-    }
-  }, [ready, session, ruolo, router]);
+    if (!ammesso) router.replace(homeArea(session.ruolo));
+  }, [ready, session, ammesso, router]);
 
   if (!ready) return <div className="page-loading">Caricamento…</div>;
-  if (!session || session.ruolo !== ruolo) {
+  if (!ammesso) {
     return <div className="page-loading">Reindirizzamento…</div>;
   }
 

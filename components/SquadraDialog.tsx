@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
+import { useArea } from "@/lib/area";
 import { applicaSquadraAiRapportini, readSquadra, type PrefsSquadra } from "@/lib/squadra";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export function SquadraDialog() {
   const { session } = useSession();
   const { syncNow } = useSync();
+  const area = useArea();
+  const inCampo = Boolean(session) && area === "operatore";
   const [aperto, setAperto] = useState(false);
   const [forzato, setForzato] = useState(false);
   const [rappresentante, setRappresentante] = useState("");
@@ -16,21 +19,21 @@ export function SquadraDialog() {
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
 
-  const obbligatorio = Boolean(session && session.ruolo === "operatore" && !readSquadra(session.userId));
+  const obbligatorio = Boolean(session && inCampo && !readSquadra(session.userId));
 
   useEffect(() => {
-    if (!session || session.ruolo !== "operatore") return;
+    if (!session || !inCampo) return;
     const attuale = readSquadra(session.userId);
     if (attuale) {
       setRappresentante(attuale.rappresentanteDitta);
       setNOperatori(String(attuale.nOperatori));
     }
     setAperto(!attuale);
-  }, [session]);
+  }, [session, inCampo]);
 
   useEffect(() => {
     function apri() {
-      if (!session || session.ruolo !== "operatore") return;
+      if (!session || !inCampo) return;
       const attuale = readSquadra(session.userId);
       if (attuale) {
         setRappresentante(attuale.rappresentanteDitta);
@@ -40,9 +43,9 @@ export function SquadraDialog() {
     }
     window.addEventListener("apri-squadra", apri);
     return () => window.removeEventListener("apri-squadra", apri);
-  }, [session]);
+  }, [session, inCampo]);
 
-  if (!session || session.ruolo !== "operatore") return null;
+  if (!session || !inCampo) return null;
   if (!aperto && !forzato) return null;
   const sessione = session;
 

@@ -31,7 +31,7 @@ export default function ElencoSezionePage({
   const config = sezioneDa(sezione);
   if (!config) notFound();
 
-  const items = rapportiniDellaSezione(rapportini, config, session);
+  const items = rapportiniDellaSezione(rapportini, config, session, "operatore");
 
   return (
     <>

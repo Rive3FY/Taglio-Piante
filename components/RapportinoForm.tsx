@@ -27,6 +27,7 @@ import {
 } from "@/lib/campate/guard";
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { useArea } from "@/lib/area";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 
@@ -49,6 +50,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const firmaBloccoRef = useRef<HTMLElement | null>(null);
   const { session } = useSession();
   const { syncNow } = useSync();
+  const area = useArea();
   const [squadraTick, setSquadraTick] = useState(0);
   const [squadra, setSquadra] = useState<PrefsSquadra | null>(null);
   useEffect(() => {
@@ -365,7 +367,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
 
   function percorsoDopoBozza(id: string) {
     if (existing) return "resta" as const;
-    return session?.ruolo === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`;
+    return area === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`;
   }
 
   async function salva() {
@@ -680,7 +682,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           <DeleteRapportinoButton
             id={existing.id}
             numero={existing.numero}
-            href={session?.ruolo === "tecnico" ? "/tecnico/fogli?s=archiviati" : "/operatore"}
+            href={area === "tecnico" ? "/tecnico/fogli?s=archiviati" : "/operatore"}
           />
         </div>
       ) : null}

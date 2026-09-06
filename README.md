@@ -32,17 +32,19 @@ Le stesse tre variabili vanno su **Vercel → Settings → Environment Variables
 
 | Ruolo | Come nasce |
 |-------|------------|
-| Tecnico | Creato a mano in Supabase + `supabase/tecnico.sql` |
+| Tecnico | Il primo a mano in Supabase + `supabase/tecnico.sql`, gli altri promossi in **Tecnico → Operatori** |
 | Operatore | Creato dal tecnico in **Tecnico → Operatori** |
 
-Il tecnico può rinominare un operatore, assegnargli una nuova password o eliminarne l'account.
+Il tecnico può rinominare un operatore, cambiargli l'email di accesso, assegnargli una nuova password o eliminarne l'account. L'email nuova vale subito, senza mail di conferma: dal login successivo si entra con quella. Con **Promuovi a tecnico** un operatore passa all'area tecnico (e con **Riporta a operatore** torna indietro): il nuovo ruolo vale dal successivo avvio dell'app sul suo dispositivo. Nessuno può cambiare il ruolo del proprio account, così resta sempre almeno un tecnico.
+
+Il tecnico lavora anche sul campo: il tasto **Passa a operatore** nell'intestazione apre l'area operatore, e da lì **Passa a tecnico** riporta indietro. In area operatore il tecnico è un operatore a tutti gli effetti — vede solo i rapportini che ha creato lui e ha gli stessi tasti sulle campate — mentre i permessi veri sul database non cambiano. L'ultima area scelta viene ricordata, così riaprendo l'app si torna dove si era rimasti.
 
 ## Chi vede cosa
 
 | Ruolo | Rapportini | Profili e firme |
 |-------|-----------|-----------------|
 | Operatore | Solo quelli che ha creato | Solo il proprio |
-| Tecnico | Tutti | Tutti |
+| Tecnico | Tutti (in area operatore, solo i suoi) | Tutti |
 
 Il filtro non è solo nell'interfaccia: le policy RLS di Supabase legano ogni rapportino al campo `owner_id`, quindi un operatore non può leggere i rapportini degli altri nemmeno chiamando l'API. Al primo accesso dopo l'aggiornamento il dispositivo cancella dalla copia locale i rapportini non suoi già scaricati.
 

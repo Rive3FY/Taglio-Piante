@@ -5,6 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import {
   addOperatore,
+  cambiaEmailOperatore,
+  cambiaRuoloOperatore,
   removeOperatore,
   renameOperatore,
   resetPasswordOperatore,
@@ -14,7 +16,24 @@ import { normalizzaFirma } from "@/lib/firma";
 import { useSession } from "@/lib/SessionContext";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 
-type Azione = { tipo: "rinomina" | "password"; id: string } | null;
+type TipoAzione = "rinomina" | "email" | "password";
+type Azione = { tipo: TipoAzione; id: string } | null;
+
+const ETICHETTE: Record<TipoAzione, string> = {
+  rinomina: "Nuovo nome",
+  email: "Nuova email",
+  password: "Nuova password",
+};
+
+function esitoDelCambio(tipo: TipoAzione, nome: string) {
+  if (tipo === "password") {
+    return { titolo: "Password aggiornata", testo: `${nome} può entrare con la nuova password.` };
+  }
+  if (tipo === "email") {
+    return { titolo: "Email aggiornata", testo: `${nome} da ora entra con la nuova email.` };
+  }
+  return { titolo: "Nome aggiornato", testo: "Il nome dell’operatore è stato cambiato." };
+}
 
 export default function OperatoriPage() {
   const { session } = useSession();
@@ -98,7 +117,7 @@ export default function OperatoriPage() {
           <ul className="operatori-list">
             {operatori.map((op) => {
               const isTecnico = op.ruolo === "tecnico";
-              const inModifica = azione?.id === op.id;
+              const modifica = azione?.id === op.id ? azione : null;
               return (
                 <li key={op.id}>
                   <div className="operatori-info">
@@ -151,32 +170,39 @@ export default function OperatoriPage() {
                     </div>
                   </div>
 
-                  {inModifica ? (
+                  {modifica ? (
                     <div className="operatori-actions">
                       <input
-                        type={azione?.tipo === "password" ? "text" : "text"}
+                        type={modifica.tipo === "email" ? "email" : "text"}
+                        inputMode={modifica.tipo === "email" ? "email" : undefined}
+                        autoComplete={modifica.tipo === "email" ? "off" : undefined}
                         value={valore}
                         onChange={(e) => setValore(e.target.value)}
-                        placeholder={azione?.tipo === "password" ? "Nuova password" : "Nuovo nome"}
-                        aria-label={azione?.tipo === "password" ? "Nuova password" : "Nuovo nome"}
+                        placeholder={ETICHETTE[modifica.tipo]}
+                        aria-label={ETICHETTE[modifica.tipo]}
                       />
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={busy || !valore.trim()}
-                        onClick={() =>
+                        disabled={
+                          busy ||
+                          !valore.trim() ||
+                          (modifica.tipo === "email" && !valore.includes("@"))
+                        }
+                        onClick={() => {
+                          const tipo = modifica.tipo;
                           void esegui(async () => {
-                            if (azione?.tipo === "password") {
+                            if (tipo === "password") {
                               await resetPasswordOperatore(op.id, valore);
+                            } else if (tipo === "email") {
+                              await cambiaEmailOperatore(op.id, valore);
                             } else {
                               await renameOperatore(op.id, valore);
                             }
                             setAzione(null);
                             setValore("");
-                          }, azione?.tipo === "password"
-                            ? { titolo: "Password aggiornata", testo: `${op.nome} può entrare con la nuova password.` }
-                            : { titolo: "Nome aggiornato", testo: "Il nome dell’operatore è stato cambiato." })
-                        }
+                          }, esitoDelCambio(tipo, op.nome));
+                        }}
                       >
                         Salva
                       </button>
@@ -207,12 +233,59 @@ export default function OperatoriPage() {
                         type="button"
                         className="btn btn-ghost btn-sm"
                         onClick={() => {
+                          setAzione({ tipo: "email", id: op.id });
+                          setValore(op.email);
+                        }}
+                      >
+                        Cambia email
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
                           setAzione({ tipo: "password", id: op.id });
                           setValore("");
                         }}
                       >
                         Nuova password
                       </button>
+                      {op.id === session?.userId ? null : isTecnico ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Riportare ${op.nome} a operatore? Perde l’area tecnico e torna a vedere solo i propri rapportini.`,
+                            );
+                            if (!ok) return;
+                            void esegui(() => cambiaRuoloOperatore(op.id, "operatore"), {
+                              titolo: "Ora è operatore",
+                              testo: `${op.nome} rientra come operatore al prossimo avvio dell’app.`,
+                            });
+                          }}
+                        >
+                          Riporta a operatore
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Promuovere ${op.nome} a tecnico? Vedrà tutti i rapportini e potrà gestire campate, prezzi e account.`,
+                            );
+                            if (!ok) return;
+                            void esegui(() => cambiaRuoloOperatore(op.id, "tecnico"), {
+                              titolo: "Ora è tecnico",
+                              testo: `${op.nome} entra nell’area tecnico al prossimo avvio dell’app.`,
+                            });
+                          }}
+                        >
+                          Promuovi a tecnico
+                        </button>
+                      )}
                       {isTecnico || op.id === session?.userId ? null : (
                         <button
                           type="button"

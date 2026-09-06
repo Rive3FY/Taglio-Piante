@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSync } from "@/lib/SyncContext";
 import { useSession } from "@/lib/SessionContext";
+import { homeArea, useArea, writeArea } from "@/lib/area";
 
 export function AppHeader({
   title,
@@ -13,6 +15,9 @@ export function AppHeader({
 }) {
   const { online, pending, lastError, lastSyncAt, syncing, syncNow } = useSync();
   const { session, offline, logout } = useSession();
+  const router = useRouter();
+  const area = useArea();
+  const altraArea = area === "tecnico" ? "operatore" : "tecnico";
 
   const pillClass = [
     "sync-pill",
@@ -83,10 +88,28 @@ export function AppHeader({
               {session.nome}
               <small>
                 {session.ruolo === "tecnico" ? "Tecnico" : "Operatore"}
+                {session.ruolo === "tecnico" && area === "operatore" ? " · sul campo" : ""}
                 {offline ? " · accesso offline" : ""}
               </small>
             </span>
-            {session.ruolo === "operatore" ? (
+            {session.ruolo === "tecnico" ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                title={
+                  altraArea === "operatore"
+                    ? "Lavora come operatore: rapportini tuoi e campate sul campo."
+                    : "Torna all’area tecnico: tutti i rapportini, campate e account."
+                }
+                onClick={() => {
+                  writeArea(session.userId, altraArea);
+                  router.replace(homeArea(altraArea));
+                }}
+              >
+                {altraArea === "operatore" ? "Passa a operatore" : "Passa a tecnico"}
+              </button>
+            ) : null}
+            {area === "operatore" ? (
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
