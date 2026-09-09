@@ -1,4 +1,5 @@
-import type { RapportinoCampata } from "@/lib/types";
+import { CAMPATA_PRIORITA_LABEL, type RapportinoCampata } from "@/lib/types";
+import { pianoAccoppiaFratelli, readPianoLavoro } from "./pianoLavoro";
 
 export type CampataDaChiudere = {
   chiave: string;
@@ -10,20 +11,33 @@ export function esitoETerminato(esito: Pick<RapportinoCampata, "terminata">) {
   return esito.terminata !== false;
 }
 
+function chiaveEsito(e: Pick<RapportinoCampata, "normalizzata" | "priorita">) {
+  if (pianoAccoppiaFratelli(readPianoLavoro())) return e.normalizzata;
+  return `${e.normalizzata}|${e.priorita ?? ""}`;
+}
+
+function etichettaEsito(e: Pick<RapportinoCampata, "normalizzata" | "originale" | "priorita">) {
+  const base = (e.normalizzata || e.originale).trim();
+  if (!e.priorita || pianoAccoppiaFratelli(readPianoLavoro())) return base;
+  return `${base} · ${CAMPATA_PRIORITA_LABEL[e.priorita]}`;
+}
+
 /**
  * Span distinti (non le basi) su cui chiedere se il taglio è finito.
- * Urgente e differibile dello stesso span si chiudono insieme: una domanda sola.
+ * Col piano «entrambe» urgente e differibile dello stesso span sono una domanda sola;
+ * altrimenti restano due interventi distinti.
  */
 export function campatePerDomandaTerminata(esiti: RapportinoCampata[]): CampataDaChiudere[] {
   const out: CampataDaChiudere[] = [];
   const visti = new Set<string>();
   for (const e of esiti) {
     if (e.tipo === "base") continue;
-    const etichetta = (e.normalizzata || e.originale).trim();
+    const etichetta = etichettaEsito(e);
     if (!etichetta) continue;
-    if (visti.has(e.normalizzata)) continue;
-    visti.add(e.normalizzata);
-    out.push({ chiave: e.normalizzata, etichetta });
+    const chiave = chiaveEsito(e);
+    if (visti.has(chiave)) continue;
+    visti.add(chiave);
+    out.push({ chiave, etichetta });
   }
   return out;
 }
@@ -34,7 +48,7 @@ export function applicaScelteTerminata(
 ): RapportinoCampata[] {
   return esiti.map((e) => {
     if (e.tipo === "base") return { ...e, terminata: true };
-    const scelta = scelte[e.normalizzata];
+    const scelta = scelte[chiaveEsito(e)];
     if (typeof scelta !== "boolean") return e;
     return { ...e, terminata: scelta };
   });

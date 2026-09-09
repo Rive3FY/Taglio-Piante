@@ -17,6 +17,7 @@ import {
   type OrdineElenco,
   type RipresaFiltro,
 } from "@/lib/campate/elencoVista";
+import { PIANO_LAVORO_LABEL, usePianoLavoro, type PianoLavoro } from "@/lib/campate/pianoLavoro";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
@@ -51,6 +52,19 @@ type OrigineFiltro = CampataOrigine | "tutte";
 type PrioritaFiltro = CampataPriorita | "tutte";
 type StatoFiltro = CampataStatoLavoro | "tutte";
 type ModoElenco = "piano" | "rinvii";
+
+function conteggiTaglio(set: CampataLavoro[]) {
+  return {
+    totale: set.length,
+    daTagliare: set.filter((c) => !campataETagliata(c) && !campataNonTerminata(c)).length,
+    nonTerminate: set.filter((c) => campataNonTerminata(c)).length,
+    tagliate: set.filter((c) => campataETagliata(c)).length,
+  };
+}
+
+function filtroDaPiano(piano: PianoLavoro): PrioritaFiltro {
+  return piano === "entrambe" ? "tutte" : piano;
+}
 
 /** Una riga per span+priorità: se lo stesso promemoria è su due anni, resta quello aperto più recente. */
 function promemoriaSenzaDoppioni(lista: CampataLavoro[]) {
@@ -168,9 +182,12 @@ export function CampateElenco({
     () => readElencoVista(session?.userId, chiaveVista),
     [session?.userId, chiaveVista],
   );
+  const [piano, scegliPiano] = usePianoLavoro();
   const [q, setQ] = useState(vistaSalvata?.q ?? "");
   const [kv, setKv] = useState<number | "tutte">(vistaSalvata?.kv ?? "tutte");
-  const [priorita, setPriorita] = useState<PrioritaFiltro>(vistaSalvata?.priorita ?? "tutte");
+  const [priorita, setPriorita] = useState<PrioritaFiltro>(
+    vistaSalvata?.priorita ?? filtroDaPiano(piano),
+  );
   const [stato, setStato] = useState<StatoFiltro>(vistaSalvata?.stato ?? "tutte");
   const [soloAttenzione, setSoloAttenzione] = useState(vistaSalvata?.soloAttenzione ?? false);
   const [soloDaNonTagliare, setSoloDaNonTagliare] = useState(vistaSalvata?.soloDaNonTagliare ?? false);
@@ -316,6 +333,8 @@ export function CampateElenco({
       inElenco: set.filter((c) => campataInElencoParallelo(c)).length,
       daFare: set.filter((c) => promemoriaAperto(c)).length,
       fatte: set.filter((c) => promemoriaChiuso(c)).length,
+      differibili: conteggiTaglio(set.filter((c) => c.priorita === "differibile")),
+      urgenti: conteggiTaglio(set.filter((c) => c.priorita === "urgente")),
     };
   }, [delPiano]);
 
@@ -392,6 +411,26 @@ export function CampateElenco({
 
   return (
     <>
+      {!soloRinvii ? (
+        <div className="piano-lavoro">
+          <span className="muted">Lavoro in corso</span>
+          {(["differibile", "urgente", "entrambe"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`chip ${piano === p ? "on" : ""}`}
+              onClick={() => {
+                scegliPiano(p);
+                setPriorita(filtroDaPiano(p));
+                setVisibili(40);
+              }}
+            >
+              {PIANO_LAVORO_LABEL[p]}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="chip-row">
         {soloRinvii ? (
           <>
@@ -409,10 +448,24 @@ export function CampateElenco({
           </>
         ) : (
           <>
-            <span className="muted">{conteggi.totale} campate · piano {annoEffettivo}</span>
-            <span className="badge">{conteggi.daTagliare} da tagliare</span>
-            <span className="badge badge-non-terminata">{conteggi.nonTerminate} non terminate</span>
-            <span className="badge badge-tagliata">{conteggi.tagliate} tagliate</span>
+            <div className={`conteggi-prio${piano === "differibile" || piano === "entrambe" ? " in-corso" : ""}`}>
+              <span className="badge badge-differibile">Differibili · {conteggi.differibili.totale}</span>
+              <span className="badge">{conteggi.differibili.daTagliare} da tagliare</span>
+              {conteggi.differibili.nonTerminate > 0 ? (
+                <span className="badge badge-non-terminata">
+                  {conteggi.differibili.nonTerminate} non terminate
+                </span>
+              ) : null}
+              <span className="badge badge-tagliata">{conteggi.differibili.tagliate} tagliate</span>
+            </div>
+            <div className={`conteggi-prio${piano === "urgente" || piano === "entrambe" ? " in-corso" : ""}`}>
+              <span className="badge badge-urgente">Urgenze · {conteggi.urgenti.totale}</span>
+              <span className="badge">{conteggi.urgenti.daTagliare} da tagliare</span>
+              {conteggi.urgenti.nonTerminate > 0 ? (
+                <span className="badge badge-non-terminata">{conteggi.urgenti.nonTerminate} non terminate</span>
+              ) : null}
+              <span className="badge badge-tagliata">{conteggi.urgenti.tagliate} tagliate</span>
+            </div>
             <span className="badge badge-da_non_tagliare">{conteggi.daNonTagliare} da non tagliare</span>
             <span className="badge badge-aggiuntiva">{conteggi.aggiuntive} aggiuntive</span>
             <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
