@@ -399,6 +399,31 @@ select.inline-field { width: auto; min-width: 160px; }
 .esito-salvataggio-card h2 { font-size: 22px; margin: 0; }
 .esito-salvataggio-card .muted { margin: 0; }
 .esito-salvataggio-card .btn { width: 100%; }
+.terminata-card { text-align: left; justify-items: stretch; }
+.terminata-card h2 { text-align: center; }
+.terminata-card .muted { text-align: center; }
+.terminata-azioni {
+  display: grid;
+  gap: 8px;
+}
+.terminata-elenco {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.terminata-riga {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7faf8;
+}
+.terminata-riga .terminata-azioni {
+  grid-template-columns: 1fr 1fr;
+}
 .esito-mark {
   width: 88px;
   height: 88px;
@@ -710,6 +735,7 @@ select.inline-field { width: auto; min-width: 160px; }
 .badge-anni-scorsi { background: #fef3c7; color: #92400e; }
 .badge-attenzionare { background: #fef08a; color: #854d0e; }
 .badge-rinvio { background: #e0e7ff; color: #3730a3; }
+.badge-non-terminata { background: #ffedd5; color: #9a3412; }
 
 .cerca-wrap { position: relative; }
 .suggerimenti {
@@ -762,15 +788,19 @@ select.inline-field { width: auto; min-width: 160px; }
 .campate-table tbody tr.campata-row:hover { background: #f7faf8; }
 .campata-row.campata-tagliata { background: #f0fdf4; }
 .campate-table tbody tr.campata-row.campata-tagliata:hover { background: #dcfce7; }
+.campata-row.campata-non-terminata { background: #fff7ed; }
+.campate-table tbody tr.campata-row.campata-non-terminata:hover { background: #ffedd5; }
 .campata-row.campata-tralasciata { background: #fecaca; }
 .campate-table tbody tr.campata-row.campata-tralasciata:hover { background: #fca5a5; }
 .campata-row.campata-attenzionare,
 .campata-row.campata-tagliata.campata-attenzionare,
+.campata-row.campata-non-terminata.campata-attenzionare,
 .campata-row.campata-tralasciata.campata-attenzionare {
   background: #fde047;
 }
 .campate-table tbody tr.campata-row.campata-attenzionare:hover,
 .campate-table tbody tr.campata-row.campata-tagliata.campata-attenzionare:hover,
+.campate-table tbody tr.campata-row.campata-non-terminata.campata-attenzionare:hover,
 .campate-table tbody tr.campata-row.campata-tralasciata.campata-attenzionare:hover {
   background: #facc15;
 }
@@ -836,6 +866,7 @@ select.inline-field { width: auto; min-width: 160px; }
 .esiti-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .esito-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
 .esito-card.esito-tagliata { border-color: #86efac; background: #f0fdf4; }
+.esito-card.esito-non-terminata { border-color: #fdba74; background: #fff7ed; }
 .esito-card.esito-nulla_da_tagliare { border-color: #86efac; background: #f0fdf4; }
 .esito-card.esito-tralasciata { border-color: #f87171; background: #fef2f2; }
 .esito-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

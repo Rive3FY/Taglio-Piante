@@ -20,16 +20,20 @@ import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
 import { eLavoroBasi, esitiClassificati, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
 import {
-  campateGiaTagliateDaFoglio,
   esitiCheToccanoDaNonTagliare,
   messaggioCampateDaNonTagliare,
-  messaggioCampateGiaTagliate,
 } from "@/lib/campate/guard";
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
+import {
+  applicaScelteTerminata,
+  campatePerDomandaTerminata,
+  type CampataDaChiudere,
+} from "@/lib/campate/terminata";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 import { useArea } from "@/lib/area";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
+import { PopupCampataTerminata } from "./PopupCampataTerminata";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
@@ -113,6 +117,10 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [numeroLocale, setNumeroLocale] = useState(existing?.numero);
   const [preview, setPreview] = useState<Rapportino | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [domandaTerminata, setDomandaTerminata] = useState<{
+    campate: CampataDaChiudere[];
+    extra: Partial<Rapportino>;
+  } | null>(null);
   useDialogBack(Boolean(preview), () => setPreview(null));
   const [dockReady, setDockReady] = useState(false);
 
@@ -213,17 +221,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     );
   }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi]);
   const erroreDaNonTagliare = messaggioCampateDaNonTagliare(campateBloccate);
-  const campateGiaTagliate = useMemo(() => {
-    if (qtyHaBase || erroreBasi) return [];
-    const classificati = esitiClassificati(
-      testoBox,
-      { righe: righeQty },
-      prestazioni,
-      esiti.length > 0 ? esiti : undefined,
-    );
-    return campateGiaTagliateDaFoglio(campateLinea, classificati, existing?.id);
-  }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi, existing?.id]);
-  const avvisoGiaTagliata = messaggioCampateGiaTagliate(campateGiaTagliate);
 
   const modoPrecompilato = Boolean(
     precompilatoLineaId ||
@@ -274,7 +271,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     campataScelta,
   ]);
 
-  async function persist(stato: Rapportino["stato"], extra: Partial<Rapportino> = {}) {
+  async function persist(
+    stato: Rapportino["stato"],
+    extra: Partial<Rapportino> = {},
+    esitiOverride?: RapportinoCampata[],
+  ) {
     if (!effectiveLineaId) {
       setError("Seleziona la linea.");
       return null;
@@ -301,7 +302,12 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           quantita: qty[p.id],
         }));
       const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
-      const esitiSalvati = esitiClassificati(testoSorgente, { righe }, prestazioni, esiti);
+      const esitiSalvati = esitiClassificati(
+        testoSorgente,
+        { righe },
+        prestazioni,
+        esitiOverride ?? (esiti.length > 0 ? esiti : undefined),
+      );
       const campateSulDb = (await db.campateLavoro.where("lineaId").equals(effectiveLineaId).toArray()).filter(
         (c) => annoDi(c) === annoDaDataLavoro(dataLavoro),
       );
@@ -413,11 +419,49 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
 
     const now = new Date().toISOString();
-    const saved = await persist("archiviato", {
+    const extra = {
       inviatoAt: existing?.inviatoAt ?? now,
       archiviatoAt: now,
-    });
+    };
+    const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+    const esitiPrevisti = esitiClassificati(
+      testoSorgente,
+      { righe: righeQty.map((r) => ({ id: r.id, prestazioneId: r.prestazioneId, quantita: r.quantita })) },
+      prestazioni,
+      esiti.length > 0 ? esiti : undefined,
+    );
+    const daChiedere = qtyHaBase ? [] : campatePerDomandaTerminata(esitiPrevisti);
+    if (daChiedere.length > 0) {
+      setDomandaTerminata({ campate: daChiedere, extra });
+      return;
+    }
+
+    const saved = await persist("archiviato", extra);
     if (!saved) return;
+    mostraEsito({
+      titolo: "Rapportino archiviato",
+      testo: "Tutto a posto: foglio firmato e messo in archivio.",
+      dopo: "home",
+    });
+  }
+
+  async function confermaTerminata(scelte: Record<string, boolean>) {
+    if (!domandaTerminata) return;
+    const extra = domandaTerminata.extra;
+    const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
+    const esitiPrevisti = applicaScelteTerminata(
+      esitiClassificati(
+        testoSorgente,
+        { righe: righeQty.map((r) => ({ id: r.id, prestazioneId: r.prestazioneId, quantita: r.quantita })) },
+        prestazioni,
+        esiti.length > 0 ? esiti : undefined,
+      ),
+      scelte,
+    );
+    const saved = await persist("archiviato", extra, esitiPrevisti);
+    if (!saved) return;
+    setEsiti(esitiPrevisti);
+    setDomandaTerminata(null);
     mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
@@ -508,8 +552,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               </span>
             ) : erroreDaNonTagliare ? (
               <span className="form-error">{erroreDaNonTagliare}</span>
-            ) : avvisoGiaTagliata ? (
-              <span className="muted">{avvisoGiaTagliata}</span>
             ) : null}
           </label>
         </div>
@@ -688,6 +730,13 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
+
+      {domandaTerminata ? (
+        <PopupCampataTerminata
+          campate={domandaTerminata.campate}
+          onConferma={(scelte) => void confermaTerminata(scelte)}
+        />
+      ) : null}
 
       {dockReady
         ? createPortal(

@@ -39,6 +39,8 @@ Il tecnico può rinominare un operatore, cambiargli l'email di accesso, assegnar
 
 Il tecnico lavora anche sul campo: il tasto **Passa a operatore** nell'intestazione apre l'area operatore, e da lì **Passa a tecnico** riporta indietro. In area operatore il tecnico è un operatore a tutti gli effetti — vede solo i rapportini che ha creato lui e ha gli stessi tasti sulle campate — mentre i permessi veri sul database non cambiano. L'ultima area scelta viene ricordata, così riaprendo l'app si torna dove si era rimasti.
 
+A fine di ogni rapportino (nuovo o precompilato) l'app chiede se quella campata è **terminata**. Solo in quel caso il tecnico la vede come tagliata e la torta si muove. Se l'operatore segna **non terminata**, la riga resta arancione in elenco e si può riprendere un altro giorno con **Riprendi**. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_campata_non_terminata.sql`.
+
 ## Chi vede cosa
 
 | Ruolo | Rapportini | Profili e firme |

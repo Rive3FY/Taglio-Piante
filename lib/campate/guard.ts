@@ -64,7 +64,7 @@ export function esitiCheToccanoDaNonTagliare(
   return campateBloccateDaNonTagliare(campateLinea, classificati);
 }
 
-/** Già chiusa da un foglio precedente: un secondo rapportino (altra giornata) è lecito. */
+/** Già chiusa da un foglio precedente come tagliata: un secondo foglio è lecito. */
 export function campataGiaChiusaDaFoglio(
   c: Pick<CampataLavoro, "stato" | "daNonTagliare" | "rapportinoId">,
   questoFoglioId?: string,

@@ -34,6 +34,7 @@ import {
   campataDaRiprendere,
   campataETagliata,
   campataInElencoParallelo,
+  campataNonTerminata,
   etichettaRinvio,
   promemoriaAperto,
   promemoriaChiuso,
@@ -305,7 +306,8 @@ export function CampateElenco({
     const set = delPiano.filter((c) => c.tipo !== "base");
     return {
       totale: set.length,
-      daTagliare: set.filter((c) => !campataETagliata(c)).length,
+      daTagliare: set.filter((c) => !campataETagliata(c) && !campataNonTerminata(c)).length,
+      nonTerminate: set.filter((c) => campataNonTerminata(c)).length,
       tagliate: set.filter((c) => campataETagliata(c)).length,
       daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
       aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
@@ -409,6 +411,7 @@ export function CampateElenco({
           <>
             <span className="muted">{conteggi.totale} campate · piano {annoEffettivo}</span>
             <span className="badge">{conteggi.daTagliare} da tagliare</span>
+            <span className="badge badge-non-terminata">{conteggi.nonTerminate} non terminate</span>
             <span className="badge badge-tagliata">{conteggi.tagliate} tagliate</span>
             <span className="badge badge-da_non_tagliare">{conteggi.daNonTagliare} da non tagliare</span>
             <span className="badge badge-aggiuntiva">{conteggi.aggiuntive} aggiuntive</span>
@@ -881,7 +884,8 @@ function eventoDaRapportino(evento: string) {
     evento === "tagliata" ||
     evento.startsWith("tagliata") ||
     evento === "aggiuntiva_da_rapportino" ||
-    evento === "ripristinata_da_cancellazione"
+    evento === "ripristinata_da_cancellazione" ||
+    evento === "non_terminata"
   );
 }
 
@@ -924,6 +928,7 @@ function etichettaEvento(evento: string) {
   if (evento === "ripresa_fatta") return "Ripresa fatta";
   if (evento === "ripresa_fatta_off") return "Ripresa da fare";
   if (evento === "nota") return "Nota";
+  if (evento === "non_terminata") return "Non terminata";
   if (eventoDaRapportino(evento)) return "Tagliata";
   return null;
 }
@@ -958,6 +963,7 @@ function CampataRiga({
   const session = sessionUserId ? { userId: sessionUserId, ruolo, nome: "", email: "" } : null;
   const nonTagliare = campataDaNonTagliare(c);
   const tagliata = campataETagliata(c);
+  const nonTerminata = campataNonTerminata(c);
   const daRiprendere = campataDaRiprendere(c);
   const daAttenzionare = campataDaAttenzionare(c);
   const ripresa = rinvioRipreso(c);
@@ -1017,7 +1023,7 @@ function CampataRiga({
   return (
     <>
       <tr
-        className={`campata-row campata-${tagliata ? "tagliata" : c.stato}${c.attenzionare ? " campata-attenzionare" : ""}${promemoriaFatto ? " campata-ripresa" : ""}`}
+        className={`campata-row campata-${nonTerminata ? "non-terminata" : tagliata ? "tagliata" : c.stato}${c.attenzionare ? " campata-attenzionare" : ""}${promemoriaFatto ? " campata-ripresa" : ""}`}
         onClick={onToggle}
       >
         <td className="linea-codice">{c.codiceLinea}</td>
@@ -1044,9 +1050,13 @@ function CampataRiga({
           )}
         </td>
         <td>
-          <span className={`badge badge-${tagliata ? "tagliata" : c.stato}`}>
-            {tagliata ? CAMPATA_STATO_LABEL.tagliata : CAMPATA_STATO_LABEL[c.stato]}
-          </span>
+          {nonTerminata ? (
+            <span className="badge badge-non-terminata">Non terminata</span>
+          ) : (
+            <span className={`badge badge-${tagliata ? "tagliata" : c.stato}`}>
+              {tagliata ? CAMPATA_STATO_LABEL.tagliata : CAMPATA_STATO_LABEL[c.stato]}
+            </span>
+          )}
           {nonTagliare ? <span className="badge badge-da_non_tagliare">Da non tagliare</span> : null}
           {daRiprendere ? (
             <span className={`badge ${ripresa ? "badge-tagliata" : "badge-rinvio"}`}>
@@ -1068,14 +1078,24 @@ function CampataRiga({
           {mostraRapportino ? (
             c.rapportinoId ? (
               <span className="campata-rap-btns">
+                {!nonTagliare && nonTerminata ? (
+                  <Link
+                    href={hrefNuovoRapportino(ruolo, c)}
+                    className="btn btn-sm btn-secondary"
+                    title="Riprendi il taglio un altro giorno"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Riprendi
+                  </Link>
+                ) : null}
                 <Link
                   href={hrefRapportino(ruolo, c)}
-                  className="btn btn-sm btn-secondary"
+                  className={`btn btn-sm ${nonTerminata ? "btn-ghost" : "btn-secondary"}`}
                   onClick={(e) => e.stopPropagation()}
                 >
                   Apri
                 </Link>
-                {!nonTagliare ? (
+                {!nonTagliare && !nonTerminata ? (
                   <Link
                     href={hrefNuovoRapportino(ruolo, c)}
                     className="btn btn-sm btn-ghost"
@@ -1120,6 +1140,11 @@ function CampataRiga({
                     <span className="muted"> — già segnato, non modificabile</span>
                   ) : null}
                 </label>
+              ) : nonTerminata ? (
+                <p className="muted">
+                  Iniziata, non terminata. Si può fare un altro foglio un altro giorno: finché non
+                  risulta terminata il tecnico non la vede come tagliata.
+                </p>
               ) : (
                 <p className="muted">Tagliata con rapportino.</p>
               )}

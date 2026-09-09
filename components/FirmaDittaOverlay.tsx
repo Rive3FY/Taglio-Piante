@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -9,9 +9,16 @@ import { useSync } from "@/lib/SyncContext";
 import { applicaFirmaDitta, haFirmaDitta } from "@/lib/rapportinoFirma";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
+import { eLavoroBasi, esitiClassificati } from "@/lib/campate/basi";
+import {
+  applicaScelteTerminata,
+  campatePerDomandaTerminata,
+  type CampataDaChiudere,
+} from "@/lib/campate/terminata";
 import type { Linea, Rapportino } from "@/lib/types";
 import { RapportinoSheet } from "./RapportinoSheet";
 import { SignaturePad } from "./SignaturePad";
+import { PopupCampataTerminata } from "./PopupCampataTerminata";
 
 export function FirmaDittaOverlay({
   item,
@@ -28,25 +35,57 @@ export function FirmaDittaOverlay({
   const [firma, setFirma] = useState<string | undefined>(item.firmaOperatore);
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
-  useDialogBack(true, onChiudi);
+  const [domanda, setDomanda] = useState<CampataDaChiudere[] | null>(null);
+  useDialogBack(!domanda, onChiudi);
+
+  const esitiPrevisti = useMemo(
+    () => esitiClassificati(item.campata, item, prestazioni, item.esitiCampate),
+    [item, prestazioni],
+  );
+  const qtyHaBase = useMemo(
+    () => eLavoroBasi(item.campata, item, prestazioni),
+    [item, prestazioni],
+  );
+
+  async function archivia(esiti = esitiPrevisti) {
+    await applicaFirmaDitta(item, firma!, session, esiti);
+    void syncNow();
+    onChiudi();
+    mostraEsito({
+      titolo: "Firma salvata",
+      testo: "Il foglio è firmato dalla ditta e va in archivio.",
+      dopo: "resta",
+    });
+  }
 
   async function salva() {
     if (!haFirmaDitta(firma)) {
       setErrore("Firma nel riquadro della ditta, poi conferma.");
       return;
     }
+    const daChiedere = qtyHaBase ? [] : campatePerDomandaTerminata(esitiPrevisti);
+    if (daChiedere.length > 0) {
+      setDomanda(daChiedere);
+      return;
+    }
     setBusy(true);
     setErrore(null);
     try {
-      await applicaFirmaDitta(item, firma!, session);
-      void syncNow();
-      onChiudi();
-      mostraEsito({
-        titolo: "Firma salvata",
-        testo: "Il foglio è firmato dalla ditta e va in archivio.",
-        dopo: "resta",
-      });
+      await archivia();
     } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Firma non salvata.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confermaTerminata(scelte: Record<string, boolean>) {
+    setBusy(true);
+    setErrore(null);
+    try {
+      await archivia(applicaScelteTerminata(esitiPrevisti, scelte));
+    } catch (e) {
+      setDomanda(null);
       setErrore(e instanceof Error ? e.message : "Firma non salvata.");
     } finally {
       setBusy(false);
@@ -81,6 +120,9 @@ export function FirmaDittaOverlay({
           {busy ? "Salvataggio…" : "Conferma firma"}
         </button>
       </div>
+      {domanda ? (
+        <PopupCampataTerminata campate={domanda} onConferma={(scelte) => void confermaTerminata(scelte)} />
+      ) : null}
     </div>,
     document.body,
   );

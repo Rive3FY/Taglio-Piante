@@ -14,6 +14,7 @@ function campiTaglio(c: CampataLavoro) {
     rapportinoId: c.rapportinoId,
     daNonTagliare: c.daNonTagliare,
     daNonTagliareBy: c.daNonTagliareBy,
+    nonTerminata: c.nonTerminata,
   };
 }
 
@@ -100,6 +101,7 @@ export function unisciCampataLocaleRemoto(
     taglio.stato !== base.stato ||
     taglio.rapportinoId !== base.rapportinoId ||
     taglio.daNonTagliare !== base.daNonTagliare ||
+    taglio.nonTerminata !== base.nonTerminata ||
     rinvio.rinvioMese !== base.rinvioMese ||
     rinvio.rinvioFattaIl !== base.rinvioFattaIl ||
     attenzione.attenzionare !== base.attenzionare ||

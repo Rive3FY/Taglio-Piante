@@ -27,6 +27,7 @@ import {
 import { idCampataLavoro, chiaveCampata } from "./normalize";
 import { eLavoroBasi, esitiClassificati, haVociBase, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
+import { esitoETerminato } from "./terminata";
 import type { AnteprimaImport } from "./preview";
 import { eliminaPianoAnno, resetOperativoPerImport } from "./reset";
 import { annoDaDataLavoro, annoDi } from "./anno";
@@ -414,7 +415,8 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
   const giaChiuse = new Set<string>();
 
   for (const esito of esiti) {
-    const stato = esitoRapportinoToStato(esito.esito);
+    const terminata = esitoETerminato(esito);
+    const stato = terminata ? esitoRapportinoToStato(esito.esito) : "da_tagliare";
     const trovati = espandiFratelliPriorita(
       tutte,
       bersagliPerEsito(tutte, esito, linea?.codice ?? "", anno),
@@ -443,9 +445,12 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
         origine: "aggiuntiva",
         anno,
         attenzionare: false,
-        daNonTagliare: esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata",
+        nonTerminata: terminata ? undefined : true,
+        daNonTagliare: terminata
+          ? esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata"
+          : undefined,
         daNonTagliareBy:
-          esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata"
+          terminata && (esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata")
             ? session?.userId
             : undefined,
         dataTaglio: data,
@@ -460,7 +465,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
       storico.push({
         id: uid("sto"),
         campataId: nuova.id,
-        evento: "aggiuntiva_da_rapportino",
+        evento: terminata ? "aggiuntiva_da_rapportino" : "non_terminata",
         stato,
         priorita: esito.priorita,
         operatore,
@@ -473,9 +478,10 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
     for (const presente of bersagli) {
       if (soloBasi && !isBaseLavoro(presente)) continue;
       if (!soloBasi && isBaseLavoro(presente)) continue;
-      // Seconda giornata sulla stessa campata: il foglio si registra, la riga
-      // resta una sola (già tagliata) così la torta non conta due volte.
-      const soloLog = campataGiaChiusaDaFoglio(presente, item.id);
+      // Seconda giornata: se la campata era già terminata e anche questo foglio
+      // la chiude, si registra solo il log (la torta non conta due volte).
+      // Se l'operatore dice che non è finita, la riga torna arancione.
+      const soloLog = campataGiaChiusaDaFoglio(presente, item.id) && terminata;
       const aggiornata: CampataLavoro = soloLog
         ? { ...presente, syncStatus: "pending", updatedAt: now }
         : {
@@ -485,10 +491,22 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
             dataTaglio: data,
             operatore,
             rapportinoId: item.id,
+            nonTerminata: terminata ? undefined : true,
             syncStatus: "pending",
             updatedAt: now,
           };
-      if (!soloLog && (esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata")) {
+      if (!soloLog && !terminata) {
+        delete aggiornata.daNonTagliare;
+        delete aggiornata.daNonTagliareBy;
+      }
+      if (!soloLog && terminata) {
+        delete aggiornata.nonTerminata;
+      }
+      if (
+        !soloLog &&
+        terminata &&
+        (esito.esito === "nulla_da_tagliare" || esito.esito === "tralasciata")
+      ) {
         aggiornata.daNonTagliare = true;
         aggiornata.daNonTagliareBy = session?.userId;
       }
@@ -497,14 +515,15 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
       if (idx >= 0) tutte[idx] = aggiornata;
       if (giaChiuse.has(presente.id)) continue;
       giaChiuse.add(presente.id);
+      const evento = terminata ? eventoStoricoDaEsito(esito.esito) : "non_terminata";
       const giaLoggato = (await db.campateStorico.where("campataId").equals(presente.id).toArray()).some(
-        (s) => s.rapportinoId === item.id && s.evento === eventoStoricoDaEsito(esito.esito),
+        (s) => s.rapportinoId === item.id && s.evento === evento,
       );
       if (giaLoggato) continue;
       storico.push({
         id: uid("sto"),
         campataId: presente.id,
-        evento: eventoStoricoDaEsito(esito.esito),
+        evento,
         stato,
         priorita: presente.priorita,
         operatore,
@@ -564,15 +583,32 @@ async function fogliCheAncoraCoprono(
   return out.sort((a, b) => (b.dataLavoro ?? "").localeCompare(a.dataLavoro ?? ""));
 }
 
-function agganciataAdAltroFoglio(presente: CampataLavoro, sostituto: Rapportino, now: string): CampataLavoro {
-  return {
+function foglioSegnaCampataTerminata(foglio: Rapportino, campata: CampataLavoro) {
+  const esiti = foglio.esitiCampate ?? [];
+  const hit = esiti.find(
+    (e) => e.tipo !== "base" && (e.campataId === campata.id || e.normalizzata === campata.normalizzata),
+  );
+  if (!hit) return true;
+  return esitoETerminato(hit);
+}
+
+function agganciataAdAltroFoglio(
+  presente: CampataLavoro,
+  sostituto: Rapportino,
+  now: string,
+  terminata = true,
+): CampataLavoro {
+  const next: CampataLavoro = {
     ...presente,
-    stato: "tagliata",
+    stato: terminata ? "tagliata" : "da_tagliare",
+    nonTerminata: terminata ? undefined : true,
     rapportinoId: sostituto.id,
     dataTaglio: presente.dataTaglio || sostituto.dataLavoro,
     syncStatus: "pending",
     updatedAt: now,
   };
+  if (terminata) delete next.nonTerminata;
+  return next;
 }
 
 async function campateCollegateAlRapportino(rapportinoId: string, item?: Rapportino | null) {
@@ -620,6 +656,7 @@ function ripristinaCampataChiusa(presente: CampataLavoro, now: string): CampataL
       updatedAt: now,
     };
     delete resta.rapportinoId;
+    delete resta.nonTerminata;
     return resta;
   }
   const ripristinata: CampataLavoro = {
@@ -632,6 +669,7 @@ function ripristinaCampataChiusa(presente: CampataLavoro, now: string): CampataL
   delete ripristinata.dataTaglio;
   delete ripristinata.operatore;
   delete ripristinata.rapportinoId;
+  delete ripristinata.nonTerminata;
   return ripristinata;
 }
 
@@ -657,7 +695,7 @@ export async function ripristinaCampateOrfane() {
   const daEliminare: string[] = [];
 
   for (const presente of campate) {
-    if (presente.stato === "da_tagliare") continue;
+    if (presente.stato === "da_tagliare" && !presente.nonTerminata) continue;
     if (presente.rapportinoId && vivi.has(presente.rapportinoId)) continue;
 
     const altri = await fogliCheAncoraCoprono(
@@ -667,7 +705,9 @@ export async function ripristinaCampateOrfane() {
       prestazioni,
     );
     if (altri[0]) {
-      daRipristinare.push(agganciataAdAltroFoglio(presente, altri[0], now));
+      daRipristinare.push(
+        agganciataAdAltroFoglio(presente, altri[0], now, foglioSegnaCampataTerminata(altri[0], presente)),
+      );
       continue;
     }
 
@@ -795,7 +835,14 @@ export async function annullaEsitiDaRapportino(
   for (const presente of legate) {
     const coperti = await fogliCheAncoraCoprono(presente, rapportinoId, altriVivi, prestazioni);
     if (coperti[0]) {
-      daRipristinare.push(agganciataAdAltroFoglio(presente, coperti[0], now));
+      daRipristinare.push(
+        agganciataAdAltroFoglio(
+          presente,
+          coperti[0],
+          now,
+          foglioSegnaCampataTerminata(coperti[0], presente),
+        ),
+      );
       continue;
     }
     const log = await db.campateStorico.where("campataId").equals(presente.id).toArray();
@@ -828,10 +875,12 @@ export async function annullaEsitiDaRapportino(
         };
     if (campataDaNonTagliare(presente)) {
       delete ripristinata.rapportinoId;
+      delete ripristinata.nonTerminata;
     } else {
       delete ripristinata.dataTaglio;
       delete ripristinata.operatore;
       delete ripristinata.rapportinoId;
+      delete ripristinata.nonTerminata;
     }
     daRipristinare.push(ripristinata);
   }

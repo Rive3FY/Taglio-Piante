@@ -34,13 +34,19 @@ export async function riportaInBozzaSeMancaFirma(item: Rapportino) {
   return next;
 }
 
-export async function applicaFirmaDitta(item: Rapportino, firma: string, session: Session | null) {
+export async function applicaFirmaDitta(
+  item: Rapportino,
+  firma: string,
+  session: Session | null,
+  esitiCampate?: Rapportino["esitiCampate"],
+) {
   if (!haFirmaDitta(firma)) throw new Error("Serve la firma della ditta.");
   const now = new Date().toISOString();
   const pronto = rapportinoProntoPerArchivio(item);
   const next: Rapportino = {
     ...item,
     firmaOperatore: firma,
+    esitiCampate: esitiCampate ?? item.esitiCampate,
     stato: pronto ? "archiviato" : "bozza",
     inviatoAt: pronto ? item.inviatoAt ?? now : item.inviatoAt,
     archiviatoAt: pronto ? now : undefined,

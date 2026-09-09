@@ -242,6 +242,10 @@ alter table campate_lavoro add column if not exists rinvio_note text;
 alter table campate_lavoro add column if not exists rinvio_by text;
 alter table campate_lavoro add column if not exists rinvio_fatta_il timestamptz;
 alter table campate_lavoro add column if not exists rinvio_fatta_by text;
+
+-- Taglio iniziato ma non finito: le torte restano su da_tagliare.
+alter table campate_lavoro add column if not exists non_terminata boolean not null default false;
+create index if not exists campate_lavoro_non_terminata_idx on campate_lavoro(non_terminata);
 do $$
 begin
   if not exists (

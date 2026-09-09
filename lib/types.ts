@@ -72,6 +72,11 @@ export type CampataLavoro = {
   /** Niente da tagliare: in elenco resta Tagliata (verde), senza rapportino. */
   daNonTagliare?: boolean;
   daNonTagliareBy?: string;
+  /**
+   * Taglio iniziato con un rapportino ma non finito: in elenco è arancione,
+   * le torte restano su «da tagliare», si può fare un altro foglio un altro giorno.
+   */
+  nonTerminata?: boolean;
   /** Promemoria «da riprendere» in un mese (1–12): elenco parallelo, non è uno stato di taglio. */
   rinvioMese?: number;
   rinvioAnno?: number;
@@ -131,6 +136,11 @@ export type RapportinoCampata = {
   note?: string;
   attenzionare?: boolean;
   aggiuntiva?: boolean;
+  /**
+   * Risposta a fine foglio: se false la campata non risulta tagliata al tecnico.
+   * Assente sui fogli vecchi: si tratta come terminata.
+   */
+  terminata?: boolean;
 };
 
 export type OperatoreTerna = {
@@ -272,6 +282,13 @@ export function campataETagliata(c: Pick<CampataLavoro, "stato" | "daNonTagliare
 
 export function campataDaNonTagliare(c: Pick<CampataLavoro, "stato" | "daNonTagliare">) {
   return Boolean(c.daNonTagliare) || c.stato === "tralasciata";
+}
+
+/** Iniziata, non chiusa: non è tagliata e si distingue in elenco. */
+export function campataNonTerminata(
+  c: Pick<CampataLavoro, "nonTerminata" | "stato" | "daNonTagliare">,
+) {
+  return Boolean(c.nonTerminata) && !campataETagliata(c);
 }
 
 export const MESI_LABEL = [

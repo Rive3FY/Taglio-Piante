@@ -1,8 +1,8 @@
 "use client";
 
-import { campataGiaChiusaDaFoglio } from "@/lib/campate/guard";
 import {
   CAMPATA_PRIORITA_LABEL,
+  campataNonTerminata,
   type CampataLavoro,
   type RapportinoCampata,
 } from "@/lib/types";
@@ -20,8 +20,9 @@ export function CampateEsitiEditor({
     <section className="panel">
       <h2>Campate del lavoro</h2>
       <p className="muted">
-        Queste campate risultano tagliate con il rapportino. Se non c’è nulla da tagliare, non usare
-        questo foglio: aprila dall’elenco campate e spunta «Da non tagliare».
+        Queste campate vanno sul rapportino. A fine foglio ti chiederemo se il taglio è terminato: se
+        non lo è, resta in elenco e si può riprendere un altro giorno. Se non c’è nulla da tagliare,
+        non usare questo foglio: aprila dall’elenco campate e spunta «Da non tagliare».
       </p>
       <ul className="esiti-list">
         {esiti.map((e) => {
@@ -39,15 +40,15 @@ export function CampateEsitiEditor({
                   (!e.priorita || p.priorita === e.priorita),
               );
           const priorita = e.priorita ?? piano?.priorita;
-          const giaTagliata = piano ? campataGiaChiusaDaFoglio(piano) : false;
+          const nonTerminata = piano ? campataNonTerminata(piano) : false;
           return (
-            <li key={e.id} className="esito-card esito-tagliata">
+            <li key={e.id} className={`esito-card ${nonTerminata ? "esito-non-terminata" : "esito-tagliata"}`}>
               <div className="esito-head">
                 <strong>{e.normalizzata}</strong>
                 {priorita ? (
                   <span className={`badge badge-${priorita}`}>{CAMPATA_PRIORITA_LABEL[priorita]}</span>
                 ) : null}
-                {giaTagliata ? <span className="badge badge-tagliata">Già tagliata</span> : null}
+                {nonTerminata ? <span className="badge badge-non-terminata">Non terminata</span> : null}
               </div>
             </li>
           );
