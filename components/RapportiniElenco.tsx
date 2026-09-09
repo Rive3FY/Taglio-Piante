@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { RapportinoCard } from "./RapportinoCard";
 import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, periodoAttivo } from "./FiltroPeriodo";
+import { mostraTestoCampate } from "@/lib/campate/normalize";
 import type { Linea, Rapportino } from "@/lib/types";
 
 export function RapportiniElenco({
@@ -51,7 +52,7 @@ export function RapportiniElenco({
       if (filtroData && !nelPeriodo(r.dataLavoro, periodo)) return false;
       if (!term) return true;
       const linea = lineaDi.get(r.lineaId);
-      return [r.numero, r.campata, r.ditta, r.rappresentanteDitta, linea?.codice, linea?.nome]
+      return [r.numero, r.campata, mostraTestoCampate(r.campata ?? ""), r.ditta, r.rappresentanteDitta, linea?.codice, linea?.nome]
         .filter(Boolean)
         .some((valore) => String(valore).toLowerCase().includes(term));
     });

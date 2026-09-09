@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
 import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
 import { etichettaOggettoFoglio, foglioEBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
-import { mostraCampata } from "@/lib/campate/normalize";
+import { mostraCampata, mostraTestoCampate } from "@/lib/campate/normalize";
 import { useDialogBack } from "@/lib/useDialogBack";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
@@ -50,7 +50,7 @@ function etichetteDaFogli(items: Rapportino[], prestazioni: Prestazione[]) {
     if (comeBasi) {
       for (const n of numeriDaTestoCampata(testo)) metti(basi, vistiB, n);
     } else {
-      metti(campate, vistiC, testo);
+      metti(campate, vistiC, mostraTestoCampate(testo));
     }
   }
   return { campate, basi };

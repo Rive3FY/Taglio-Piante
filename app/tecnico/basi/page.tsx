@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { isBaseLavoro } from "@/lib/campate/basi";
+import { mostraCampata } from "@/lib/campate/normalize";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { LineaPicker } from "@/components/LineaPicker";
@@ -44,7 +45,7 @@ export default function TecnicoBasiPage() {
       .map((g) => ({
         ...g,
         basi: [...g.basi].sort((a, b) =>
-          a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }),
+          mostraCampata(a.normalizzata).localeCompare(mostraCampata(b.normalizzata), "it", { numeric: true }),
         ),
       }))
       .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
@@ -173,7 +174,7 @@ export default function TecnicoBasiPage() {
                               {basiVisibili.map((b) => (
                                 <tr key={b.id}>
                                   <td>
-                                    <strong>{b.normalizzata}</strong>
+                                    <strong>{mostraCampata(b.normalizzata)}</strong>
                                   </td>
                                   <td>{b.dataTaglio ? formatDate(b.dataTaglio) : "—"}</td>
                                   <td>{b.operatore ?? "—"}</td>

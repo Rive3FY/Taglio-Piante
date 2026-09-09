@@ -2,6 +2,7 @@
 
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
+import { mostraTestoCampate } from "@/lib/campate/normalize";
 import { scaricaBlob } from "./download";
 import {
   SCHEDA_AL_SIG_DITTA,
@@ -266,7 +267,7 @@ export async function fillOfficialScheda(opts: {
 
     w.writeInBox(linea?.codice ?? "", SCHEDA_HEADER.codice, 10);
     w.writeFit(linea?.nome ?? "", SCHEDA_HEADER.descr, 11);
-    w.writeInBox(item.campata ?? "", SCHEDA_HEADER.campata, 12);
+    w.writeInBox(mostraTestoCampate(item.campata ?? ""), SCHEDA_HEADER.campata, 12);
 
     w.writeOnLine(formatSchedaDate(item.dataLavoro ?? ""), SCHEDA_IN_DATA);
     w.writeOnLine(item.dipendenteTerna, SCHEDA_IN_DATA_TERNA, true);

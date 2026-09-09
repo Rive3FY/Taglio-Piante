@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { RapportiniElenco } from "./RapportiniElenco";
 import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, periodoAttivo } from "./FiltroPeriodo";
 import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
+import { mostraTestoCampate } from "@/lib/campate/normalize";
 import type { Linea, Rapportino } from "@/lib/types";
 
 export function RapportiniPerTensione({
@@ -31,7 +32,7 @@ export function RapportiniPerTensione({
       if (!nelPeriodo(r.dataLavoro, periodo)) return false;
       if (!term) return true;
       const linea = lineaDi.get(r.lineaId);
-      return [r.numero, r.campata, r.ditta, r.rappresentanteDitta, linea?.codice, linea?.nome]
+      return [r.numero, r.campata, mostraTestoCampate(r.campata ?? ""), r.ditta, r.rappresentanteDitta, linea?.codice, linea?.nome]
         .filter(Boolean)
         .some((valore) => String(valore).toLowerCase().includes(term));
     });

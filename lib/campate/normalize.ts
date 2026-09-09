@@ -55,3 +55,9 @@ export function spezzaCampateTesto(testo: string) {
     .map((p) => p.trim())
     .filter(Boolean);
 }
+
+/** Più numeri sullo stesso foglio: 21-22, 22-23 → 22, 23. */
+export function mostraTestoCampate(testo: string) {
+  const pezzi = spezzaCampateTesto(testo).map(mostraCampata).filter(Boolean);
+  return pezzi.length > 0 ? pezzi.join(", ") : testo.trim();
+}

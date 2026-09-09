@@ -19,7 +19,7 @@ import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
 import { esitiClassificati, haVociBase, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
-import { mostraCampata, normalizzaCampata } from "@/lib/campate/normalize";
+import { mostraCampata, mostraTestoCampate, normalizzaCampata } from "@/lib/campate/normalize";
 import {
   esitiCheToccanoDaNonTagliare,
   messaggioCampateDaNonTagliare,
@@ -88,7 +88,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     () => (precompilatoCampataId ? db.campateLavoro.get(precompilatoCampataId) : undefined),
     [precompilatoCampataId],
   );
-  const [campata, setCampata] = useState(existing?.campata ?? "");
+  const [campata, setCampata] = useState(
+    () => mostraTestoCampate(existing?.campata ?? "") || (existing?.campata ?? ""),
+  );
   const [lavoroBasi, setLavoroBasi] = useState(
     () =>
       Boolean(existing?.esitiCampate?.length) &&
@@ -339,7 +341,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         setError(messaggioCampateDaNonTagliare(bloccate));
         return null;
       }
-      const campataTesto = testoSorgente;
+      const campataTesto = mostraTestoCampate(testoSorgente) || testoSorgente;
       const sigDitta = (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim();
       const nSquadra = nOperatori || squadra?.nOperatori || 0;
       const record: Rapportino = {
@@ -517,7 +519,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       id: existing?.id ?? "preview",
       numero: existing?.numero ?? "ANTEPRIMA",
       lineaId: effectiveLineaId,
-      campata: testoSorgente,
+      campata: mostraTestoCampate(testoSorgente) || testoSorgente,
       dataLavoro,
       ditta: effectiveDitta.trim(),
       rappresentanteDitta: (rappresentanteDitta || squadra?.rappresentanteDitta || "").trim(),

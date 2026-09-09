@@ -1,6 +1,6 @@
 import type { Prestazione, Rapportino, RapportinoCampata } from "@/lib/types";
 import { uid } from "@/lib/format";
-import { normalizzaCampata, spezzaCampateTesto } from "./normalize";
+import { mostraTestoCampate, normalizzaCampata, spezzaCampateTesto } from "./normalize";
 
 /** Pulizia basamento sul foglio ufficiale: 5.1–5.4. */
 export const CODICI_PULIZIA_BASE = new Set(["5.1", "5.2", "5.3", "5.4"]);
@@ -106,10 +106,10 @@ export function etichettaOggettoFoglio(
   item: Pick<Rapportino, "campata" | "esitiCampate" | "righe">,
   prestazioni: Prestazione[] = [],
 ) {
-  const testo = (item.campata ?? "").trim();
+  const testo = mostraTestoCampate(item.campata ?? "");
   if (!testo) return "";
   if (!foglioEBasi(item, prestazioni)) return `Campata ${testo}`;
-  const n = numeriDaTestoCampata(testo).length;
+  const n = numeriDaTestoCampata(item.campata ?? "").length;
   return `${n === 1 ? "Base" : "Basi"} ${testo}`;
 }
 
