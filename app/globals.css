@@ -530,26 +530,6 @@ select.inline-field { width: auto; min-width: 160px; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.piano-lavoro {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 0 0 12px;
-}
-.conteggi-prio {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 12px;
-  opacity: 0.7;
-}
-.conteggi-prio.in-corso {
-  opacity: 1;
-  background: #f0f7f2;
-}
 .chip {
   border: 1px solid var(--line);
   background: #f7faf8;

@@ -25,7 +25,7 @@ import {
   messaggioCampateDaNonTagliare,
 } from "@/lib/campate/guard";
 import { annoDaDataLavoro, annoDi } from "@/lib/campate/anno";
-import { usePianoLavoro } from "@/lib/campate/pianoLavoro";
+import { prioritaVisibile } from "@/lib/campate/urgenze";
 import {
   applicaScelteTerminata,
   campatePerDomandaTerminata,
@@ -57,7 +57,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const { session } = useSession();
   const { syncNow } = useSync();
   const area = useArea();
-  const [piano] = usePianoLavoro();
   const [squadraTick, setSquadraTick] = useState(0);
   const [squadra, setSquadra] = useState<PrefsSquadra | null>(null);
   useEffect(() => {
@@ -176,17 +175,19 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const pianificate = useMemo(
     () =>
       campateLinea
-        .filter((c) => {
-          if (c.tipo === "base" || c.origine !== "prevista" || c.stato !== "da_tagliare") return false;
-          if (piano !== "entrambe" && c.priorita && c.priorita !== piano) return false;
-          return true;
-        })
+        .filter(
+          (c) =>
+            c.tipo !== "base" &&
+            c.origine === "prevista" &&
+            c.stato === "da_tagliare" &&
+            prioritaVisibile(c.priorita),
+        )
         .sort(
           (a, b) =>
             mostraCampata(a.normalizzata).localeCompare(mostraCampata(b.normalizzata), "it", { numeric: true }) ||
             (a.priorita ?? "").localeCompare(b.priorita ?? ""),
         ),
-    [campateLinea, piano],
+    [campateLinea],
   );
 
   useEffect(() => {

@@ -17,7 +17,7 @@ import {
   type OrdineElenco,
   type RipresaFiltro,
 } from "@/lib/campate/elencoVista";
-import { PIANO_LAVORO_LABEL, usePianoLavoro, type PianoLavoro } from "@/lib/campate/pianoLavoro";
+import { PRIORITA_VISIBILI, URGENZE_VISIBILI, soloCampateVisibili } from "@/lib/campate/urgenze";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
@@ -53,19 +53,6 @@ type OrigineFiltro = CampataOrigine | "tutte";
 type PrioritaFiltro = CampataPriorita | "tutte";
 type StatoFiltro = CampataStatoLavoro | "tutte";
 type ModoElenco = "piano" | "rinvii";
-
-function conteggiTaglio(set: CampataLavoro[]) {
-  return {
-    totale: set.length,
-    daTagliare: set.filter((c) => !campataETagliata(c) && !campataNonTerminata(c)).length,
-    nonTerminate: set.filter((c) => campataNonTerminata(c)).length,
-    tagliate: set.filter((c) => campataETagliata(c)).length,
-  };
-}
-
-function filtroDaPiano(piano: PianoLavoro): PrioritaFiltro {
-  return piano === "entrambe" ? "tutte" : piano;
-}
 
 /** Una riga per span+priorità: se lo stesso promemoria è su due anni, resta quello aperto più recente. */
 function promemoriaSenzaDoppioni(lista: CampataLavoro[]) {
@@ -186,18 +173,20 @@ export function CampateElenco({
   const { syncNow } = useSync();
   const soloRinvii = modo === "rinvii";
   const chiaveVista = soloRinvii ? `${ruolo}.rinvii` : ruolo;
-  const campate = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
+  const campateTutte = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
+  // Le urgenze restano nel database ma finché sono nascoste non entrano in nessun conto.
+  const campate = useMemo(() => soloCampateVisibili(campateTutte), [campateTutte]);
   const storico = useLiveQuery(() => db.campateStorico.toArray(), []) ?? [];
   const vistaSalvata = useMemo(
     () => readElencoVista(session?.userId, chiaveVista),
     [session?.userId, chiaveVista],
   );
-  const [piano, scegliPiano] = usePianoLavoro();
   const [q, setQ] = useState(vistaSalvata?.q ?? "");
   const [kv, setKv] = useState<number | "tutte">(vistaSalvata?.kv ?? "tutte");
-  const [priorita, setPriorita] = useState<PrioritaFiltro>(
-    vistaSalvata?.priorita ?? filtroDaPiano(piano),
-  );
+  const [priorita, setPriorita] = useState<PrioritaFiltro>(() => {
+    const salvata = vistaSalvata?.priorita ?? "tutte";
+    return salvata !== "tutte" && !PRIORITA_VISIBILI.includes(salvata) ? "tutte" : salvata;
+  });
   const [stato, setStato] = useState<StatoFiltro>(vistaSalvata?.stato ?? "tutte");
   const [soloAttenzione, setSoloAttenzione] = useState(vistaSalvata?.soloAttenzione ?? false);
   const [soloDaNonTagliare, setSoloDaNonTagliare] = useState(vistaSalvata?.soloDaNonTagliare ?? false);
@@ -344,8 +333,6 @@ export function CampateElenco({
       inElenco: set.filter((c) => campataInElencoParallelo(c)).length,
       daFare: set.filter((c) => promemoriaAperto(c)).length,
       fatte: set.filter((c) => promemoriaChiuso(c)).length,
-      differibili: conteggiTaglio(set.filter((c) => c.priorita === "differibile")),
-      urgenti: conteggiTaglio(set.filter((c) => c.priorita === "urgente")),
     };
   }, [delPiano]);
 
@@ -422,26 +409,6 @@ export function CampateElenco({
 
   return (
     <>
-      {!soloRinvii ? (
-        <div className="piano-lavoro">
-          <span className="muted">Lavoro in corso</span>
-          {(["differibile", "urgente", "entrambe"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={`chip ${piano === p ? "on" : ""}`}
-              onClick={() => {
-                scegliPiano(p);
-                setPriorita(filtroDaPiano(p));
-                setVisibili(40);
-              }}
-            >
-              {PIANO_LAVORO_LABEL[p]}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <div className="chip-row">
         {soloRinvii ? (
           <>
@@ -453,30 +420,20 @@ export function CampateElenco({
             <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
             <span className="badge">{conteggi.daFare} da fare</span>
             <span className="badge badge-tagliata">{conteggi.fatte} fatte</span>
-            <span className="badge badge-urgente">
-              {delPiano.filter((c) => c.priorita === "urgente" && !campataETagliata(c)).length} ancora urgenti
-            </span>
+            {URGENZE_VISIBILI ? (
+              <span className="badge badge-urgente">
+                {delPiano.filter((c) => c.priorita === "urgente" && !campataETagliata(c)).length} ancora urgenti
+              </span>
+            ) : null}
           </>
         ) : (
           <>
-            <div className={`conteggi-prio${piano === "differibile" || piano === "entrambe" ? " in-corso" : ""}`}>
-              <span className="badge badge-differibile">Differibili · {conteggi.differibili.totale}</span>
-              <span className="badge">{conteggi.differibili.daTagliare} da tagliare</span>
-              {conteggi.differibili.nonTerminate > 0 ? (
-                <span className="badge badge-non-terminata">
-                  {conteggi.differibili.nonTerminate} non terminate
-                </span>
-              ) : null}
-              <span className="badge badge-tagliata">{conteggi.differibili.tagliate} tagliate</span>
-            </div>
-            <div className={`conteggi-prio${piano === "urgente" || piano === "entrambe" ? " in-corso" : ""}`}>
-              <span className="badge badge-urgente">Urgenze · {conteggi.urgenti.totale}</span>
-              <span className="badge">{conteggi.urgenti.daTagliare} da tagliare</span>
-              {conteggi.urgenti.nonTerminate > 0 ? (
-                <span className="badge badge-non-terminata">{conteggi.urgenti.nonTerminate} non terminate</span>
-              ) : null}
-              <span className="badge badge-tagliata">{conteggi.urgenti.tagliate} tagliate</span>
-            </div>
+            <span className="muted">
+              {conteggi.totale} campate · piano {annoEffettivo}
+            </span>
+            <span className="badge">{conteggi.daTagliare} da tagliare</span>
+            <span className="badge badge-non-terminata">{conteggi.nonTerminate} non terminate</span>
+            <span className="badge badge-tagliata">{conteggi.tagliate} tagliate</span>
             <span className="badge badge-da_non_tagliare">{conteggi.daNonTagliare} da non tagliare</span>
             <span className="badge badge-aggiuntiva">{conteggi.aggiuntive} aggiuntive</span>
             <span className="badge badge-attenzionare">{conteggi.attenzione} da attenzionare</span>
@@ -623,21 +580,23 @@ export function CampateElenco({
           ))}
         </FiltroGruppo>
 
-        <FiltroGruppo
-          titolo={priorita === "tutte" ? "Tutte le priorità" : CAMPATA_PRIORITA_LABEL[priorita]}
-          attivo={priorita !== "tutte"}
-        >
-          {(["tutte", "urgente", "differibile"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={`chip ${priorita === p ? "on" : ""}`}
-              onClick={() => setPriorita(p)}
-            >
-              {p === "tutte" ? "Tutte" : CAMPATA_PRIORITA_LABEL[p]}
-            </button>
-          ))}
-        </FiltroGruppo>
+        {URGENZE_VISIBILI ? (
+          <FiltroGruppo
+            titolo={priorita === "tutte" ? "Tutte le priorità" : CAMPATA_PRIORITA_LABEL[priorita]}
+            attivo={priorita !== "tutte"}
+          >
+            {(["tutte", ...PRIORITA_VISIBILI] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`chip ${priorita === p ? "on" : ""}`}
+                onClick={() => setPriorita(p)}
+              >
+                {p === "tutte" ? "Tutte" : CAMPATA_PRIORITA_LABEL[p]}
+              </button>
+            ))}
+          </FiltroGruppo>
+        ) : null}
 
         <FiltroGruppo
           titolo={stato === "tutte" ? "Tutti gli stati" : CAMPATA_STATO_LABEL[stato]}
@@ -941,7 +900,8 @@ export function CampateElenco({
           onCreata={(id, codiceLinea, prioritaCreata) => {
             void syncNow();
             setLinea(codiceLinea);
-            setPriorita(prioritaCreata);
+            // Col filtro priorità nascosto non si potrebbe più togliere: si resta su «tutte».
+            if (URGENZE_VISIBILI) setPriorita(prioritaCreata);
             setOrigine("tutte");
             setStato("tutte");
             setAperta(id);

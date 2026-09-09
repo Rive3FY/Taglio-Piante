@@ -30,6 +30,7 @@ import { CalendarioMese } from "@/components/CalendarioMese";
 import { LineaPicker } from "@/components/LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "@/components/MostraAltro";
 import { annoPianoPiuRecente, anniPiani, campateDellAnno } from "@/lib/campate/anno";
+import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
 
 function TabellaVoci({
   voci,
@@ -292,10 +293,12 @@ export default function ContabilitaPage() {
         </div>
       ) : null}
       <div className="contab-torte">
-        <TortaAvanzamento
-          key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
-          dati={urgente}
-        />
+        {URGENZE_VISIBILI ? (
+          <TortaAvanzamento
+            key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
+            dati={urgente}
+          />
+        ) : null}
         <TortaAvanzamento
           key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.tralasciate}`}
           dati={differibile}
@@ -410,13 +413,15 @@ export default function ContabilitaPage() {
                   {aperta && estrattoAperto?.lineaId === l.lineaId ? (
                     <>
                       <div className="contab-torte">
-                        <TortaAvanzamento
-                          key={`${l.lineaId}-u`}
-                          dati={avanzamentoPriorita(
-                            campateAnno.filter((c) => c.lineaId === l.lineaId),
-                            "urgente",
-                          )}
-                        />
+                        {URGENZE_VISIBILI ? (
+                          <TortaAvanzamento
+                            key={`${l.lineaId}-u`}
+                            dati={avanzamentoPriorita(
+                              campateAnno.filter((c) => c.lineaId === l.lineaId),
+                              "urgente",
+                            )}
+                          />
+                        ) : null}
                         <TortaAvanzamento
                           key={`${l.lineaId}-d`}
                           dati={avanzamentoPriorita(

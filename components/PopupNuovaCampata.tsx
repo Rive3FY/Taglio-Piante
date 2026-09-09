@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { CAMPATA_PRIORITA_LABEL, type CampataPriorita, type Linea } from "@/lib/types";
 import { inserisciCampataManuale } from "@/lib/campate/apply";
 import { normalizzaCampata } from "@/lib/campate/normalize";
-import { readPianoLavoro } from "@/lib/campate/pianoLavoro";
+import { PRIORITA_VISIBILI } from "@/lib/campate/urgenze";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 import { useSession } from "@/lib/SessionContext";
@@ -27,12 +27,9 @@ export function PopupNuovaCampata({
 }) {
   const { session } = useSession();
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
-  const piano = readPianoLavoro();
   const [lineaId, setLineaId] = useState(lineaIdIniziale ?? "");
   const [campata, setCampata] = useState("");
-  const [priorita, setPriorita] = useState<CampataPriorita>(
-    piano === "urgente" ? "urgente" : "differibile",
-  );
+  const [priorita, setPriorita] = useState<CampataPriorita>(PRIORITA_VISIBILI[0]);
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   useDialogBack(true, onChiudi);
@@ -99,16 +96,21 @@ export function PopupNuovaCampata({
             <span className="muted">In elenco: {anteprima}</span>
           ) : null}
         </label>
-        <label>
-          Priorità
-          <select
-            value={priorita}
-            onChange={(e) => setPriorita(e.target.value as CampataPriorita)}
-          >
-            <option value="differibile">{CAMPATA_PRIORITA_LABEL.differibile}</option>
-            <option value="urgente">{CAMPATA_PRIORITA_LABEL.urgente}</option>
-          </select>
-        </label>
+        {PRIORITA_VISIBILI.length > 1 ? (
+          <label>
+            Priorità
+            <select
+              value={priorita}
+              onChange={(e) => setPriorita(e.target.value as CampataPriorita)}
+            >
+              {PRIORITA_VISIBILI.map((p) => (
+                <option key={p} value={p}>
+                  {CAMPATA_PRIORITA_LABEL[p]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {errore ? <p className="form-error">{errore}</p> : null}
         <div className="danger-actions">
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={onChiudi}>

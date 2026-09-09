@@ -56,9 +56,9 @@ Chi aggiorna un'installazione esistente deve rieseguire `supabase/schema.sql`: �
 
 Il tecnico carica un file nello stesso formato del fac-simile LIDAR (**Carica file campate**): il parser legge intestazione e righe, non i dati di un file specifico. Ogni file è un **piano di un anno** (Importa piano 20XX): gli anni precedenti e i rapportini restano. «Azzera tutto e riparti» cancella prove e riparte da zero. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_campate_anno.sql`. L'elenco è visibile a tecnico e operatori; solo il tecnico importa i file.
 
-In elenco, **Lavoro in corso** è sulle differibili (default): i contatori di urgente e differibile restano separati, così le urgenze già tagliate non gonfiano l’avanzamento. Un rapportino chiude solo quella priorità: se la stessa campata è sia urgente sia differibile non si pestano. Quando servirà lavorare su tutte e due, si passa a **Urgenze e differibili** e torna la meccanica che le considera insieme. Il file che si carica non cambia.
+Oggi si lavora **solo sulle differibili**: le urgenze restano nel database (il file si importa sempre intero) ma non si vedono in elenco, nei contatori, nelle torte e negli scarichi. Un rapportino continua a chiudere insieme urgente e differibile della stessa campata, come sempre. Per rimettere le urgenze basta `URGENZE_VISIBILI = true` in `lib/campate/urgenze.ts`: tornano visibili e lavorabili senza toccare i dati.
 
-Operatore e tecnico possono aggiungere una campata a mano (**Nuova campata**): resta aggiuntiva, sul piano dell’anno in elenco, e da lì si parte col rapportino. Se c’è già la stessa linea + campata + priorità non si duplica.
+Operatore e tecnico possono aggiungere una campata a mano (**Nuova campata**): resta aggiuntiva, sul piano dell’anno in elenco, e da lì si parte col rapportino. Se c’è già la stessa linea + campata + priorità non si duplica. Finché le urgenze sono nascoste la campata nuova nasce differibile e la scelta della priorità non compare.
 
 In elenco e sul foglio la campata è il **numero** del LIDAR (22 resta 22, non 21-22). Forme speciali come `78\2 80` restano com’è. Se il numero è una pulizia base e non un taglio, sul rapportino si spunta **BASE**: i sostegni non chiudono le campate.
 

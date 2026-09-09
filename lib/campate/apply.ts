@@ -19,7 +19,6 @@ import {
   campataDaAttenzionare,
   campataDaNonTagliare,
   campataDaRiprendere,
-  campataETagliata,
   campataInElencoParallelo,
   esitoRapportinoToStato,
   etichettaRinvio,
@@ -31,7 +30,6 @@ import { idCampataLavoro, chiaveCampata, normalizzaCampata, stessaNormalizzata }
 import { esitiClassificati, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import { esitoETerminato } from "./terminata";
-import { pianoAccoppiaFratelli, readPianoLavoro } from "./pianoLavoro";
 import type { AnteprimaImport } from "./preview";
 import { eliminaPianoAnno, resetOperativoPerImport } from "./reset";
 import { annoDaDataLavoro, annoDi } from "./anno";
@@ -360,26 +358,15 @@ function bersagliPerEsito(
   );
   const byDet = nelTipo.filter((c) => c.id === idDeterministico);
   if (byDet.length > 0) return byDet;
-  const candidati = nelTipo.filter((c) => {
+  return nelTipo.filter((c) => {
     if (!stessaNormalizzata(c.normalizzata, esito.normalizzata)) return false;
     if (esito.priorita) return c.priorita === esito.priorita;
     return true;
   });
-  if (esito.priorita || candidati.length <= 1) return candidati;
-  const piano = readPianoLavoro();
-  if (!pianoAccoppiaFratelli(piano)) {
-    const delPiano = candidati.filter((c) => c.priorita === piano);
-    if (delPiano.length > 0) return delPiano;
-    const aperti = candidati.filter((c) => !campataETagliata(c));
-    if (aperti.length === 1) return aperti;
-    if (aperti.length > 0) return aperti.filter((c) => c.priorita === "differibile");
-  }
-  return candidati;
 }
 
-/** Stessa campata fisica urgente+differibile: si chiudono insieme solo col piano «entrambe». */
+/** Stessa campata fisica con priorità urgente e differibile: chiudiamo entrambe insieme. */
 function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro[]): CampataLavoro[] {
-  if (!pianoAccoppiaFratelli()) return bersagli;
   const out = new Map<string, CampataLavoro>();
   for (const b of bersagli) {
     out.set(b.id, b);
@@ -773,7 +760,7 @@ export async function unisciCampateDoppie() {
   const gruppi = new Map<string, CampataLavoro[]>();
   for (const c of campate) {
     if (isBaseLavoro(c) || !c.normalizzata) continue;
-    const chiave = `${annoDi(c)}|${c.lineaId}|${normalizzaCampata(c.normalizzata)}|${c.priorita ?? ""}`;
+    const chiave = `${annoDi(c)}|${c.lineaId}|${normalizzaCampata(c.normalizzata)}`;
     const list = gruppi.get(chiave) ?? [];
     list.push(c);
     gruppi.set(chiave, list);
@@ -984,9 +971,9 @@ export async function aggiornaDettagliCampata(
   const toccaAttenzione = patch.attenzionare !== undefined || patch.attenzionareFatta !== undefined;
   const toccaSpan = toccaNonTagliare || toccaRinvio || toccaAttenzione;
 
-  // Stessa campata fisica urgente+differibile: i promemoria restano sullo span.
-  // «Da non tagliare» segue la gemella solo col piano «entrambe», così un foglio
-  // sulle differibili non chiude (né riapre) le urgenze già tagliate.
+  // Stessa campata fisica segnata sia urgente sia differibile: «da non tagliare» e i due
+  // promemoria dell’elenco parallelo valgono sullo span, come il rapportino che le chiude
+  // insieme. La nota resta invece sulla riga toccata.
   const gemelle: CampataLavoro[] = [];
   if (toccaSpan && !isBaseLavoro(presente) && presente.normalizzata) {
     const sullaLinea = await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray();
@@ -1000,7 +987,6 @@ export async function aggiornaDettagliCampata(
 
   function gemellaSegueNonTagliare(gemella: CampataLavoro) {
     if (!toccaNonTagliare) return false;
-    if (!pianoAccoppiaFratelli()) return false;
     if (campataDaNonTagliare(gemella) === patch.daNonTagliare) return false;
     // Già tagliata con un rapportino: quello è un fatto, non si riscrive.
     if (patch.daNonTagliare && gemella.rapportinoId) return false;
