@@ -41,8 +41,8 @@ export function AppHeader({
     : lastError
       ? `${pending} modifiche da mandare al server. Ultimo errore: ${lastError}. Tocca per riprovare.`
       : pending > 0
-        ? `${pending} modifiche salvate sul telefono, ancora da mandare al server. Tocca per inviare.`
-        : "Tutto allineato con il server. Tocca per sincronizzare di nuovo.") + ultimoGiro;
+        ? `${pending} modifiche salvate sul telefono, in invio automatico. Tocca per forzare l’invio.`
+        : "Tutto allineato con il server. Tocca solo se vuoi sincronizzare di nuovo.") + ultimoGiro;
 
   const pillLabel = !online
     ? "Offline"

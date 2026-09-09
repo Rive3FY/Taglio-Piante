@@ -61,13 +61,29 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }, 2000);
     const timer = window.setInterval(() => {
       if (navigator.onLine) void syncNow();
-    }, 45000);
+    }, 20_000);
+    const onVisibile = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) void syncNow();
+    };
+    document.addEventListener("visibilitychange", onVisibile);
     return () => {
       unsub();
       window.clearTimeout(bootTimer);
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibile);
     };
   }, [syncNow]);
+
+  /* Non aspetta il tocco sulla pillola: se c’è coda e c’è rete, parte da solo. */
+  useEffect(() => {
+    if (pending === 0) return;
+    if (!online) return;
+    const delay = lastError ? 12_000 : 500;
+    const t = window.setTimeout(() => {
+      void syncNow();
+    }, delay);
+    return () => window.clearTimeout(t);
+  }, [pending, lastError, online, syncNow]);
 
   // Dopo il login serve una passata subito, altrimenti i dati arrivano solo al giro successivo.
   useEffect(() => {

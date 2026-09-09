@@ -399,6 +399,13 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     return area === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`;
   }
 
+  const daElencoCampate = Boolean(precompilatoLineaId || precompilatoCampataId);
+  const percorsoDopoCompletato = daElencoCampate
+    ? area === "tecnico"
+      ? "/tecnico/campate"
+      : "/operatore/campate"
+    : ("home" as const);
+
   async function salva() {
     if (!effectiveLineaId) {
       setError("Seleziona la linea.");
@@ -465,7 +472,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
-      dopo: "home",
+      dopo: percorsoDopoCompletato,
     });
   }
 
@@ -490,7 +497,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
-      dopo: "home",
+      dopo: percorsoDopoCompletato,
     });
   }
 
