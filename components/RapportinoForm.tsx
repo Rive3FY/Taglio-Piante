@@ -559,8 +559,20 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
             <LineaPicker linee={linee} value={effectiveLineaId} onChange={setLineaId} campo="nome" />
           </label>
           <div className="campo-campata">
-            <div className="campata-label-row">
-              <span>{lavoroBasi ? "Basi" : "Campata"}</span>
+            <span className="campo-campata-label">{lavoroBasi ? "Basi" : "Campata"}</span>
+            <div className="campo-campata-riga">
+              {modoPrecompilato && !lavoroBasi ? (
+                <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
+              ) : (
+                <input
+                  value={modoPrecompilato && esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata}
+                  onChange={(e) => {
+                    setCampata(e.target.value);
+                    if (esiti.length > 0) setEsiti([]);
+                  }}
+                  placeholder="Es. 22"
+                />
+              )}
               <label className={`spunta-base ${lavoroBasi ? "on" : ""}`}>
                 <input
                   type="checkbox"
@@ -576,18 +588,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
                 BASE
               </label>
             </div>
-            {modoPrecompilato && !lavoroBasi ? (
-              <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
-            ) : (
-              <input
-                value={modoPrecompilato && esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata}
-                onChange={(e) => {
-                  setCampata(e.target.value);
-                  if (esiti.length > 0) setEsiti([]);
-                }}
-                placeholder="Es. 22"
-              />
-            )}
             {erroreBasi ? (
               <span className="form-error">{erroreBasi}</span>
             ) : lavoroBasi ? (
@@ -673,6 +673,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
 
       <section className="panel">
         <h2>Descrizione prestazioni e quantità</h2>
+            <div className="prest-scroll">
             <table className="prest-table">
               <thead>
                 <tr>
@@ -706,6 +707,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
 
           <section className="panel">
