@@ -4,6 +4,9 @@ import { mostraTestoCampate, normalizzaCampata, spezzaCampateTesto } from "./nor
 
 /** Pulizia basamento sul foglio ufficiale: 5.1–5.4. */
 export const CODICI_PULIZIA_BASE = new Set(["5.1", "5.2", "5.3", "5.4"]);
+/** Con la spunta BASE ne serve almeno una: sentiero 1.2 oppure pulizia 5.1–5.4. */
+export const CODICI_CHIAMATE_BASE = new Set(["1.2", "5.1", "5.2", "5.3", "5.4"]);
+export const ETICHETTA_CHIAMATE_BASE = "1.2 o 5.1–5.4";
 
 export function isBaseLavoro(c: { tipo?: string }) {
   return c.tipo === "base";
@@ -31,6 +34,17 @@ function quantitaBasiArrotondate(item: Pick<Rapportino, "righe">, prestazioni: P
 
 export function haVociBase(item: Pick<Rapportino, "righe">, prestazioni: Prestazione[]) {
   return quantitaBasiArrotondate(item, prestazioni).length > 0;
+}
+
+/** C’è almeno una chiamata accettata sulla spunta BASE (1.2 oppure 5.1–5.4). */
+export function haChiamataBase(item: Pick<Rapportino, "righe">, prestazioni: Prestazione[]) {
+  for (const r of item.righe ?? []) {
+    const q = Number(r.quantita);
+    if (!q) continue;
+    const p = prestazioni.find((x) => x.id === r.prestazioneId);
+    if (p && CODICI_CHIAMATE_BASE.has(p.codice)) return true;
+  }
+  return false;
 }
 
 /**
@@ -73,12 +87,15 @@ export function eLavoroBasi(testo: string, item: Pick<Rapportino, "righe">, pres
   return somma === n;
 }
 
-/** 5.1–5.4 senza i numeri giusti nel box: non è né base né campata. */
+/** Spunta BASE senza una chiamata, oppure 5.1–5.4 senza i numeri giusti nel box. */
 export function messaggioIncoerenzaBasi(
   testo: string,
   item: Pick<Rapportino, "righe">,
   prestazioni: Prestazione[],
 ) {
+  if (!haChiamataBase(item, prestazioni)) {
+    return `Spunta BASE: è obbligatoria almeno una chiamata tra ${ETICHETTA_CHIAMATE_BASE}.`;
+  }
   const voci = quantitaBasiArrotondate(item, prestazioni);
   if (voci.length === 0) return null;
   const n = numeriDaTestoCampata(testo).length;

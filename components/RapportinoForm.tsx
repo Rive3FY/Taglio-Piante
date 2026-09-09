@@ -18,7 +18,12 @@ import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
-import { esitiClassificati, haVociBase, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
+import {
+  ETICHETTA_CHIAMATE_BASE,
+  esitiClassificati,
+  haVociBase,
+  messaggioIncoerenzaBasi,
+} from "@/lib/campate/basi";
 import { mostraCampata, mostraTestoCampate, normalizzaCampata } from "@/lib/campate/normalize";
 import {
   esitiCheToccanoDaNonTagliare,
@@ -592,8 +597,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               <span className="form-error">{erroreBasi}</span>
             ) : lavoroBasi ? (
               <span className="muted">
-                Spunta BASE: i numeri sono sostegni, non chiudono le campate. Se compili 5.1–5.4, la
-                quantità deve coincidere.
+                Spunta BASE: i numeri sono sostegni, non chiudono le campate. Serve almeno una
+                chiamata tra {ETICHETTA_CHIAMATE_BASE}; se compili 5.1–5.4 la quantità deve
+                coincidere.
               </span>
             ) : vociBasePresenti ? (
               <span className="muted">

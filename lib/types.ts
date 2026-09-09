@@ -54,7 +54,7 @@ export type CampataLavoro = {
   tensioneKv?: number;
   originale: string;
   normalizzata: string;
-  /** Assente o campata = span; base = sostegno/pulizia basamento (voci 5.2–5.4). */
+  /** Assente o campata = span; base = sostegno (chiamate 1.2 o 5.1–5.4). */
   tipo?: CampataTipo;
   priorita?: CampataPriorita;
   stato: CampataStatoLavoro;
