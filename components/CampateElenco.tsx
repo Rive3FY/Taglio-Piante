@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, formatDistInt, TENSIONI, tensioneLabel } from "@/lib/format";
-import { aggiornaDettagliCampata, type PatchRinvio } from "@/lib/campate/apply";
+import { aggiornaDettagliCampata, eliminaCampataLavoro, type PatchRinvio } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
@@ -404,6 +404,26 @@ export function CampateElenco({
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Modifica non consentita.");
       throw e;
+    }
+  }
+
+  async function eliminaRiga(c: CampataLavoro) {
+    const nome = mostraCampata(c.normalizzata);
+    const ok = window.confirm(
+      `Eliminare la campata ${nome} da ${c.codiceLinea}? Esce dall’elenco e dai contatori. I fogli già fatti restano. Non si può annullare.`,
+    );
+    if (!ok) return;
+    try {
+      await eliminaCampataLavoro(c.id, session);
+      void syncNow();
+      if (aperta === c.id) setAperta(null);
+      mostraEsito({
+        titolo: "Campata eliminata",
+        testo: `${c.codiceLinea} · ${nome} non è più in elenco.`,
+        dopo: "resta",
+      });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Eliminazione non riuscita.");
     }
   }
 
@@ -871,6 +891,9 @@ export function CampateElenco({
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
                   onPatch={(patch) => void patchCampata(c.id, patch)}
                   onApriPopup={() => setPopup(c.id)}
+                  onElimina={
+                    ruolo === "tecnico" && !soloRinvii ? () => void eliminaRiga(c) : undefined
+                  }
                 />
               ))}
             </tbody>
@@ -992,6 +1015,7 @@ function CampataRiga({
   onToggle,
   onPatch,
   onApriPopup,
+  onElimina,
 }: {
   c: CampataLavoro;
   ruolo: "tecnico" | "operatore";
@@ -1003,9 +1027,11 @@ function CampataRiga({
   onToggle: () => void;
   onPatch: (patch: PatchCampata) => Promise<void> | void;
   onApriPopup: () => void;
+  onElimina?: () => Promise<void> | void;
 }) {
   const [nota, setNota] = useState("");
   const [attenzione, setAttenzione] = useState(Boolean(c.attenzionare));
+  const [eliminaBusy, setEliminaBusy] = useState(false);
   const attenzioneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Conta l'area, non il ruolo: il tecnico passato sul campo lavora con i tasti dell'operatore.
   const session = sessionUserId ? { userId: sessionUserId, ruolo, nome: "", email: "" } : null;
@@ -1300,6 +1326,21 @@ function CampataRiga({
               ) : (
                 <p className="muted">Nessun log su questa campata.</p>
               )}
+              {onElimina ? (
+                <div className="danger-actions campata-elimina">
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={eliminaBusy}
+                    onClick={() => {
+                      setEliminaBusy(true);
+                      void Promise.resolve(onElimina()).finally(() => setEliminaBusy(false));
+                    }}
+                  >
+                    {eliminaBusy ? "Eliminazione…" : "Elimina campata"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </td>
         </tr>

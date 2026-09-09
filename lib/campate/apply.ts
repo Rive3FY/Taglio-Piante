@@ -1299,3 +1299,17 @@ export async function inserisciCampataManuale(
   await enqueueSync(nuova.id, "campate");
   return nuova;
 }
+
+/** Solo il tecnico: toglie la campata dall’elenco (locale + cloud). I fogli restano. */
+export async function eliminaCampataLavoro(id: string, session: Session | null) {
+  if (session?.ruolo !== "tecnico") {
+    throw new Error("Solo il tecnico può eliminare una campata.");
+  }
+  const presente = await db.campateLavoro.get(id);
+  if (!presente) return;
+  const log = await db.campateStorico.where("campataId").equals(id).toArray();
+  if (log.length > 0) await db.campateStorico.bulkDelete(log.map((s) => s.id));
+  await db.campateLavoro.delete(id);
+  await db.campateDeleteQueue.put({ id });
+  await enqueueSync(id, "campate");
+}
