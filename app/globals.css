@@ -206,11 +206,16 @@ textarea { resize: vertical; }
 .campo-campata-label { line-height: 1.2; }
 .campo-campata-riga {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+  max-width: 420px;
 }
-.campo-campata-riga input { flex: 1 1 auto; }
+.campo-campata-riga input {
+  flex: 1 1 auto;
+  height: 48px;
+  min-height: 48px;
+}
 .spunta-base {
   display: inline-flex;
   align-items: center;
@@ -218,6 +223,8 @@ textarea { resize: vertical; }
   gap: 6px;
   margin: 0;
   flex: 0 0 auto;
+  height: 48px;
+  min-height: 48px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1294,14 +1301,22 @@ button.rap-card-link {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   margin: 0 -4px;
-  padding: 0 4px;
+  padding: 0 4px 8px;
+  max-height: calc(100dvh - 13rem);
 }
+.prest-table th { position: sticky; top: 0; z-index: 1; background: #fff; }
 .prest-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .prest-table th, .prest-table td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 6px; vertical-align: top; }
 .prest-table .cod { width: 52px; font-weight: 700; }
 .prest-table .um { width: 72px; color: var(--muted); white-space: nowrap; }
-.prest-table .qty { width: 92px; }
-.prest-table .qty input { padding: 8px; }
+.prest-table .qty { width: 88px; }
+.prest-table .qty input {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px;
+  text-align: right;
+}
 
 .danger-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -1404,11 +1419,6 @@ button.rap-card-link {
   .hero h1 { font-size: 26px; }
   .inline-field, select.inline-field { min-width: 0; width: 100%; margin: 6px 0; display: block; }
   .contab-estrai { grid-template-columns: 1fr; }
-  .prest-scroll {
-    max-height: calc(100dvh - 13rem);
-    padding-bottom: 8px;
-  }
-  .prest-table th { position: sticky; top: 0; z-index: 1; background: #fff; }
 
   .tecnico-shell .app-header {
     flex-direction: row;
