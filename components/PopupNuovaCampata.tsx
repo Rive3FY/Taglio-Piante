@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { CAMPATA_PRIORITA_LABEL, type CampataPriorita, type Linea } from "@/lib/types";
-import { inserisciCampataManuale } from "@/lib/campate/apply";
-import { normalizzaCampata } from "@/lib/campate/normalize";
-import { PRIORITA_VISIBILI } from "@/lib/campate/urgenze";
+import { CAMPATA_PRIORITA_LABEL, type CampataLavoro, type CampataPriorita, type Linea } from "@/lib/types";
+import {
+  campateGiaPresenti,
+  inserisciCampataManuale,
+  messaggioCampataGiaPresente,
+} from "@/lib/campate/apply";
+import { mostraCampata, normalizzaCampata } from "@/lib/campate/normalize";
+import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 import { useSession } from "@/lib/SessionContext";
@@ -22,19 +26,32 @@ export function PopupNuovaCampata({
 }: {
   lineaIdIniziale?: string;
   anno: number;
-  onCreata: (id: string, codiceLinea: string, priorita: CampataPriorita) => void;
+  onCreata: (id: string, codiceLinea: string, priorita: CampataPriorita, normalizzata: string) => void;
   onChiudi: () => void;
 }) {
   const { session } = useSession();
-  const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
   const [lineaId, setLineaId] = useState(lineaIdIniziale ?? "");
   const [campata, setCampata] = useState("");
-  const [priorita, setPriorita] = useState<CampataPriorita>(PRIORITA_VISIBILI[0]);
+  const [priorita, setPriorita] = useState<CampataPriorita | "">("");
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
+  const linee = useLiveQuery(() => db.linee.toArray(), []) ?? EMPTY_LINEE;
+  const campateLinea =
+    useLiveQuery(
+      () => (lineaId ? db.campateLavoro.where("lineaId").equals(lineaId).toArray() : Promise.resolve([] as CampataLavoro[])),
+      [lineaId],
+    ) ?? [];
   useDialogBack(true, onChiudi);
 
   const anteprima = useMemo(() => normalizzaCampata(campata), [campata]);
+  const giaPresenti = useMemo(() => {
+    if (!lineaId || !anteprima) return [];
+    return campateGiaPresenti(campateLinea, { lineaId, normalizzata: anteprima, anno });
+  }, [campateLinea, lineaId, anteprima, anno]);
+  const lineaScelta = linee.find((l) => l.id === lineaId);
+  const avvisoGia = giaPresenti.length > 0
+    ? messaggioCampataGiaPresente(giaPresenti, lineaScelta?.codice ?? "")
+    : "";
 
   async function salva() {
     if (!lineaId) {
@@ -45,6 +62,14 @@ export function PopupNuovaCampata({
       setErrore("Indica la campata.");
       return;
     }
+    if (giaPresenti.length > 0) {
+      setErrore(avvisoGia);
+      return;
+    }
+    if (!priorita) {
+      setErrore("Indica se è urgente o differibile.");
+      return;
+    }
     setBusy(true);
     setErrore(null);
     try {
@@ -53,10 +78,10 @@ export function PopupNuovaCampata({
         session,
       );
       onChiudi();
-      onCreata(nuova.id, nuova.codiceLinea, nuova.priorita ?? priorita);
+      onCreata(nuova.id, nuova.codiceLinea, nuova.priorita ?? priorita, nuova.normalizzata);
       mostraEsito({
         titolo: "Campata aggiunta",
-        testo: `${nuova.normalizzata} è in elenco come aggiuntiva. Da lì parti col rapportino.`,
+        testo: `${mostraCampata(nuova.normalizzata)} è in elenco come ${CAMPATA_PRIORITA_LABEL[nuova.priorita ?? priorita]}. Da lì parti col rapportino.`,
         dopo: "resta",
       });
     } catch (e) {
@@ -93,30 +118,32 @@ export function PopupNuovaCampata({
             autoComplete="off"
           />
           {anteprima && anteprima !== campata.trim() ? (
-            <span className="muted">In elenco: {anteprima}</span>
+            <span className="muted">In elenco: {mostraCampata(anteprima)}</span>
           ) : null}
         </label>
-        {PRIORITA_VISIBILI.length > 1 ? (
+        {avvisoGia ? <p className="form-error">{avvisoGia}</p> : null}
+        {giaPresenti.length === 0 ? (
           <label>
             Priorità
             <select
               value={priorita}
-              onChange={(e) => setPriorita(e.target.value as CampataPriorita)}
+              onChange={(e) => setPriorita(e.target.value as CampataPriorita | "")}
             >
-              {PRIORITA_VISIBILI.map((p) => (
-                <option key={p} value={p}>
-                  {CAMPATA_PRIORITA_LABEL[p]}
-                </option>
-              ))}
+              <option value="">Seleziona…</option>
+              <option value="differibile">{CAMPATA_PRIORITA_LABEL.differibile}</option>
+              <option value="urgente">{CAMPATA_PRIORITA_LABEL.urgente}</option>
             </select>
+            {!URGENZE_VISIBILI && priorita === "urgente" ? (
+              <span className="muted">Oggi le urgenze sono nascoste: in elenco la vedi solo da questa scheda.</span>
+            ) : null}
           </label>
         ) : null}
-        {errore ? <p className="form-error">{errore}</p> : null}
+        {errore && errore !== avvisoGia ? <p className="form-error">{errore}</p> : null}
         <div className="danger-actions">
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={onChiudi}>
             Annulla
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
+          <button type="submit" className="btn btn-primary" disabled={busy || giaPresenti.length > 0}>
             {busy ? "Salvataggio…" : "Aggiungi all’elenco"}
           </button>
         </div>

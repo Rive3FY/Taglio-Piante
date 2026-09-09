@@ -26,7 +26,7 @@ import {
   puoModificareSceltaCampata,
   rapportinoEChiuso,
 } from "@/lib/types";
-import { idCampataLavoro, chiaveCampata, normalizzaCampata, stessaNormalizzata } from "./normalize";
+import { idCampataLavoro, chiaveCampata, mostraCampata, normalizzaCampata, stessaNormalizzata } from "./normalize";
 import { esitiClassificati, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import { esitoETerminato } from "./terminata";
@@ -1236,6 +1236,34 @@ export async function aggiornaDettagliCampata(
   await enqueueSync(presente.rapportinoId || presente.id, "campate");
 }
 
+/** Stesso numero sulla linea, urgente e/o differibile (piano e elenco parallelo). */
+export function campateGiaPresenti(
+  lista: CampataLavoro[],
+  opts: { lineaId: string; normalizzata: string; anno: number },
+) {
+  return lista.filter(
+    (c) =>
+      c.lineaId === opts.lineaId &&
+      annoDi(c) === opts.anno &&
+      !isBaseLavoro(c) &&
+      stessaNormalizzata(c.normalizzata, opts.normalizzata),
+  );
+}
+
+export function messaggioCampataGiaPresente(presenti: CampataLavoro[], codiceLinea: string) {
+  if (presenti.length === 0) return "";
+  const nome = mostraCampata(presenti[0]?.normalizzata ?? "");
+  const etichette = [
+    ...new Set(
+      presenti
+        .map((c) => (c.priorita ? CAMPATA_PRIORITA_LABEL[c.priorita] : null))
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  const dove = etichette.length > 0 ? ` (${etichette.join(" e ")})` : "";
+  return `La campata ${nome} è già in elenco su ${codiceLinea}${dove}.`;
+}
+
 /** Campata nata sul campo, non dal file LIDAR. Stessa chiave dell’import: se c’è già, non si duplica. */
 export async function inserisciCampataManuale(
   opts: {
@@ -1254,18 +1282,11 @@ export async function inserisciCampataManuale(
   const anno = opts.anno >= 2000 ? opts.anno : 2026;
   const priorita = opts.priorita;
   const id = idCampataLavoro(linea.codice, normalizzata, priorita, "campata", anno);
-  const sullaLinea = (await db.campateLavoro.where("lineaId").equals(linea.id).toArray()).filter(
-    (c) =>
-      annoDi(c) === anno &&
-      !isBaseLavoro(c) &&
-      stessaNormalizzata(c.normalizzata, normalizzata) &&
-      c.priorita === priorita,
-  );
-  const presente = (await db.campateLavoro.get(id)) ?? sullaLinea[0];
+  const sullaLinea = await db.campateLavoro.where("lineaId").equals(linea.id).toArray();
+  const gemelle = campateGiaPresenti(sullaLinea, { lineaId: linea.id, normalizzata, anno });
+  const presente = (await db.campateLavoro.get(id)) ?? gemelle[0];
   if (presente) {
-    throw new Error(
-      `La campata ${normalizzata} è già in elenco su ${linea.codice} (${CAMPATA_PRIORITA_LABEL[priorita]}).`,
-    );
+    throw new Error(messaggioCampataGiaPresente(gemelle.length > 0 ? gemelle : [presente], linea.codice));
   }
   const now = new Date().toISOString();
   const nuova: CampataLavoro = {

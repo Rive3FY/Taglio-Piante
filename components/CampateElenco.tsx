@@ -131,11 +131,20 @@ function campiRicerca(c: CampataLavoro) {
     .map((v) => String(v).toLowerCase());
 }
 
+/** «6» è la campata 6, non 16 o 61. Le altre parole restano un pezzo qualsiasi del campo. */
+function campoHaTermine(campo: string, termine: string) {
+  if (/^\d+$/.test(termine)) {
+    if (campo === termine) return true;
+    return campo.split(/[^\d]+/).includes(termine);
+  }
+  return campo.includes(termine);
+}
+
 /** «patria 58» trova la campata 58 di quella linea: ogni parola in un campo qualsiasi. */
 function passaTermini(c: CampataLavoro, termini: string[]) {
   if (termini.length === 0) return true;
   const campi = campiRicerca(c);
-  return termini.every((t) => campi.some((v) => v.includes(t)));
+  return termini.every((t) => campi.some((v) => campoHaTermine(v, t)));
 }
 
 function passaFiltriVista(
@@ -203,6 +212,7 @@ export function CampateElenco({
   const [suggAperti, setSuggAperti] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
   const [nuovaAperta, setNuovaAperta] = useState(false);
+  const [sceltaId, setSceltaId] = useState<string | null>(null);
   // Nell'elenco parallelo l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
   const universo = useMemo(
     () => (soloRinvii ? promemoriaSenzaDoppioni(campate) : campate),
@@ -251,6 +261,11 @@ export function CampateElenco({
   const termini = useMemo(() => q.trim().toLowerCase().split(/\s+/).filter(Boolean), [q]);
 
   const filtrate = useMemo(() => {
+    if (sceltaId) {
+      const scelta =
+        delPiano.find((c) => c.id === sceltaId) ?? campateTutte.find((c) => c.id === sceltaId);
+      return scelta && scelta.tipo !== "base" ? [scelta] : [];
+    }
     return [...delPiano]
       .filter((c) => c.tipo !== "base")
       .sort((a, b) => confrontaElenco(a, b, ordine))
@@ -270,6 +285,8 @@ export function CampateElenco({
         return true;
       });
   }, [
+    sceltaId,
+    campateTutte,
     delPiano,
     termini,
     kv,
@@ -469,6 +486,7 @@ export function CampateElenco({
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
+              setSceltaId(null);
               setVisibili(40);
               setSuggAperti(true);
             }}
@@ -480,6 +498,9 @@ export function CampateElenco({
             placeholder="Es. patria 58, oppure 21317B1"
             autoComplete="off"
           />
+          {sceltaId ? (
+            <span className="muted">Solo la campata scelta dalla tendina. Cancella la cerca per rivedere l’elenco.</span>
+          ) : null}
         </label>
         {mostraSugg ? (
           <ul className="suggerimenti" onMouseDown={(e) => e.preventDefault()}>
@@ -491,6 +512,7 @@ export function CampateElenco({
                   onClick={() => {
                     setLinea(l.codice);
                     setQ("");
+                    setSceltaId(null);
                     setVisibili(40);
                     setSuggAperti(false);
                   }}
@@ -511,6 +533,8 @@ export function CampateElenco({
                   className="suggerimento"
                   onClick={() => {
                     setQ(`${c.codiceLinea} ${mostraCampata(c.normalizzata)}`);
+                    setSceltaId(c.id);
+                    setLinea("");
                     setAperta(c.id);
                     setVisibili(40);
                     setSuggAperti(false);
@@ -920,11 +944,13 @@ export function CampateElenco({
         <PopupNuovaCampata
           lineaIdIniziale={delPiano.find((c) => c.codiceLinea === linea)?.lineaId}
           anno={annoRiferimento}
-          onCreata={(id, codiceLinea, prioritaCreata) => {
+          onCreata={(id, codiceLinea, prioritaCreata, normalizzata) => {
             void syncNow();
-            setLinea(codiceLinea);
-            // Col filtro priorità nascosto non si potrebbe più togliere: si resta su «tutte».
+            setQ(`${codiceLinea} ${mostraCampata(normalizzata)}`.trim());
+            setSceltaId(id);
+            setLinea("");
             if (URGENZE_VISIBILI) setPriorita(prioritaCreata);
+            else setPriorita("tutte");
             setOrigine("tutte");
             setStato("tutte");
             setAperta(id);
