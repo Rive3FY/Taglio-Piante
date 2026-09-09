@@ -23,6 +23,7 @@ import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
 import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, type Periodo } from "./FiltroPeriodo";
 import { PopupRinvio } from "./PopupRinvio";
+import { PopupNuovaCampata } from "./PopupNuovaCampata";
 import { LinkMaps } from "./LinkMaps";
 import {
   CAMPATA_ORIGINE_LABEL,
@@ -203,6 +204,7 @@ export function CampateElenco({
   const [ordine, setOrdine] = useState<OrdineElenco>(vistaSalvata?.ordine ?? "linea");
   const [suggAperti, setSuggAperti] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
+  const [nuovaAperta, setNuovaAperta] = useState(false);
   // Nell'elenco parallelo l'universo è solo il promemoria: gli anni dei chip sono quelli che ne hanno.
   const universo = useMemo(
     () => (soloRinvii ? promemoriaSenzaDoppioni(campate) : campate),
@@ -813,32 +815,39 @@ export function CampateElenco({
             ? ` · ${basiVista.length} ${basiVista.length === 1 ? "base" : "basi"} nel file`
             : ""}
         </span>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={(ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate).length === 0}
-          onClick={() => {
-            const lista = ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate;
-            void (async () => {
-              await scaricaVistaCampate(lista, {
-                linea: linea || undefined,
-                stato,
-                priorita,
-                origine,
-                anno: annoEffettivo ?? undefined,
-                prefisso: soloRinvii ? "elenco-parallelo" : undefined,
-                parallelo: soloRinvii,
-              });
-              mostraEsito({
-                titolo: "Excel scaricato",
-                testo: `Vista con ${lista.length} ${lista.length === 1 ? "riga" : "righe"}.`,
-                dopo: "resta",
-              });
-            })();
-          }}
-        >
-          Scarica vista
-        </button>
+        <span className="elenco-azioni">
+          {!soloRinvii ? (
+            <button type="button" className="btn btn-primary" onClick={() => setNuovaAperta(true)}>
+              Nuova campata
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={(ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate).length === 0}
+            onClick={() => {
+              const lista = ruolo === "tecnico" && !soloRinvii ? daScaricare : filtrate;
+              void (async () => {
+                await scaricaVistaCampate(lista, {
+                  linea: linea || undefined,
+                  stato,
+                  priorita,
+                  origine,
+                  anno: annoEffettivo ?? undefined,
+                  prefisso: soloRinvii ? "elenco-parallelo" : undefined,
+                  parallelo: soloRinvii,
+                });
+                mostraEsito({
+                  titolo: "Excel scaricato",
+                  testo: `Vista con ${lista.length} ${lista.length === 1 ? "riga" : "righe"}.`,
+                  dopo: "resta",
+                });
+              })();
+            }}
+          >
+            Scarica vista
+          </button>
+        </span>
       </div>
 
       {filtrate.length === 0 ? (
@@ -916,6 +925,22 @@ export function CampateElenco({
           onChiudi={() => setPopup(null)}
         />
       ) : null}
+      {nuovaAperta ? (
+        <PopupNuovaCampata
+          lineaIdIniziale={delPiano.find((c) => c.codiceLinea === linea)?.lineaId}
+          anno={annoRiferimento}
+          onCreata={(id, codiceLinea, prioritaCreata) => {
+            void syncNow();
+            setLinea(codiceLinea);
+            setPriorita(prioritaCreata);
+            setOrigine("tutte");
+            setStato("tutte");
+            setAperta(id);
+            setVisibili(40);
+          }}
+          onChiudi={() => setNuovaAperta(false)}
+        />
+      ) : null}
     </>
   );
 }
@@ -982,6 +1007,7 @@ function etichettaEvento(evento: string) {
   if (evento === "ripresa_fatta_off") return "Ripresa da fare";
   if (evento === "nota") return "Nota";
   if (evento === "non_terminata") return "Non terminata";
+  if (evento === "aggiuntiva_manuale" || evento === "aggiuntiva_da_rapportino") return "Aggiuntiva";
   if (eventoDaRapportino(evento)) return "Tagliata";
   return null;
 }

@@ -58,6 +58,8 @@ Il tecnico carica un file nello stesso formato del fac-simile LIDAR (**Carica fi
 
 In elenco, **Lavoro in corso** è sulle differibili (default): i contatori di urgente e differibile restano separati, così le urgenze già tagliate non gonfiano l’avanzamento. Un rapportino chiude solo quella priorità: se la stessa campata è sia urgente sia differibile non si pestano. Quando servirà lavorare su tutte e due, si passa a **Urgenze e differibili** e torna la meccanica che le considera insieme. Il file che si carica non cambia.
 
+Operatore e tecnico possono aggiungere una campata a mano (**Nuova campata**): resta aggiuntiva, sul piano dell’anno in elenco, e da lì si parte col rapportino. Se c’è già la stessa linea + campata + priorità non si duplica.
+
 ## Da riprendere e attenzionare
 
 Elenco parallelo al piano: ci finiscono le campate con un mese di ripresa («da riprendere», col popup del mese) e quelle segnate «da attenzionare» (una spunta, senza popup). Non è uno stato di taglio: le torte restano legate a stato e «da non tagliare». Le due segnalazioni valgono sullo span (urgente e differibile insieme), compaiono una volta sola anche se il piano cambia anno, sopravvivono al reimport dello stesso anno e si tolgono da questo elenco. Il tecnico le chiude con «Tagliata»: la riga resta, barrata. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_attenzione_parallelo.sql`.

@@ -5,6 +5,7 @@ import { campataLavoroToRow, campataStoricoToRow, importCampateToRow, lineaToRow
 import { messaggioErroreSupabase, upsertCampateLavoro } from "@/lib/supabase/remote";
 import type {
   CampataLavoro,
+  CampataPriorita,
   CampataStorico,
   ImportCampate,
   Linea,
@@ -14,6 +15,7 @@ import type {
   Session,
 } from "@/lib/types";
 import {
+  CAMPATA_PRIORITA_LABEL,
   campataDaAttenzionare,
   campataDaNonTagliare,
   campataDaRiprendere,
@@ -25,7 +27,7 @@ import {
   puoModificareSceltaCampata,
   rapportinoEChiuso,
 } from "@/lib/types";
-import { idCampataLavoro, chiaveCampata } from "./normalize";
+import { idCampataLavoro, chiaveCampata, normalizzaCampata } from "./normalize";
 import { eLavoroBasi, esitiClassificati, haVociBase, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import { esitoETerminato } from "./terminata";
@@ -1248,4 +1250,68 @@ export async function aggiornaDettagliCampata(
   if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
   if (storico.length > 0) await db.campateStorico.bulkPut(storico);
   await enqueueSync(presente.rapportinoId || presente.id, "campate");
+}
+
+/** Campata nata sul campo, non dal file LIDAR. Stessa chiave dell’import: se c’è già, non si duplica. */
+export async function inserisciCampataManuale(
+  opts: {
+    lineaId: string;
+    campata: string;
+    priorita: CampataPriorita;
+    anno: number;
+  },
+  session: Session | null,
+) {
+  const originale = opts.campata.trim();
+  const normalizzata = normalizzaCampata(originale);
+  if (!normalizzata) throw new Error("Indica la campata.");
+  const linea = await db.linee.get(opts.lineaId);
+  if (!linea) throw new Error("Seleziona la linea.");
+  const anno = opts.anno >= 2000 ? opts.anno : 2026;
+  const priorita = opts.priorita;
+  const id = idCampataLavoro(linea.codice, normalizzata, priorita, "campata", anno);
+  const sullaLinea = (await db.campateLavoro.where("lineaId").equals(linea.id).toArray()).filter(
+    (c) =>
+      annoDi(c) === anno &&
+      !isBaseLavoro(c) &&
+      c.normalizzata === normalizzata &&
+      c.priorita === priorita,
+  );
+  const presente = (await db.campateLavoro.get(id)) ?? sullaLinea[0];
+  if (presente) {
+    throw new Error(
+      `La campata ${normalizzata} è già in elenco su ${linea.codice} (${CAMPATA_PRIORITA_LABEL[priorita]}).`,
+    );
+  }
+  const now = new Date().toISOString();
+  const nuova: CampataLavoro = {
+    id,
+    lineaId: linea.id,
+    codiceLinea: linea.codice,
+    nomeLinea: linea.nome,
+    tensioneKv: linea.tensioneKv ?? tensioneDaCodice(linea.codice),
+    originale,
+    normalizzata,
+    tipo: "campata",
+    priorita,
+    stato: "da_tagliare",
+    origine: "aggiuntiva",
+    anno,
+    operatore: session?.nome,
+    syncStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.campateLavoro.put(nuova);
+  await db.campateStorico.put({
+    id: uid("sto"),
+    campataId: nuova.id,
+    evento: "aggiuntiva_manuale",
+    stato: "da_tagliare",
+    priorita,
+    operatore: session?.nome,
+    createdAt: now,
+  });
+  await enqueueSync(nuova.id, "campate");
+  return nuova;
 }
