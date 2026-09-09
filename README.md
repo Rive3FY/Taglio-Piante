@@ -60,6 +60,8 @@ In elenco, **Lavoro in corso** è sulle differibili (default): i contatori di ur
 
 Operatore e tecnico possono aggiungere una campata a mano (**Nuova campata**): resta aggiuntiva, sul piano dell’anno in elenco, e da lì si parte col rapportino. Se c’è già la stessa linea + campata + priorità non si duplica.
 
+In elenco e sul foglio la campata è il **numero** del LIDAR (22 resta 22, non 21-22). Forme speciali come `78\2 80` restano com’è. Se il numero è una pulizia base e non un taglio, sul rapportino si spunta **BASE**: i sostegni non chiudono le campate.
+
 ## Da riprendere e attenzionare
 
 Elenco parallelo al piano: ci finiscono le campate con un mese di ripresa («da riprendere», col popup del mese) e quelle segnate «da attenzionare» (una spunta, senza popup). Non è uno stato di taglio: le torte restano legate a stato e «da non tagliare». Le due segnalazioni valgono sullo span (urgente e differibile insieme), compaiono una volta sola anche se il piano cambia anno, sopravvivono al reimport dello stesso anno e si tolgono da questo elenco. Il tecnico le chiude con «Tagliata»: la riga resta, barrata. Chi aggiorna un progetto già in cloud deve eseguire `supabase/patch_attenzione_parallelo.sql`.

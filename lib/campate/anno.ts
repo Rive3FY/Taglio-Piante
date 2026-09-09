@@ -1,4 +1,5 @@
 import { campataETagliata, type CampataLavoro } from "@/lib/types";
+import { normalizzaCampata, stessaNormalizzata } from "./normalize";
 
 /** Piano già in produzione prima della colonna anno. */
 export const ANNO_PIANO_INIZIALE = 2026;
@@ -35,7 +36,7 @@ export function campateDellAnno(campate: CampataLavoro[], anno: number) {
 }
 
 export function chiaveFisica(codiceLinea: string, normalizzata: string) {
-  return `${codiceLinea.trim().toUpperCase()}|${normalizzata}`;
+  return `${codiceLinea.trim().toUpperCase()}|${normalizzaCampata(normalizzata)}`;
 }
 
 /** Anni precedenti in cui la stessa linea+campata risulta già tagliata. */
@@ -50,7 +51,7 @@ export function anniTaglioPrecedenti(
   for (const c of tutte) {
     if (c.tipo === "base") continue;
     if (c.codiceLinea.trim().toUpperCase() !== linea) continue;
-    if (c.normalizzata !== normalizzata) continue;
+    if (!stessaNormalizzata(c.normalizzata, normalizzata)) continue;
     const a = annoDi(c);
     if (a >= annoCorrente) continue;
     if (campataETagliata(c)) anni.add(a);

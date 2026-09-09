@@ -1,27 +1,34 @@
 /**
- * Il file tecnico indica spesso solo la seconda estremità della campata.
- * 22 → 21-22, 055 → 54-55. Se il valore è già un intervallo, si lascia così.
+ * Numero di campata come lo scrive l’operatore e il LIDAR.
+ * 22 resta 22 (non diventa 21-22). Un intervallo già espanso 21-22 si riduce
+ * a 22, così i dati vecchi restano allineati. Forme speciali (78\2 80) restano
+ * com’è, spazi compresi.
  */
 export function normalizzaCampata(valore: string) {
-  const pulito = valore.trim().replace(/–/g, "-").replace(/\s+/g, "");
+  const pulito = valore.trim().replace(/–/g, "-").replace(/\s+/g, " ");
   if (!pulito) return "";
 
   const intervallo = pulito.match(/^(\d+)\s*-\s*(\d+)$/);
-  if (intervallo) return `${Number(intervallo[1])}-${Number(intervallo[2])}`;
+  if (intervallo) return String(Number(intervallo[2]));
 
-  const pezzi = pulito.replace(/-+$/g, "").split("-").filter(Boolean);
-  const primoNumero = pezzi.find((p) => /^\d+$/.test(p));
-  if (!primoNumero) return pulito.replace(/-+$/g, "");
+  const soloCifre = pulito.replace(/\s/g, "");
+  if (/^\d+$/.test(soloCifre)) return String(Number(soloCifre));
 
-  const n = Number(primoNumero);
-  const base = n > 0 ? `${n - 1}-${n}` : String(n);
-  const extra = pezzi.filter((p) => p !== primoNumero);
-  return extra.length > 0 ? `${base}/${extra.join("-")}` : base;
+  return pulito;
+}
+
+export function stessaNormalizzata(a: string, b: string) {
+  return normalizzaCampata(a) === normalizzaCampata(b);
+}
+
+/** Testo da mostrare in elenco e sul foglio: sempre il numero canonico. */
+export function mostraCampata(valore: string) {
+  return normalizzaCampata(valore) || valore.trim();
 }
 
 export function chiaveCampata(codiceLinea: string, normalizzata: string, priorita?: string | null) {
   const prio = priorita?.trim() || "_";
-  return `${codiceLinea.trim().toUpperCase()}|${normalizzata}|${prio}`;
+  return `${codiceLinea.trim().toUpperCase()}|${normalizzaCampata(normalizzata)}|${prio}`;
 }
 
 export function idCampataLavoro(
@@ -31,7 +38,7 @@ export function idCampataLavoro(
   tipo?: string | null,
   anno?: number | null,
 ) {
-  const slug = `${codiceLinea}_${normalizzata}_${priorita || "x"}`
+  const slug = `${codiceLinea}_${normalizzaCampata(normalizzata)}_${priorita || "x"}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
@@ -41,7 +48,7 @@ export function idCampataLavoro(
   return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
-/** Spezza il campo libero del rapportino in bianco: 21-22, 22-23 / 54-55. */
+/** Spezza il campo libero del rapportino: 22, 23 / 54 oppure 78\2 80. */
 export function spezzaCampateTesto(testo: string) {
   return testo
     .split(/[,;/|\n]+/)

@@ -18,7 +18,8 @@ import { SignaturePad } from "./SignaturePad";
 import { CampateEsitiEditor, testoCampateDaEsiti } from "./CampateEsitiEditor";
 import { DeleteRapportinoButton } from "./DeleteRapportinoButton";
 import { applicaEsitiDaRapportino } from "@/lib/campate/apply";
-import { eLavoroBasi, esitiClassificati, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
+import { esitiClassificati, haVociBase, messaggioIncoerenzaBasi } from "@/lib/campate/basi";
+import { mostraCampata, normalizzaCampata } from "@/lib/campate/normalize";
 import {
   esitiCheToccanoDaNonTagliare,
   messaggioCampateDaNonTagliare,
@@ -88,6 +89,11 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     [precompilatoCampataId],
   );
   const [campata, setCampata] = useState(existing?.campata ?? "");
+  const [lavoroBasi, setLavoroBasi] = useState(
+    () =>
+      Boolean(existing?.esitiCampate?.length) &&
+      (existing?.esitiCampate?.every((e) => e.tipo === "base") ?? false),
+  );
   const [esiti, setEsiti] = useState<RapportinoCampata[]>(existing?.esitiCampate ?? []);
   const [dataLavoro, setDataLavoro] = useState(existing?.dataLavoro ?? todayIso());
   const campateLinea = useMemo(
@@ -175,7 +181,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         })
         .sort(
           (a, b) =>
-            a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+            mostraCampata(a.normalizzata).localeCompare(mostraCampata(b.normalizzata), "it", { numeric: true }) ||
             (a.priorita ?? "").localeCompare(b.priorita ?? ""),
         ),
     [campateLinea, piano],
@@ -207,13 +213,14 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         .map((p) => ({ id: p.id, prestazioneId: p.id, quantita: qty[p.id] })),
     [prestazioni, qty],
   );
-  const qtyHaBase = useMemo(
-    () => eLavoroBasi(testoBox, { righe: righeQty }, prestazioni),
-    [prestazioni, righeQty, testoBox],
+  const qtyHaBase = lavoroBasi;
+  const vociBasePresenti = useMemo(
+    () => haVociBase({ righe: righeQty }, prestazioni),
+    [prestazioni, righeQty],
   );
   const erroreBasi = useMemo(
-    () => messaggioIncoerenzaBasi(testoBox, { righe: righeQty }, prestazioni),
-    [prestazioni, righeQty, testoBox],
+    () => (lavoroBasi ? messaggioIncoerenzaBasi(testoBox, { righe: righeQty }, prestazioni) : null),
+    [lavoroBasi, prestazioni, righeQty, testoBox],
   );
 
   const campateBloccate = useMemo(() => {
@@ -224,8 +231,9 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       { righe: righeQty },
       prestazioni,
       esiti.length > 0 ? esiti : undefined,
+      lavoroBasi,
     );
-  }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi]);
+  }, [campateLinea, testoBox, prestazioni, righeQty, esiti, qtyHaBase, erroreBasi, lavoroBasi]);
   const erroreDaNonTagliare = messaggioCampateDaNonTagliare(campateBloccate);
 
   const modoPrecompilato = Boolean(
@@ -247,7 +255,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           id: uid("es"),
           campataId: scelta.id,
           originale: scelta.originale,
-          normalizzata: scelta.normalizzata,
+          normalizzata: normalizzaCampata(scelta.normalizzata) || scelta.normalizzata,
           priorita: scelta.priorita,
           esito: "tagliata",
         },
@@ -262,7 +270,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         id: uid("es"),
         campataId: c.id,
         originale: c.originale,
-        normalizzata: c.normalizzata,
+        normalizzata: normalizzaCampata(c.normalizzata) || c.normalizzata,
         priorita: c.priorita,
         esito: "tagliata" as const,
       })),
@@ -313,6 +321,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         { righe },
         prestazioni,
         esitiOverride ?? (esiti.length > 0 ? esiti : undefined),
+        lavoroBasi,
       );
       const campateSulDb = (await db.campateLavoro.where("lineaId").equals(effectiveLineaId).toArray()).filter(
         (c) => annoDi(c) === annoDaDataLavoro(dataLavoro),
@@ -435,6 +444,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       { righe: righeQty.map((r) => ({ id: r.id, prestazioneId: r.prestazioneId, quantita: r.quantita })) },
       prestazioni,
       esiti.length > 0 ? esiti : undefined,
+      lavoroBasi,
     );
     const daChiedere = qtyHaBase ? [] : campatePerDomandaTerminata(esitiPrevisti);
     if (daChiedere.length > 0) {
@@ -461,6 +471,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         { righe: righeQty.map((r) => ({ id: r.id, prestazioneId: r.prestazioneId, quantita: r.quantita })) },
         prestazioni,
         esiti.length > 0 ? esiti : undefined,
+        lavoroBasi,
       ),
       scelte,
     );
@@ -495,7 +506,13 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       .filter((p) => (qty[p.id] ?? 0) > 0)
       .map((p) => ({ id: uid("riga"), prestazioneId: p.id, quantita: qty[p.id] }));
     const testoSorgente = esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata.trim();
-    const esitiSalvati = esitiClassificati(testoSorgente, { righe: righePreview }, prestazioni, esiti);
+    const esitiSalvati = esitiClassificati(
+      testoSorgente,
+      { righe: righePreview },
+      prestazioni,
+      esiti.length > 0 ? esiti : undefined,
+      lavoroBasi,
+    );
     const draft: Rapportino = {
       id: existing?.id ?? "preview",
       numero: existing?.numero ?? "ANTEPRIMA",
@@ -538,28 +555,53 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
             Descrizione linea
             <LineaPicker linee={linee} value={effectiveLineaId} onChange={setLineaId} campo="nome" />
           </label>
-          <label>
-            {qtyHaBase ? "Basi" : "Campata"}
-            {modoPrecompilato ? (
+          <div className="campo-campata">
+            <div className="campata-label-row">
+              <span>{lavoroBasi ? "Basi" : "Campata"}</span>
+              <label className={`spunta-base ${lavoroBasi ? "on" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={lavoroBasi}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setLavoroBasi(on);
+                    if (esiti.length > 0) {
+                      setEsiti(esiti.map((x) => ({ ...x, tipo: on ? "base" : "campata" })));
+                    }
+                  }}
+                />
+                BASE
+              </label>
+            </div>
+            {modoPrecompilato && !lavoroBasi ? (
               <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
             ) : (
               <input
-                value={campata}
-                onChange={(e) => setCampata(e.target.value)}
-                placeholder="Es. 22-23 oppure 22"
+                value={modoPrecompilato && esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata}
+                onChange={(e) => {
+                  setCampata(e.target.value);
+                  if (esiti.length > 0) setEsiti([]);
+                }}
+                placeholder="Es. 22"
               />
             )}
             {erroreBasi ? (
               <span className="form-error">{erroreBasi}</span>
-            ) : qtyHaBase ? (
+            ) : lavoroBasi ? (
               <span className="muted">
-                I numeri coincidono con 5.1–5.4: sono basi. Puoi aggiungere altre chiamate, restano
-                in contabilità sulle basi e non toccano le torte.
+                Spunta BASE: i numeri sono sostegni, non chiudono le campate. Se compili 5.1–5.4, la
+                quantità deve coincidere.
+              </span>
+            ) : vociBasePresenti ? (
+              <span className="muted">
+                Hai voci 5.1–5.4. Se è pulizia base e non taglio, spunta BASE.
               </span>
             ) : erroreDaNonTagliare ? (
               <span className="form-error">{erroreDaNonTagliare}</span>
+            ) : !modoPrecompilato ? (
+              <span className="muted">Inserisci solo il numero della campata (es. 22).</span>
             ) : null}
-          </label>
+          </div>
         </div>
 
         <div className="consegna-kicker">Consegna</div>
@@ -618,7 +660,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         </p>
       </section>
 
-      {modoPrecompilato ? (
+      {modoPrecompilato && !lavoroBasi ? (
         <CampateEsitiEditor
           pianificate={pianificate}
           esiti={esiti}

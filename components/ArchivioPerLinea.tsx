@@ -6,7 +6,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
 import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
-import { eLavoroBasi, etichettaOggettoFoglio, numeriDaTestoCampata } from "@/lib/campate/basi";
+import { etichettaOggettoFoglio, foglioEBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
+import { mostraCampata } from "@/lib/campate/normalize";
 import { useDialogBack } from "@/lib/useDialogBack";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { LineaPicker } from "./LineaPicker";
@@ -34,12 +35,12 @@ function etichetteDaFogli(items: Rapportino[], prestazioni: Prestazione[]) {
     lista.push(nome);
   };
   for (const r of items) {
-    const comeBasi = eLavoroBasi(r.campata ?? "", r, prestazioni);
+    const comeBasi = foglioEBasi(r, prestazioni);
     const esiti = r.esitiCampate ?? [];
     if (esiti.length > 0) {
       for (const e of esiti) {
-        const nome = (e.normalizzata || e.originale || "").trim();
-        if (e.tipo === "base" || comeBasi) metti(basi, vistiB, nome);
+        const nome = mostraCampata(e.normalizzata || e.originale || "");
+        if (e.tipo === "base") metti(basi, vistiB, nome);
         else metti(campate, vistiC, nome);
       }
       continue;

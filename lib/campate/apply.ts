@@ -27,8 +27,8 @@ import {
   puoModificareSceltaCampata,
   rapportinoEChiuso,
 } from "@/lib/types";
-import { idCampataLavoro, chiaveCampata, normalizzaCampata } from "./normalize";
-import { eLavoroBasi, esitiClassificati, haVociBase, isBaseLavoro } from "./basi";
+import { idCampataLavoro, chiaveCampata, normalizzaCampata, stessaNormalizzata } from "./normalize";
+import { esitiClassificati, isBaseLavoro } from "./basi";
 import { campataGiaChiusaDaFoglio } from "./guard";
 import { esitoETerminato } from "./terminata";
 import { pianoAccoppiaFratelli, readPianoLavoro } from "./pianoLavoro";
@@ -361,7 +361,7 @@ function bersagliPerEsito(
   const byDet = nelTipo.filter((c) => c.id === idDeterministico);
   if (byDet.length > 0) return byDet;
   const candidati = nelTipo.filter((c) => {
-    if (c.normalizzata !== esito.normalizzata) return false;
+    if (!stessaNormalizzata(c.normalizzata, esito.normalizzata)) return false;
     if (esito.priorita) return c.priorita === esito.priorita;
     return true;
   });
@@ -386,7 +386,7 @@ function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro
     if (isBaseLavoro(b)) continue;
     for (const c of tutte) {
       if (c.lineaId !== b.lineaId) continue;
-      if (c.normalizzata !== b.normalizzata) continue;
+      if (!stessaNormalizzata(c.normalizzata, b.normalizzata)) continue;
       if (annoDi(c) !== annoDi(b)) continue;
       if (isBaseLavoro(c)) continue;
       out.set(c.id, c);
@@ -402,8 +402,6 @@ function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro
 export async function applicaEsitiDaRapportino(item: Rapportino, session: Session | null) {
   if (!rapportinoEChiuso(item.stato)) return;
   const prestazioni = await db.prestazioni.toArray();
-  const testo = testoEsiti(item);
-  if (haVociBase(item, prestazioni) && !eLavoroBasi(testo, item, prestazioni)) return;
   const classificati = esitiDaRapportino(item, prestazioni).filter((e) => e.normalizzata);
   const soloBasi = classificati.some((e) => e.tipo === "base");
   const esiti = soloBasi
@@ -604,7 +602,7 @@ function foglioSegnaCampataTerminata(foglio: Rapportino, campata: CampataLavoro)
     (e) =>
       e.tipo !== "base" &&
       (e.campataId === campata.id ||
-        (e.normalizzata === campata.normalizzata &&
+        (stessaNormalizzata(e.normalizzata, campata.normalizzata) &&
           (!e.priorita || e.priorita === campata.priorita))),
   );
   if (!hit) return true;
@@ -775,7 +773,7 @@ export async function unisciCampateDoppie() {
   const gruppi = new Map<string, CampataLavoro[]>();
   for (const c of campate) {
     if (isBaseLavoro(c) || !c.normalizzata) continue;
-    const chiave = `${annoDi(c)}|${c.lineaId}|${c.normalizzata}`;
+    const chiave = `${annoDi(c)}|${c.lineaId}|${normalizzaCampata(c.normalizzata)}|${c.priorita ?? ""}`;
     const list = gruppi.get(chiave) ?? [];
     list.push(c);
     gruppi.set(chiave, list);
@@ -995,7 +993,7 @@ export async function aggiornaDettagliCampata(
     for (const gemella of sullaLinea) {
       if (gemella.id === presente.id) continue;
       if (annoDi(gemella) !== annoDi(presente)) continue;
-      if (isBaseLavoro(gemella) || gemella.normalizzata !== presente.normalizzata) continue;
+      if (isBaseLavoro(gemella) || !stessaNormalizzata(gemella.normalizzata, presente.normalizzata)) continue;
       gemelle.push(gemella);
     }
   }
@@ -1206,7 +1204,7 @@ export async function aggiornaDettagliCampata(
     const nota = "Un solo promemoria: aggiornato su quest’anno";
     for (const altra of sullaLinea) {
       if (gia.has(altra.id)) continue;
-      if (isBaseLavoro(altra) || altra.normalizzata !== presente.normalizzata) continue;
+      if (isBaseLavoro(altra) || !stessaNormalizzata(altra.normalizzata, presente.normalizzata)) continue;
       let ripulita = altra;
       if (
         patch.rinvio &&
@@ -1274,7 +1272,7 @@ export async function inserisciCampataManuale(
     (c) =>
       annoDi(c) === anno &&
       !isBaseLavoro(c) &&
-      c.normalizzata === normalizzata &&
+      stessaNormalizzata(c.normalizzata, normalizzata) &&
       c.priorita === priorita,
   );
   const presente = (await db.campateLavoro.get(id)) ?? sullaLinea[0];

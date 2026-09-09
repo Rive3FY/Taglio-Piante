@@ -1,4 +1,5 @@
 import { CAMPATA_PRIORITA_LABEL, type RapportinoCampata } from "@/lib/types";
+import { mostraCampata } from "./normalize";
 import { pianoAccoppiaFratelli, readPianoLavoro } from "./pianoLavoro";
 
 export type CampataDaChiudere = {
@@ -12,12 +13,13 @@ export function esitoETerminato(esito: Pick<RapportinoCampata, "terminata">) {
 }
 
 function chiaveEsito(e: Pick<RapportinoCampata, "normalizzata" | "priorita">) {
-  if (pianoAccoppiaFratelli(readPianoLavoro())) return e.normalizzata;
-  return `${e.normalizzata}|${e.priorita ?? ""}`;
+  const n = mostraCampata(e.normalizzata);
+  if (pianoAccoppiaFratelli(readPianoLavoro())) return n;
+  return `${n}|${e.priorita ?? ""}`;
 }
 
 function etichettaEsito(e: Pick<RapportinoCampata, "normalizzata" | "originale" | "priorita">) {
-  const base = (e.normalizzata || e.originale).trim();
+  const base = mostraCampata(e.normalizzata || e.originale);
   if (!e.priorita || pianoAccoppiaFratelli(readPianoLavoro())) return base;
   return `${base} · ${CAMPATA_PRIORITA_LABEL[e.priorita]}`;
 }

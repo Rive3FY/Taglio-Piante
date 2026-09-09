@@ -9,7 +9,7 @@ import { aggiornaDettagliCampata, type PatchRinvio } from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
-import { chiaveCampata } from "@/lib/campate/normalize";
+import { chiaveCampata, mostraCampata } from "@/lib/campate/normalize";
 import {
   readElencoVista,
   writeElencoVista,
@@ -104,7 +104,7 @@ const ORDINE_LABEL: Record<OrdineElenco, string> = {
 function confrontaLinea(a: CampataLavoro, b: CampataLavoro) {
   return (
     a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
-    a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+    mostraCampata(a.normalizzata).localeCompare(mostraCampata(b.normalizzata), "it", { numeric: true }) ||
     (a.priorita ?? "").localeCompare(b.priorita ?? "")
   );
 }
@@ -130,12 +130,21 @@ export type PatchCampata = {
 };
 
 function campiRicerca(c: CampataLavoro) {
-  return [c.codiceLinea, c.nomeLinea, c.normalizzata, c.originale, c.operatore, c.note, c.distInt]
+  return [
+    c.codiceLinea,
+    c.nomeLinea,
+    c.normalizzata,
+    mostraCampata(c.normalizzata),
+    c.originale,
+    c.operatore,
+    c.note,
+    c.distInt,
+  ]
     .filter((v) => v != null && v !== "")
     .map((v) => String(v).toLowerCase());
 }
 
-/** «patria 58» deve trovare la campata 57-58 di quella linea: ogni parola in un campo qualsiasi. */
+/** «patria 58» trova la campata 58 di quella linea: ogni parola in un campo qualsiasi. */
 function passaTermini(c: CampataLavoro, termini: string[]) {
   if (termini.length === 0) return true;
   const campi = campiRicerca(c);
@@ -524,14 +533,14 @@ export function CampateElenco({
                   type="button"
                   className="suggerimento"
                   onClick={() => {
-                    setQ(`${c.codiceLinea} ${c.normalizzata}`);
+                    setQ(`${c.codiceLinea} ${mostraCampata(c.normalizzata)}`);
                     setAperta(c.id);
                     setVisibili(40);
                     setSuggAperti(false);
                   }}
                 >
                   <span className="sugg-titolo">
-                    Campata {c.normalizzata} · {c.nomeLinea}
+                    Campata {mostraCampata(c.normalizzata)} · {c.nomeLinea}
                   </span>
                   <span className="sugg-nota">
                     {c.codiceLinea}
@@ -1109,7 +1118,7 @@ function CampataRiga({
         <td>{c.nomeLinea}</td>
         <td>{c.tensioneKv ?? "—"}</td>
         <td>
-          <strong>{c.normalizzata}</strong>
+          <strong>{mostraCampata(c.normalizzata)}</strong>
           {c.origine === "aggiuntiva" ? <span className="badge badge-aggiuntiva">Aggiuntiva</span> : null}
           {anniPrecedenti.length > 0 ? (
             <span className="badge badge-anni-scorsi" title={etichettaAnniTaglio(anniPrecedenti)}>

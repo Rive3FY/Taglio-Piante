@@ -218,7 +218,7 @@ export default function ImportaCampatePage() {
                   <th>Linea</th>
                   <th>Nome</th>
                   <th>Originale</th>
-                  <th>Normalizzata</th>
+                  <th>Campata</th>
                   <th>Dist int</th>
                   <th>Priorità</th>
                   <th>Anni scorsi</th>

@@ -1,5 +1,5 @@
 import { chiaveCampata } from "./normalize";
-import { annoDi, anniTaglioPrecedenti, etichettaAnniTaglio } from "./anno";
+import { annoDi, anniTaglioPrecedenti, chiaveFisica, etichettaAnniTaglio } from "./anno";
 import type { CampataLavoro, CampataPriorita } from "@/lib/types";
 import type { RigaImportBruta, RigaImportScartata } from "./parse";
 
@@ -76,7 +76,7 @@ export function costruisciAnteprima(
   const coppie = new Set<string>();
   const viste = new Map<string, CampataPriorita>();
   for (const voce of perChiave.values()) {
-    const fisica = `${voce.codiceLinea}|${voce.normalizzata}`;
+    const fisica = chiaveFisica(voce.codiceLinea, voce.normalizzata);
     const altra = viste.get(fisica);
     if (altra && altra !== voce.priorita) {
       coppie.add(fisica);
@@ -86,7 +86,7 @@ export function costruisciAnteprima(
     }
   }
   for (const voce of perChiave.values()) {
-    const fisica = `${voce.codiceLinea}|${voce.normalizzata}`;
+    const fisica = chiaveFisica(voce.codiceLinea, voce.normalizzata);
     if (!coppie.has(fisica) || voce.nota) continue;
     voce.nota = "Stessa campata con l’altra priorità: restano due interventi distinti.";
   }

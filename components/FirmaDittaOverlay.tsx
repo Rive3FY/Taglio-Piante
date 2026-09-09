@@ -9,7 +9,7 @@ import { useSync } from "@/lib/SyncContext";
 import { applicaFirmaDitta, haFirmaDitta } from "@/lib/rapportinoFirma";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
-import { eLavoroBasi, esitiClassificati } from "@/lib/campate/basi";
+import { esitiClassificati, foglioEBasi } from "@/lib/campate/basi";
 import {
   applicaScelteTerminata,
   campatePerDomandaTerminata,
@@ -43,7 +43,7 @@ export function FirmaDittaOverlay({
     [item, prestazioni],
   );
   const qtyHaBase = useMemo(
-    () => eLavoroBasi(item.campata, item, prestazioni),
+    () => foglioEBasi(item, prestazioni),
     [item, prestazioni],
   );
 

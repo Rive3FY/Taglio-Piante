@@ -7,7 +7,7 @@ import {
   type RapportinoRiga,
 } from "@/lib/types";
 import { esitiClassificati, isBaseLavoro } from "./basi";
-import { normalizzaCampata } from "./normalize";
+import { mostraCampata, normalizzaCampata, stessaNormalizzata } from "./normalize";
 
 /**
  * Righe della tabella che quell'esito andrebbe a chiudere.
@@ -23,7 +23,7 @@ export function bersagliDiEsito(campateLinea: CampataLavoro[], esito: Rapportino
   const norm = esito.normalizzata || normalizzaCampata(esito.originale);
   if (!norm) return [];
   return campate.filter((c) => {
-    if (c.normalizzata !== norm) return false;
+    if (!stessaNormalizzata(c.normalizzata, norm)) return false;
     if (esito.priorita) return c.priorita === esito.priorita;
     return true;
   });
@@ -54,12 +54,14 @@ export function esitiCheToccanoDaNonTagliare(
   item: { righe?: RapportinoRiga[] },
   prestazioni: Prestazione[],
   pianificati?: RapportinoCampata[],
+  comeBasi?: boolean,
 ) {
   const classificati = esitiClassificati(
     testo,
     { righe: item.righe ?? [] },
     prestazioni,
     pianificati,
+    comeBasi,
   );
   return campateBloccateDaNonTagliare(campateLinea, classificati);
 }
@@ -91,7 +93,7 @@ export function campateGiaTagliateDaFoglio(
 }
 
 export function messaggioCampateGiaTagliate(giaTagliate: CampataLavoro[]) {
-  const nomi = [...new Set(giaTagliate.map((c) => c.normalizzata))];
+  const nomi = [...new Set(giaTagliate.map((c) => mostraCampata(c.normalizzata)))];
   if (nomi.length === 0) return "";
   const elenco = nomi.join(", ");
   if (nomi.length === 1) {
@@ -101,7 +103,7 @@ export function messaggioCampateGiaTagliate(giaTagliate: CampataLavoro[]) {
 }
 
 export function messaggioCampateDaNonTagliare(bloccate: CampataLavoro[]) {
-  const nomi = [...new Set(bloccate.map((c) => c.normalizzata))];
+  const nomi = [...new Set(bloccate.map((c) => mostraCampata(c.normalizzata)))];
   if (nomi.length === 0) return "";
   if (nomi.length === 1) {
     return `La campata ${nomi[0]} è già «da non tagliare»: non puoi farci un rapportino. Se c’è da tagliare, togli il segno dall’elenco campate.`;

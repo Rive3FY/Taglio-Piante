@@ -37,9 +37,17 @@ const HEADER =
 /**
  * Riga operativa LIDAR. Dopo codice-campata c’è la distanza interna, poi la priorità.
  * I trattini dopo la campata possono essere assenti nel PDF (solo spazi).
+ * Accanto al numero (22) restano forme speciali come 78\2 80.
  */
-const RIGA =
-  /([A-Z0-9]+)-([A-Z0-9]+(?:-[A-Z0-9]+)*)\s*-*\s*([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+([\d.,]+)\s+([\d.,]+)\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-[A-Z0-9]+(?:-[A-Z0-9]+)*\s*-*\s*[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)/gi;
+const PEZZO_CAMPATA = String.raw`(?:[A-Z0-9]+(?:-[A-Z0-9]+)*|[A-Z0-9]+(?:\\[A-Z0-9]+)+(?:\s+[A-Z0-9]+(?![.,]))*)`;
+const RIGA = new RegExp(
+  String.raw`([A-Z0-9]+)-(` +
+    PEZZO_CAMPATA +
+    String.raw`)\s*-*\s*([\d.,]+)\s+(URGENTE|DIFFERIBILE)\s+([\d.,]+)\s+([\d.,]+)\s+\1\s+(.+?)(?=\s+[A-Z0-9]+-` +
+    PEZZO_CAMPATA +
+    String.raw`\s*-*\s*[\d.,]+\s+(?:URGENTE|DIFFERIBILE)|\s*$)`,
+  "gi",
+);
 
 export function parseDistInt(raw: string) {
   let t = raw.trim();

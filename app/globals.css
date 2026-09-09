@@ -202,6 +202,32 @@ textarea { resize: vertical; }
 }
 .filtro-linea-riga select { flex: 1 1 auto; min-width: 0; }
 .filtro-linea-riga .btn { flex: none; }
+.campo-campata { display: grid; gap: 6px; font-weight: 650; font-size: 14px; min-width: 0; }
+.campata-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.spunta-base {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+.spunta-base.on { color: #c2410c; }
+.spunta-base input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  accent-color: #c2410c;
+}
 .scheda-head, .scheda-foot, .scheda-print-head, .scheda-print-foot {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));

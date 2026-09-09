@@ -92,10 +92,10 @@ export function PopupNuovaCampata({
           <input
             value={campata}
             onChange={(e) => setCampata(e.target.value)}
-            placeholder="Es. 22 oppure 22-23"
+            placeholder="Es. 22"
             autoComplete="off"
           />
-          {anteprima && anteprima !== campata.trim().replace(/\s+/g, "") ? (
+          {anteprima && anteprima !== campata.trim() ? (
             <span className="muted">In elenco: {anteprima}</span>
           ) : null}
         </label>

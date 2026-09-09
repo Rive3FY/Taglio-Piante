@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { scaricaBlob } from "@/lib/download";
 import { annoDi } from "./anno";
+import { mostraCampata } from "./normalize";
 
 function xml(valore: unknown) {
   return String(valore ?? "")
@@ -197,7 +198,7 @@ function rigaVista(c: CampataLavoro) {
     c.tipo === "base" ? CAMPATA_TIPO_LABEL.base : CAMPATA_TIPO_LABEL.campata,
     c.codiceLinea,
     c.nomeLinea,
-    c.normalizzata,
+    mostraCampata(c.normalizzata),
     c.distInt != null ? formatDistInt(c.distInt) : "",
     c.estInt != null ? String(c.estInt) : "",
     c.nordInt != null ? String(c.nordInt) : "",
@@ -219,7 +220,7 @@ export function ordinaVistaExport(campate: CampataLavoro[]) {
     (a, b) =>
       a.codiceLinea.localeCompare(b.codiceLinea, "it") ||
       (a.tipo === "base" ? 1 : 0) - (b.tipo === "base" ? 1 : 0) ||
-      a.normalizzata.localeCompare(b.normalizzata, "it", { numeric: true }) ||
+      mostraCampata(a.normalizzata).localeCompare(mostraCampata(b.normalizzata), "it", { numeric: true }) ||
       (a.priorita ?? "").localeCompare(b.priorita ?? ""),
   );
 }

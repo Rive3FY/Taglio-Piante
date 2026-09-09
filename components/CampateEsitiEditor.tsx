@@ -6,6 +6,7 @@ import {
   type CampataLavoro,
   type RapportinoCampata,
 } from "@/lib/types";
+import { mostraCampata, stessaNormalizzata } from "@/lib/campate/normalize";
 
 export function CampateEsitiEditor({
   pianificate,
@@ -31,12 +32,12 @@ export function CampateEsitiEditor({
             : campateLinea.find(
                 (p) =>
                   p.tipo !== "base" &&
-                  p.normalizzata === e.normalizzata &&
+                  stessaNormalizzata(p.normalizzata, e.normalizzata) &&
                   (!e.priorita || p.priorita === e.priorita),
               ) ??
               pianificate.find(
                 (p) =>
-                  p.normalizzata === e.normalizzata &&
+                  stessaNormalizzata(p.normalizzata, e.normalizzata) &&
                   (!e.priorita || p.priorita === e.priorita),
               );
           const priorita = e.priorita ?? piano?.priorita;
@@ -44,7 +45,7 @@ export function CampateEsitiEditor({
           return (
             <li key={e.id} className={`esito-card ${nonTerminata ? "esito-non-terminata" : "esito-tagliata"}`}>
               <div className="esito-head">
-                <strong>{e.normalizzata}</strong>
+                <strong>{mostraCampata(e.normalizzata)}</strong>
                 {priorita ? (
                   <span className={`badge badge-${priorita}`}>{CAMPATA_PRIORITA_LABEL[priorita]}</span>
                 ) : null}
@@ -59,5 +60,5 @@ export function CampateEsitiEditor({
 }
 
 export function testoCampateDaEsiti(esiti: RapportinoCampata[]) {
-  return [...new Set(esiti.map((e) => e.normalizzata))].join(", ");
+  return [...new Set(esiti.map((e) => mostraCampata(e.normalizzata)))].join(", ");
 }

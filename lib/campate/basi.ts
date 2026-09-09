@@ -96,12 +96,12 @@ export function foglioEBasi(
   prestazioni: Prestazione[] = [],
 ) {
   const esiti = item.esitiCampate ?? [];
-  if (esiti.length > 0 && esiti.every((e) => e.tipo === "base")) return true;
+  if (esiti.length > 0) return esiti.every((e) => e.tipo === "base");
   if (prestazioni.length > 0 && eLavoroBasi(item.campata ?? "", item, prestazioni)) return true;
-  return esiti.some((e) => e.tipo === "base");
+  return false;
 }
 
-/** «Base 82» se è un foglio basi, altrimenti «Campata 22-23». */
+/** «Base 82» se è un foglio basi, altrimenti «Campata 22». */
 export function etichettaOggettoFoglio(
   item: Pick<Rapportino, "campata" | "esitiCampate" | "righe">,
   prestazioni: Prestazione[] = [],
@@ -113,28 +113,54 @@ export function etichettaOggettoFoglio(
   return `${n === 1 ? "Base" : "Basi"} ${testo}`;
 }
 
+function decisoComeBasi(
+  testo: string,
+  item: Pick<Rapportino, "righe">,
+  prestazioni: Prestazione[],
+  pianificati?: RapportinoCampata[],
+  comeBasi?: boolean,
+) {
+  if (comeBasi === true) return true;
+  if (comeBasi === false) return false;
+  if (pianificati?.length) {
+    if (pianificati.every((e) => e.tipo === "base")) return true;
+    if (pianificati.some((e) => e.tipo !== "base")) return false;
+  }
+  return eLavoroBasi(testo, item, prestazioni);
+}
+
 export function esitiClassificati(
   testo: string,
   item: Pick<Rapportino, "righe">,
   prestazioni: Prestazione[],
   pianificati?: RapportinoCampata[],
+  comeBasi?: boolean,
 ): RapportinoCampata[] {
-  const comeBasi =
-    eLavoroBasi(testo, item, prestazioni) ||
-    Boolean(pianificati?.length && pianificati.every((e) => e.tipo === "base"));
-  if (comeBasi) {
+  if (decisoComeBasi(testo, item, prestazioni, pianificati, comeBasi)) {
     const numeri = numeriDaTestoCampata(testo);
-    const elenco = numeri.length > 0 ? numeri : (pianificati ?? []).map((e) => e.normalizzata);
+    const pezzi = spezzaCampateTesto(testo).map((p) => normalizzaCampata(p)).filter(Boolean);
+    const elenco =
+      numeri.length > 0
+        ? numeri
+        : pezzi.length > 0
+          ? pezzi
+          : (pianificati ?? []).map((e) => e.normalizzata);
     return elenco.filter(Boolean).map((n) => ({
       id: uid("es"),
       originale: n,
-      normalizzata: n,
+      normalizzata: normalizzaCampata(n) || n,
       esito: "tagliata" as const,
       tipo: "base" as const,
     }));
   }
   const campate = (pianificati ?? []).filter((e) => e.tipo !== "base");
-  if (campate.length > 0) return campate.map((e) => ({ ...e, tipo: "campata" as const }));
+  if (campate.length > 0) {
+    return campate.map((e) => ({
+      ...e,
+      tipo: "campata" as const,
+      normalizzata: normalizzaCampata(e.normalizzata) || e.normalizzata,
+    }));
+  }
   return spezzaCampateTesto(testo)
     .map((pezzo) => ({
       id: uid("es"),
