@@ -1058,6 +1058,7 @@ function CampataRiga({
   const [nota, setNota] = useState("");
   const [attenzione, setAttenzione] = useState(Boolean(c.attenzionare));
   const [eliminaBusy, setEliminaBusy] = useState(false);
+  const [mostraLog, setMostraLog] = useState(false);
   const attenzioneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Conta l'area, non il ruolo: il tecnico passato sul campo lavora con i tasti dell'operatore.
   const session = sessionUserId ? { userId: sessionUserId, ruolo, nome: "", email: "" } : null;
@@ -1077,7 +1078,8 @@ function CampataRiga({
 
   useEffect(() => {
     setNota("");
-  }, [c.id]);
+    setMostraLog(false);
+  }, [c.id, aperta]);
 
   useEffect(() => {
     setAttenzione(Boolean(c.attenzionare));
@@ -1338,20 +1340,33 @@ function CampataRiga({
                   placeholder="La nota si aggiunge a quelle già presenti"
                 />
               </label>
-              {logUtile.length > 0 ? (
-                <ul className="storico-list">
-                  {logUtile.map((s) => (
-                    <li key={s.id}>
-                      <strong>{etichettaEvento(s.evento)}</strong>
-                      {s.operatore ? ` · ${s.operatore}` : ""}
-                      {s.note ? ` · ${s.note}` : ""}
-                      <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">Nessun log su questa campata.</p>
-              )}
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost storico-toggle"
+                onClick={() => setMostraLog((v) => !v)}
+              >
+                {mostraLog
+                  ? "Nascondi log"
+                  : logUtile.length > 0
+                    ? `Log modifiche (${logUtile.length})`
+                    : "Log modifiche"}
+              </button>
+              {mostraLog ? (
+                logUtile.length > 0 ? (
+                  <ul className="storico-list">
+                    {logUtile.map((s) => (
+                      <li key={s.id}>
+                        <strong>{etichettaEvento(s.evento)}</strong>
+                        {s.operatore ? ` · ${s.operatore}` : ""}
+                        {s.note ? ` · ${s.note}` : ""}
+                        <span className="muted"> · {new Date(s.createdAt).toLocaleString("it-IT")}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">Nessun log su questa campata.</p>
+                )
+              ) : null}
               {onElimina ? (
                 <div className="danger-actions campata-elimina">
                   <button
