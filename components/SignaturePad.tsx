@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import SignaturePadLib from "signature_pad";
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
 export function SignaturePad({ value, onChange, label, hint }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePadLib | null>(null);
+  const [aperto, setAperto] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,6 +27,7 @@ export function SignaturePad({ value, onChange, label, hint }: Props) {
       penColor: "#12221c",
       backgroundColor: "rgb(255,255,255)",
     });
+    pad.off();
     padRef.current = pad;
 
     const resize = () => {
@@ -57,12 +59,23 @@ export function SignaturePad({ value, onChange, label, hint }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const pad = padRef.current;
+    if (!pad) return;
+    if (aperto) pad.on();
+    else pad.off();
+  }, [aperto]);
+
   return (
     <div className="sign-block">
       <div className="sign-head">
         <div>
           <div className="sign-label">{label}</div>
-          <div className="muted">{hint ?? "Firma con S Pen, dito o mouse. Il tratto resta sul dispositivo."}</div>
+          <div className="muted">
+            {aperto
+              ? (hint ?? "Firma con S Pen, dito o mouse. Il tratto resta sul dispositivo.")
+              : "Tocca Firma per abilitare il riquadro: così scorrendo la pagina non si sporca."}
+          </div>
         </div>
         <button
           type="button"
@@ -75,8 +88,15 @@ export function SignaturePad({ value, onChange, label, hint }: Props) {
           Cancella
         </button>
       </div>
-      <div className="sign-frame">
+      <div className={`sign-frame ${aperto ? "is-aperto" : "is-chiuso"}`}>
         <canvas ref={canvasRef} className="sign-canvas" />
+        {aperto ? null : (
+          <div className="sign-gate">
+            <button type="button" className="btn btn-primary sign-abilita" onClick={() => setAperto(true)}>
+              Firma
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
