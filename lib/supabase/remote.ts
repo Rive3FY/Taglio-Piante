@@ -1,7 +1,8 @@
 import { unisciCampataLocaleRemoto } from "@/lib/campate/merge";
 import { db } from "@/lib/db";
+import { SCADENZA_AUTH, conScadenza, eDiRete, messaggioErrore } from "@/lib/net";
 import type { CampataLavoro, Rapportino } from "@/lib/types";
-import { getSupabase, isSupabaseConfigured } from "./client";
+import { accessoRifiutato, getSupabase, isSupabaseConfigured } from "./client";
 import {
   campataLavoroToRow,
   campataStoricoToRow,
@@ -22,13 +23,17 @@ import {
 import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
 
 const LAST_PULL_KEY = "rt.lastPullAt";
+const FIRME_CARICATE_KEY = "rt.firmeCaricate";
 const SIGNATURE_BUCKET = "firme";
 const PULL_OVERLAP_MS = 5 * 60 * 1000;
 const PULL_PAGE = 1000;
+const DELETE_SCAN_MS = 10 * 60 * 1000;
 let lastReferencePullAt = 0;
+let lastDeletePullAt = 0;
 
 export function clearPullCursor() {
   lastReferencePullAt = 0;
+  lastDeletePullAt = 0;
   if (typeof window !== "undefined") localStorage.removeItem(LAST_PULL_KEY);
 }
 
@@ -127,16 +132,55 @@ function dataUrlToBlob(dataUrl: string) {
   return new Blob([bytes], { type: mime });
 }
 
+/** Impronta a buon mercato: basta a capire se la firma è cambiata da quella già caricata. */
+function improntaFirma(dataUrl: string) {
+  return `${dataUrl.length}:${dataUrl.slice(-32)}`;
+}
+
+function firmeGiaCaricate(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(FIRME_CARICATE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function segnaFirmaCaricata(chiave: string, impronta: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const mappa = firmeGiaCaricate();
+    mappa[chiave] = impronta;
+    const chiavi = Object.keys(mappa);
+    if (chiavi.length > 500) {
+      for (const vecchia of chiavi.slice(0, chiavi.length - 500)) delete mappa[vecchia];
+    }
+    localStorage.setItem(FIRME_CARICATE_KEY, JSON.stringify(mappa));
+  } catch {
+    // spazio esaurito: si ricaricherà la firma, è solo traffico in più
+  }
+}
+
+/**
+ * Le firme sono la cosa più pesante che l'app manda. Prima ripartivano da zero a
+ * ogni tentativo fallito, cioè proprio sulla connessione peggiore: se sul server
+ * c'è già questa identica immagine si salta il caricamento.
+ */
 async function uploadSignature(rapportinoId: string, kind: "operatore" | "terna", dataUrl?: string) {
   const supabase = getSupabase();
   if (!supabase || !dataUrl?.startsWith("data:image")) return undefined;
   const path = `${rapportinoId}/${kind}.png`;
+  const impronta = improntaFirma(dataUrl);
+  if (firmeGiaCaricate()[path] === impronta) return path;
+
   const blob = dataUrlToBlob(dataUrl);
   const { error } = await supabase.storage.from(SIGNATURE_BUCKET).upload(path, blob, {
     upsert: true,
     contentType: "image/png",
   });
   if (error) throw new Error(error.message);
+  segnaFirmaCaricata(path, impronta);
   return path;
 }
 
@@ -361,9 +405,17 @@ export async function pullRapportini() {
   return merged;
 }
 
-export async function pullDeletedRapportini() {
+/**
+ * Questa scansione legge gli id di tutti i rapportini vivi: è la chiamata più
+ * pesante della sincronizzazione e non ha senso rifarla a ogni giro. Su rete
+ * scarsa era lei a monopolizzare la linea.
+ */
+export async function pullDeletedRapportini(opts?: { forza?: boolean }) {
   const supabase = getSupabase();
   if (!supabase) return 0;
+
+  const now = Date.now();
+  if (!opts?.forza && now - lastDeletePullAt < DELETE_SCAN_MS) return 0;
 
   // Il login azzera rt.lastPullAt: se qui si usciva senza cursore, i fogli già
   // cancellati sul server restavano per sempre nella copia Dexie del tablet.
@@ -382,11 +434,22 @@ export async function pullDeletedRapportini() {
     if (rows.length < PULL_PAGE) break;
   }
 
+  lastDeletePullAt = now;
+
   const locali = await db.rapportini.toArray();
   const daTogliere = locali
     .filter((r) => r.syncStatus !== "pending" && r.syncStatus !== "error" && !vivi.has(r.id))
     .map((r) => r.id);
   if (daTogliere.length === 0) return 0;
+
+  // Rete che va e viene: una risposta arrivata a metà sembra un archivio svuotato.
+  // Piuttosto che cancellare il lavoro dal telefono si rimanda al giro dopo.
+  if (vivi.size === 0 && locali.some((r) => r.syncStatus === "synced")) {
+    lastDeletePullAt = 0;
+    console.warn("Elenco rapportini vuoto dal server: nessuna cancellazione locale.");
+    return 0;
+  }
+
   await db.rapportini.bulkDelete(daTogliere);
   return daTogliere.length;
 }
@@ -579,24 +642,57 @@ export function supabaseReady() {
   return isSupabaseConfigured() && typeof navigator !== "undefined" && navigator.onLine;
 }
 
+/**
+ * `scaduta` e `irraggiungibile` vanno tenute separate: la prima chiede all'utente
+ * di riaccedere, la seconda no. Confonderle significa suggerire di uscire
+ * dall'account mentre sul telefono c'è lavoro non ancora inviato.
+ */
+export type StatoAuth = "ok" | "scaduta" | "irraggiungibile" | "non-configurato";
+
 /** Senza account autenticato le policy RLS bloccano tutto: meglio non tentare nemmeno. */
-export async function supabaseAutenticato() {
-  if (!supabaseReady()) return false;
+export async function statoAutenticazione(): Promise<StatoAuth> {
+  if (!isSupabaseConfigured()) return "non-configurato";
+  if (typeof navigator !== "undefined" && !navigator.onLine) return "irraggiungibile";
   const supabase = getSupabase();
-  if (!supabase) return false;
-  const { data } = await supabase.auth.getSession();
-  let session = data.session;
+  if (!supabase) return "non-configurato";
+
+  let session;
+  try {
+    const { data } = await conScadenza(supabase.auth.getSession(), SCADENZA_AUTH, "Il login");
+    session = data.session;
+  } catch {
+    return "irraggiungibile";
+  }
+
   const inScadenza =
     !session || (session.expires_at != null && session.expires_at * 1000 < Date.now() + 60_000);
+
   if (inScadenza) {
     try {
-      const { data: refreshed } = await supabase.auth.refreshSession();
+      const { data: refreshed, error } = await conScadenza(
+        supabase.auth.refreshSession(),
+        SCADENZA_AUTH,
+        "Il rinnovo dell’accesso",
+      );
+      if (error) return accessoRifiutato(error.message) ? "scaduta" : "irraggiungibile";
       session = refreshed.session ?? session;
-    } catch {
-      // resta la sessione che c’è, se ancora valida
+    } catch (errore) {
+      // Rinnovo non riuscito per la linea: il token che c'è può bastare ancora.
+      if (eDiRete(errore)) {
+        if (session && session.expires_at != null && session.expires_at * 1000 > Date.now()) {
+          return "ok";
+        }
+        return "irraggiungibile";
+      }
+      return accessoRifiutato(messaggioErrore(errore)) ? "scaduta" : "irraggiungibile";
     }
   }
-  if (!session) return false;
-  if (session.expires_at != null && session.expires_at * 1000 < Date.now()) return false;
-  return true;
+
+  if (!session) return "scaduta";
+  if (session.expires_at != null && session.expires_at * 1000 < Date.now()) return "scaduta";
+  return "ok";
+}
+
+export async function supabaseAutenticato() {
+  return (await statoAutenticazione()) === "ok";
 }
