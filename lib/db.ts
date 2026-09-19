@@ -406,6 +406,16 @@ export async function nextNumero() {
   return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 }
 
+/**
+ * upsert, submit, archive e take finiscono tutte nella stessa identica chiamata
+ * al server: tenerle separate in coda significa solo mandare lo stesso foglio
+ * più volte, e succede proprio dove la linea è peggiore.
+ */
+function famigliaSync(action: SyncQueueItem["action"]) {
+  if (action === "delete" || action === "campate") return action;
+  return "push";
+}
+
 export async function enqueueSync(
   rapportinoId: string,
   action: SyncQueueItem["action"],
@@ -418,7 +428,7 @@ export async function enqueueSync(
     if (esistenti.some((q) => q.action === "delete")) return;
   } else if (esistenti.some((q) => q.action === "delete")) {
     return;
-  } else if (esistenti.some((q) => q.action === action)) {
+  } else if (esistenti.some((q) => famigliaSync(q.action) === famigliaSync(action))) {
     return;
   }
 
@@ -447,7 +457,7 @@ export async function compattaCodaSync() {
       junk.push(i.id);
       continue;
     }
-    const key = `${i.action}|${i.rapportinoId}`;
+    const key = `${famigliaSync(i.action)}|${i.rapportinoId}`;
     if (visti.has(key)) {
       junk.push(i.id);
       continue;

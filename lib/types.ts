@@ -214,6 +214,10 @@ export type SyncQueueItem = {
   createdAt: string;
   attempts: number;
   lastError?: string;
+  /** Non ritentare prima di questo istante: evita di martellare il server. */
+  nextAttemptAt?: string;
+  /** L'ultimo errore non era di linea: ritentare da solo non lo risolve. */
+  bloccato?: boolean;
 };
 
 /** Campate aggiuntive da togliere da Supabase dopo la cancellazione del rapportino. */

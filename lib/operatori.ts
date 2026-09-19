@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { SCADENZA_DATI, eDiRete, fetchConScadenza } from "./net";
 import { accessToken } from "./supabase/client";
 import type { Ruolo } from "./types";
 
@@ -25,14 +26,26 @@ async function chiamaApi(method: "POST" | "PATCH" | "DELETE", body: Record<strin
   const token = await accessToken();
   if (!token) throw new Error("Sessione scaduta: esci e rientra.");
 
-  const res = await fetch("/api/operatori", {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetchConScadenza(
+      "/api/operatori",
+      {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      },
+      SCADENZA_DATI,
+    );
+  } catch (errore) {
+    if (eDiRete(errore)) {
+      throw new Error("Il server non ha risposto: linea troppo debole. Riprova con più segnale.");
+    }
+    throw errore;
+  }
 
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(data.error ?? "Operazione non riuscita.");

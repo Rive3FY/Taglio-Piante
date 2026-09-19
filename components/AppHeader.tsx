@@ -13,16 +13,18 @@ export function AppHeader({
   title: string;
   backHref?: string;
 }) {
-  const { online, pending, lastError, lastSyncAt, syncing, syncNow } = useSync();
+  const { stato, pending, bloccate, lastError, lastSyncAt, syncing, syncNow } = useSync();
   const { session, offline, logout } = useSession();
   const router = useRouter();
   const area = useArea();
   const altraArea = area === "tecnico" ? "operatore" : "tecnico";
 
+  const inCoda = pending > 0 ? ` · ${pending} da inviare` : "";
+
   const pillClass = [
     "sync-pill",
-    online ? "is-online" : "is-offline",
-    lastError ? "is-error" : pending > 0 ? "is-pending" : "",
+    stato === "offline" ? "is-offline" : stato === "instabile" ? "is-debole" : "is-online",
+    bloccate > 0 ? "is-error" : pending > 0 ? "is-pending" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -34,25 +36,50 @@ export function AppHeader({
         hour: "2-digit",
         minute: "2-digit",
       })}.`
-    : " Nessuno scambio col server da quando l’app è aperta.";
+    : " Nessuno scambio col server, per ora.";
 
-  const pillTitle = (!online
-    ? "Nessuna rete: le modifiche restano sul telefono."
-    : lastError
-      ? `${pending} modifiche da mandare al server. Ultimo errore: ${lastError}. Tocca per riprovare.`
-      : pending > 0
-        ? `${pending} modifiche salvate sul telefono, in invio automatico. Tocca per forzare l’invio.`
-        : "Tutto allineato con il server. Tocca solo se vuoi sincronizzare di nuovo.") + ultimoGiro;
+  // Niente allarmi quando è solo la linea a mancare: il lavoro è comunque al sicuro
+  // sul telefono, e l'unica cosa che l'operatore deve sapere è quanto resta da mandare.
+  const pillTitle =
+    (stato === "offline"
+      ? `Nessuna rete: il lavoro resta salvato sul telefono e parte da solo appena c’è segnale.${
+          pending > 0 ? ` In attesa: ${pending}.` : ""
+        }`
+      : stato === "instabile"
+        ? `Il server non risponde: linea troppo debole. Il lavoro è salvato sul telefono, l’invio riprende da solo.${
+            pending > 0 ? ` In attesa: ${pending}.` : ""
+          }`
+        : bloccate > 0
+          ? `${bloccate} modifiche non vengono accettate dal server: ${lastError ?? ""} Tocca per riprovare.`
+          : pending > 0
+            ? `${pending} modifiche salvate sul telefono, in invio automatico. Tocca per forzare l’invio.`
+            : "Tutto allineato con il server. Tocca solo se vuoi sincronizzare di nuovo.") +
+    ultimoGiro;
 
-  const pillLabel = !online
-    ? "Offline"
-    : syncing
-      ? "Invio…"
-      : lastError
-        ? "Invio non riuscito"
-        : pending > 0
-          ? `${pending} da inviare`
-          : "Sincronizzato";
+  const pillLabel =
+    stato === "offline"
+      ? `Senza rete${inCoda}`
+      : stato === "instabile"
+        ? `Rete debole${inCoda}`
+        : syncing
+          ? "Invio…"
+          : bloccate > 0
+            ? "Da sistemare"
+            : pending > 0
+              ? `${pending} da inviare`
+              : "Sincronizzato";
+
+  const esci = () => {
+    if (
+      pending > 0 &&
+      !window.confirm(
+        `Ci sono ${pending} modifiche non ancora inviate al server. Se esci restano sul telefono e ripartiranno solo rientrando con questo stesso account. Vuoi uscire lo stesso?`,
+      )
+    ) {
+      return;
+    }
+    void logout().finally(() => window.location.assign("/"));
+  };
 
   return (
     <header className={`app-header${backHref ? " has-back" : ""}`}>
@@ -73,13 +100,13 @@ export function AppHeader({
         <button
           type="button"
           className={pillClass}
-          onClick={() => void syncNow()}
+          onClick={() => void syncNow({ manuale: true })}
           title={pillTitle}
         >
           <span className="dot" />
           <span className="sync-pill-text">
             {pillLabel}
-            {online && lastError ? <small>{lastError}</small> : null}
+            {bloccate > 0 && lastError ? <small>{lastError}</small> : null}
           </span>
         </button>
         {session ? (
@@ -118,13 +145,7 @@ export function AppHeader({
                 Squadra
               </button>
             ) : null}
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                void logout().finally(() => window.location.assign("/"));
-              }}
-            >
+            <button type="button" className="btn btn-ghost btn-sm" onClick={esci}>
               Esci
             </button>
           </div>

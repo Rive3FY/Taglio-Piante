@@ -84,14 +84,22 @@ button, input, select, textarea { font: inherit; }
   background: #d6eadc;
   cursor: pointer;
 }
-.sync-pill.is-offline { background: #f3d4c8; }
+.sync-pill.is-offline { background: #e2e5e3; }
+.sync-pill.is-debole { background: #fde7c7; }
 .sync-pill.is-pending { background: #fde7c7; }
 .sync-pill.is-error { background: #f3d4c8; }
 .sync-pill .dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
 }
-.sync-pill.is-offline .dot { background: var(--danger); }
+/* Senza rete non c'è niente di rotto: il grigio dice «in pausa», non «errore». */
+.sync-pill.is-offline .dot { background: #7b8781; }
+.sync-pill.is-debole .dot { background: #d08b2c; animation: sync-pulsa 1.6s ease-in-out infinite; }
 .sync-pill.is-error .dot { background: var(--danger); }
+
+@keyframes sync-pulsa {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 .sync-pill-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
 .sync-pill-text small {
   max-width: 220px;
