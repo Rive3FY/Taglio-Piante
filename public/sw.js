@@ -108,7 +108,7 @@ function salvaCopia(request, response) {
  * `interrompi` serve per le richieste il cui risultato tardivo non ci serve
  * più, così non restano socket aperti a consumare batteria.
  */
-function fetchConAttesa(request, ms, { interrompi = false } = {}) {
+function fetchConAttesa(request, ms, { interrompi = false, salva = true } = {}) {
   return new Promise((resolve, reject) => {
     const controller = interrompi ? new AbortController() : null;
     let deciso = false;
@@ -127,7 +127,7 @@ function fetchConAttesa(request, ms, { interrompi = false } = {}) {
         lineaSospettaDa = 0;
         // La risposta arrivata dopo la scadenza non si butta: aggiorna la cache
         // per la prossima volta, anche se ormai l'utente vede la copia salvata.
-        salvaCopia(request, risposta);
+        if (salva) salvaCopia(request, risposta);
         if (deciso) return;
         deciso = true;
         resolve(risposta);
@@ -146,10 +146,7 @@ function fetchConAttesa(request, ms, { interrompi = false } = {}) {
 /** Gli asset di build hanno l'id nel nome: se ci sono in cache sono quelli giusti. */
 async function cacheFirst(request) {
   const cached = await dallaCache(request);
-  if (cached) return cached;
-  const risposta = await fetchConAttesa(request, ATTESA_RETE_MS);
-  salvaCopia(request, risposta);
-  return risposta;
+  return cached ?? fetchConAttesa(request, ATTESA_RETE_MS);
 }
 
 /** Icone, manifest, modello PDF: si servono subito e si aggiornano in sottofondo. */
@@ -200,7 +197,9 @@ self.addEventListener("fetch", (event) => {
       return;
     }
     event.respondWith(
-      fetchConAttesa(request, ATTESA_RETE_MS, { interrompi: true }).catch(() => Response.error()),
+      fetchConAttesa(request, ATTESA_RETE_MS, { interrompi: true, salva: false }).catch(() =>
+        Response.error(),
+      ),
     );
     return;
   }
