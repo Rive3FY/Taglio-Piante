@@ -5,8 +5,9 @@ import type { Session as SupabaseSession } from "@supabase/supabase-js";
 import type { Ruolo, Session } from "@/lib/types";
 import { clearSession, readSession, writeSession } from "@/lib/session";
 import { ensureSeeded } from "@/lib/db";
+import { SCADENZA_AUTH, conScadenza, eDiRete, messaggioErrore } from "@/lib/net";
 import { clearPullCursor } from "@/lib/supabase/remote";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { accessoRifiutato, getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type SessionContextValue = {
   session: Session | null;
@@ -22,22 +23,6 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 function dispositivoOffline() {
   return typeof navigator !== "undefined" && !navigator.onLine;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const id = window.setTimeout(() => reject(new Error("timeout")), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(id);
-        resolve(value);
-      },
-      (err) => {
-        window.clearTimeout(id);
-        reject(err);
-      },
-    );
-  });
 }
 
 async function profiloDaSupabase(auth: SupabaseSession): Promise<Session> {
@@ -75,44 +60,65 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     let annullato = false;
     const supabase = getSupabase();
 
+    /** Tiene aperta l'app con la copia locale invece di riportare al login. */
+    function restaConCopiaLocale() {
+      const cache = readSession();
+      if (cache && !annullato) {
+        setSessionState(cache);
+        setOffline(true);
+      }
+    }
+
     async function confermaOnline() {
       if (!supabase || dispositivoOffline() || annullato) return;
       try {
-        const { data } = await withTimeout(supabase.auth.getSession(), 3500);
+        const { data } = await conScadenza(supabase.auth.getSession(), SCADENZA_AUTH, "Il login");
         if (annullato) return;
         let auth = data.session;
+
         if (!auth) {
+          // Rinnovo non riuscito: buttare fuori l'utente ha senso solo se è
+          // stato il server a rifiutare. Se è mancata la linea, l'app resta
+          // aperta sulla copia locale, altrimenti il lavoro non ancora inviato
+          // finisce dietro una schermata di accesso che senza rete non si passa.
+          let rifiutato = false;
           try {
-            const { data: refreshed } = await withTimeout(supabase.auth.refreshSession(), 3500);
-            auth = refreshed.session ?? null;
-          } catch {
-            auth = null;
+            const { data: refreshed, error } = await conScadenza(
+              supabase.auth.refreshSession(),
+              SCADENZA_AUTH,
+              "Il rinnovo dell’accesso",
+            );
+            if (error) rifiutato = accessoRifiutato(error.message);
+            else auth = refreshed.session ?? null;
+          } catch (errore) {
+            rifiutato = !eDiRete(errore) && accessoRifiutato(messaggioErrore(errore));
+          }
+
+          if (!auth && !rifiutato) {
+            restaConCopiaLocale();
+            return;
+          }
+          if (!auth) {
+            clearSession();
+            setSessionState(null);
+            setOffline(false);
+            return;
           }
         }
-        if (!auth) {
-          // Profilo in locale ma token assente: da online non si sincronizza più.
-          clearSession();
-          setSessionState(null);
-          setOffline(false);
-          return;
-        }
-        const profilo = await withTimeout(profiloDaSupabase(auth), 4000);
+
+        const profilo = await conScadenza(profiloDaSupabase(auth), SCADENZA_AUTH, "Il profilo");
         if (annullato) return;
         writeSession(profilo);
         setSessionState(profilo);
         setOffline(false);
       } catch {
-        const cache = readSession();
-        if (cache && !annullato) {
-          setSessionState(cache);
-          setOffline(true);
-        }
+        restaConCopiaLocale();
       }
     }
 
     (async () => {
       try {
-        await withTimeout(ensureSeeded(), 4000).catch(() => undefined);
+        await conScadenza(ensureSeeded(), 8000, "L’archivio locale").catch(() => undefined);
         if (annullato) return;
 
         const cache = readSession();
@@ -155,19 +161,32 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             try {
-              const { data: refreshed } = await withTimeout(
+              const { data: refreshed } = await conScadenza(
                 supabase.auth.refreshSession(),
-                3500,
+                SCADENZA_AUTH,
+                "Il rinnovo dell’accesso",
               );
               if (refreshed.session) {
-                const profilo = await withTimeout(profiloDaSupabase(refreshed.session), 4000);
+                const profilo = await conScadenza(
+                  profiloDaSupabase(refreshed.session),
+                  SCADENZA_AUTH,
+                  "Il profilo",
+                );
                 writeSession(profilo);
                 setSessionState(profilo);
                 setOffline(false);
                 return;
               }
-            } catch {
-              // token non rinnovabile: con rete si torna al login, i dati Dexie restano
+            } catch (errore) {
+              // Caduta la linea a metà rinnovo: l'app resta aperta sulla copia locale.
+              if (eDiRete(errore)) {
+                const cache = readSession();
+                if (cache) {
+                  setSessionState(cache);
+                  setOffline(true);
+                  return;
+                }
+              }
             }
             clearSession();
             setSessionState(null);
@@ -217,7 +236,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setOffline(false);
     if (supabase) {
       try {
-        await withTimeout(supabase.auth.signOut(), 4000);
+        await conScadenza(supabase.auth.signOut(), SCADENZA_AUTH, "L’uscita");
       } catch {
         // anche senza rete l'uscita locale deve completarsi
       }
