@@ -1,4 +1,4 @@
-const CACHE = "rapportini-taglio-v18";
+const CACHE = "rapportini-taglio-v19";
 
 /**
  * Pagine che devono aprirsi anche se non sono mai state visitate su questo
@@ -21,6 +21,19 @@ const PRECACHE = [
  * cui toccando un link non succedeva niente per parecchi secondi.
  */
 const ATTESA_RETE_MS = 2500;
+
+/**
+ * Appena una richiesta scade si annota l'ora. Per un po' non si riprova ad
+ * aspettare la rete su ogni singola richiesta: la linea è quella, e la seconda
+ * attesa sarebbe tempo buttato. Senza questa memoria una navigazione costava
+ * due scadenze in fila, quella del payload e quella della pagina.
+ */
+const MEMORIA_LINEA_MS = 10_000;
+let lineaSospettaDa = 0;
+
+function lineaSospetta() {
+  return Date.now() - lineaSospettaDa < MEMORIA_LINEA_MS;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -51,9 +64,10 @@ function stessaOrigine(url) {
 }
 
 /**
- * I payload RSC sono legati alla build: servirne uno vecchio rompe la pagina.
- * Restano fuori dalla cache, e se non arrivano il router di Next ripiega da solo
- * su una navigazione intera, che invece la cache ce l'ha.
+ * I payload RSC sono legati alla build e alla navigazione in corso: servirne
+ * uno vecchio rompe la pagina. Non si mettono in cache e non si leggono dalla
+ * cache. Se non arrivano, Next ripiega da solo su una navigazione intera, e
+ * quella la cache ce l'ha.
  */
 function eRsc(request, url) {
   return url.searchParams.has("_rsc") || request.headers.get("RSC") === "1";
@@ -66,13 +80,17 @@ function vaInCache(url) {
 }
 
 async function dallaCache(request) {
-  const esatto = await caches.match(request, { ignoreSearch: false });
+  const esatto = await caches.match(request);
   if (esatto) return esatto;
+
+  // Ripiego sul solo percorso, saltando i payload RSC: servirne uno al posto
+  // di una pagina darebbe una schermata bianca.
   const url = new URL(request.url);
   const cache = await caches.open(CACHE);
   const chiavi = await cache.keys();
   const hit = chiavi.find((key) => {
     const cached = new URL(key.url);
+    if (cached.searchParams.has("_rsc")) return false;
     return cached.origin === url.origin && cached.pathname === url.pathname;
   });
   return hit ? cache.match(hit) : undefined;
@@ -80,22 +98,33 @@ async function dallaCache(request) {
 
 function salvaCopia(request, response) {
   if (!response || !response.ok || response.type === "opaque") return;
+  if (new URL(request.url).searchParams.has("_rsc")) return;
   const copia = response.clone();
   caches.open(CACHE).then((cache) => cache.put(request, copia));
 }
 
-/** Aspetta la rete, ma solo per un po': scaduto il tempo vince la copia locale. */
-function fetchConAttesa(request, ms) {
+/**
+ * Aspetta la rete, ma solo per un po': scaduto il tempo vince la copia locale.
+ * `interrompi` serve per le richieste il cui risultato tardivo non ci serve
+ * più, così non restano socket aperti a consumare batteria.
+ */
+function fetchConAttesa(request, ms, { interrompi = false } = {}) {
   return new Promise((resolve, reject) => {
+    const controller = interrompi ? new AbortController() : null;
     let deciso = false;
+
     const timer = setTimeout(() => {
       if (deciso) return;
       deciso = true;
+      lineaSospettaDa = Date.now();
+      controller?.abort();
       reject(new Error("rete troppo lenta"));
     }, ms);
-    fetch(request).then(
+
+    fetch(controller ? new Request(request, { signal: controller.signal }) : request).then(
       (risposta) => {
         clearTimeout(timer);
+        lineaSospettaDa = 0;
         // La risposta arrivata dopo la scadenza non si butta: aggiorna la cache
         // per la prossima volta, anche se ormai l'utente vede la copia salvata.
         salvaCopia(request, risposta);
@@ -107,16 +136,18 @@ function fetchConAttesa(request, ms) {
         clearTimeout(timer);
         if (deciso) return;
         deciso = true;
+        lineaSospettaDa = Date.now();
         reject(errore);
       },
     );
   });
 }
 
+/** Gli asset di build hanno l'id nel nome: se ci sono in cache sono quelli giusti. */
 async function cacheFirst(request) {
   const cached = await dallaCache(request);
   if (cached) return cached;
-  const risposta = await fetch(request);
+  const risposta = await fetchConAttesa(request, ATTESA_RETE_MS);
   salvaCopia(request, risposta);
   return risposta;
 }
@@ -125,20 +156,23 @@ async function cacheFirst(request) {
 async function cacheEPoiAggiorna(request) {
   const cached = await dallaCache(request);
   if (cached) {
-    fetch(request)
-      .then((risposta) => salvaCopia(request, risposta))
-      .catch(() => undefined);
+    if (!lineaSospetta()) {
+      fetch(request)
+        .then((risposta) => salvaCopia(request, risposta))
+        .catch(() => undefined);
+    }
     return cached;
   }
   return fetchConAttesa(request, ATTESA_RETE_MS);
 }
 
 /**
- * Per le pagine: senza segnale si va dritti alla copia locale senza nemmeno
- * provare, con segnale si prova la rete ma con un tetto di attesa.
+ * Per le pagine: se il segnale manca, o se poco fa la rete non ha risposto, si
+ * va dritti alla copia locale senza nemmeno provare. Altrimenti si prova la
+ * rete, ma con un tetto di attesa.
  */
 async function paginaConRipiego(request) {
-  if (!self.navigator.onLine) {
+  if (!self.navigator.onLine || lineaSospetta()) {
     const subito = (await dallaCache(request)) ?? (await caches.match("/"));
     if (subito) return subito;
   }
@@ -159,7 +193,15 @@ self.addEventListener("fetch", (event) => {
   if (!stessaOrigine(url)) return;
 
   if (eRsc(request, url)) {
-    event.respondWith(fetchConAttesa(request, ATTESA_RETE_MS).catch(() => Response.error()));
+    // Linea già data per persa: meglio fallire subito e lasciare che Next
+    // ripieghi sulla navigazione intera, che la cache serve all'istante.
+    if (!self.navigator.onLine || lineaSospetta()) {
+      event.respondWith(Promise.resolve(Response.error()));
+      return;
+    }
+    event.respondWith(
+      fetchConAttesa(request, ATTESA_RETE_MS, { interrompi: true }).catch(() => Response.error()),
+    );
     return;
   }
 
@@ -168,7 +210,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Gli asset di build hanno l'id nel nome: se ci sono in cache sono quelli giusti.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       cacheFirst(request).catch(async () => (await dallaCache(request)) ?? Response.error()),
