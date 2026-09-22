@@ -304,6 +304,22 @@ class RapportiniDB extends Dexie {
       campateDeleteQueue: "id",
       syncQueue: "id, rapportinoId, createdAt",
     });
+    // updatedAt in indice: il sync confronta le versioni senza caricare le firme.
+    this.version(18).stores({
+      linee: "id, codice, nome",
+      campate: "id, lineaId, codice, tipo",
+      operatoriTerna: "id, matricola",
+      operatori: "id, nome, email",
+      ditte: "id, ragioneSociale",
+      prestazioni: "id, codice",
+      rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro, updatedAt",
+      campateLavoro:
+        "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rinvioMese, rapportinoId, updatedAt",
+      campateStorico: "id, campataId, createdAt",
+      importCampate: "id, createdAt, anno",
+      campateDeleteQueue: "id",
+      syncQueue: "id, rapportinoId, createdAt",
+    });
   }
 }
 

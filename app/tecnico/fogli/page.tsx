@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -45,11 +44,6 @@ export default function TecnicoFogliPage() {
         >
           Archiviati <span className="chip-count">{conteggi.archiviati}</span>
         </button>
-        {key === "bozze" && conteggi.bozze > 0 ? (
-          <Link href="/tecnico/correggi-bozze" className="btn btn-primary btn-sm">
-            Correggi in blocco
-          </Link>
-        ) : null}
       </div>
       <ArchivioPerLinea
         key={key}

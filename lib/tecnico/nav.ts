@@ -20,10 +20,7 @@ export const TECNICO_GRUPPI: TecnicoGruppo[] = [
   {
     id: "fogli",
     label: "Rapportini",
-    links: [
-      { href: "/tecnico/fogli", label: "Archivio" },
-      { href: "/tecnico/correggi-bozze", label: "Correggi bozze" },
-    ],
+    links: [{ href: "/tecnico/fogli", label: "Archivio" }],
   },
   {
     id: "report",

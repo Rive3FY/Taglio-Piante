@@ -14,6 +14,7 @@ import {
   segnaControlloCompleto,
   serveControlloCompleto,
   supabaseAutenticato,
+  versioniRapportiniRemote,
 } from "@/lib/supabase/remote";
 import { ripristinaCampateOrfane, unisciCampateDoppie } from "@/lib/campate/apply";
 
@@ -42,9 +43,8 @@ async function allineaStatoSyncRapportino(rapportinoId: string) {
 async function riparaRapportiniSenzaCoda(autenticato: boolean, session: Session | null) {
   if (!autenticato) return;
   const inCoda = new Set((await db.syncQueue.toArray()).map((i) => i.rapportinoId));
-  const tutti = await db.rapportini.toArray();
-  for (const r of tutti) {
-    if (r.syncStatus !== "pending" && r.syncStatus !== "error") continue;
+  const nonInviati = await db.rapportini.where("syncStatus").anyOf("pending", "error").toArray();
+  for (const r of nonInviati) {
     if (inCoda.has(r.id)) continue;
     if (!rapportinoVisibile(r, session)) continue;
     try {
@@ -63,18 +63,28 @@ async function riparaRapportiniSenzaCoda(autenticato: boolean, session: Session 
  * consegnati tengono il numero stampato.
  */
 async function risolviNumeriDuplicati(autenticato: boolean, session: Session | null) {
-  const tutti = (await db.rapportini.toArray())
+  // Solo i fogli non ancora inviati possono cambiare numero: gli altri si guardano
+  // dall'indice sul numero, senza caricare l'archivio.
+  const nonInviati = (await db.rapportini.where("syncStatus").anyOf("pending", "error").toArray())
     .filter((r) => rapportinoVisibile(r, session))
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
-  const visti = new Map<string, string>();
+  const assegnati = new Set<string>();
   let corretti = 0;
 
-  for (const r of tutti) {
+  for (const r of nonInviati) {
     if (!r.numero) continue;
-    const primo = visti.get(r.numero);
-    let duplicato = Boolean(primo && primo !== r.id);
+    const stessoNumero = (await db.rapportini.where("numero").equals(r.numero).toArray()).filter(
+      (x) => x.id !== r.id && rapportinoVisibile(x, session),
+    );
+    // Tra due fogli locali con lo stesso numero lo tiene il più vecchio, come in elenco.
+    let duplicato = stessoNumero.some(
+      (x) =>
+        x.syncStatus === "synced" ||
+        (x.createdAt ?? "") < (r.createdAt ?? "") ||
+        ((x.createdAt ?? "") === (r.createdAt ?? "") && assegnati.has(x.id)),
+    );
 
-    if (!duplicato && autenticato && r.syncStatus !== "synced") {
+    if (!duplicato && autenticato) {
       try {
         duplicato = (await idsConNumero(r.numero)).some((id) => id !== r.id);
       } catch {
@@ -82,21 +92,30 @@ async function risolviNumeriDuplicati(autenticato: boolean, session: Session | n
       }
     }
 
-    if (!duplicato || r.syncStatus === "synced") {
-      visti.set(r.numero, r.id);
+    if (!duplicato) {
+      assegnati.add(r.id);
       continue;
     }
 
     const nuovo = await nextNumero();
-    if (!nuovo || nuovo === r.numero || visti.has(nuovo)) continue;
+    if (!nuovo || nuovo === r.numero) continue;
+    if ((await db.rapportini.where("numero").equals(nuovo).count()) > 0) continue;
     await db.rapportini.update(r.id, { numero: nuovo, updatedAt: new Date().toISOString() });
     await enqueueSync(r.id, "upsert");
-    visti.set(nuovo, r.id);
+    assegnati.add(r.id);
     corretti += 1;
   }
 
   return corretti;
 }
+
+async function fogliDellaCoda() {
+  const ids = [...new Set((await db.syncQueue.toArray()).map((i) => i.rapportinoId))];
+  return (await db.rapportini.bulkGet(ids)).filter((r): r is Rapportino => Boolean(r));
+}
+
+/** Le riparazioni leggono tutte le campate: una volta a sessione, poi solo se è cambiato qualcosa. */
+let riparazioniFatte = false;
 
 /**
  * Di norma legge dal server solo ciò che è cambiato. `completo` rilegge tutto
@@ -115,10 +134,10 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   await compattaCodaSync();
 
   const profilo = readSession();
-  const fogliLocali = await db.rapportini.toArray();
   const pendingDiQuestoAccount = async () => {
     const resto = await db.syncQueue.toArray();
-    return resto.filter((i) => voceCodaDiQuestoAccount(i, profilo, fogliLocali)).length;
+    const fogli = await fogliDellaCoda();
+    return resto.filter((i) => voceCodaDiQuestoAccount(i, profilo, fogli)).length;
   };
 
   if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -140,6 +159,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   }
 
   await risolviNumeriDuplicati(autenticato, profilo);
+  const fogliLocali = await fogliDellaCoda();
 
   const falliti = new Set<string>();
   const saltati = new Set<string>();
@@ -197,7 +217,9 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
     }
   }
 
-  if (autenticato) {
+  const completo = richiestoCompleto || serveControlloCompleto();
+
+  if (autenticato && (completo || processed > 0 || !riparazioniFatte)) {
     const sistematePrima = (await ripristinaCampateOrfane()) + (await unisciCampateDoppie());
     if (sistematePrima > 0) await pushCampatePending();
   }
@@ -205,12 +227,17 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   let pulled = 0;
   let pullError: string | null = null;
   if (autenticato) {
-    const completo = richiestoCompleto || serveControlloCompleto();
     try {
       await pullReferenceData(completo);
-      const rimossi = await pullDeletedRapportini();
-      pulled = (await pullRapportini(completo)) + rimossi;
-      if (completo) segnaControlloCompleto();
+      if (completo) {
+        // Cancellazioni e fogli cambiati da un solo elenco leggero (id + data).
+        const vivi = await versioniRapportiniRemote();
+        const rimossi = await pullDeletedRapportini(vivi);
+        pulled = (await pullRapportini(true, vivi)) + rimossi;
+        segnaControlloCompleto();
+      } else {
+        pulled = await pullRapportini(false);
+      }
     } catch (error) {
       pullError =
         error instanceof Error ? error.message.slice(0, 280) : "Lettura dal server non riuscita.";
@@ -218,9 +245,10 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
     }
   }
 
-  if (autenticato) {
+  if (autenticato && (completo || pulled > 0 || !riparazioniFatte)) {
     const sistemateDopo = (await ripristinaCampateOrfane()) + (await unisciCampateDoppie());
     if (sistemateDopo > 0) await pushCampatePending();
+    riparazioniFatte = true;
   }
 
   if (autenticato) await riparaRapportiniSenzaCoda(true, profilo);
@@ -249,10 +277,13 @@ export function voceCodaDiQuestoAccount(
 export async function purgaRapportiniAltrui(session: Session | null) {
   if (!session || session.ruolo === "tecnico") return 0;
 
-  const tutti = await db.rapportini.toArray();
-  const daRimuovere = tutti
-    .filter((r) => r.syncStatus === "synced" && !rapportinoVisibile(r, session))
-    .map((r) => r.id);
+  const daRimuovere = (
+    await db.rapportini
+      .where("syncStatus")
+      .equals("synced")
+      .filter((r) => !rapportinoVisibile(r, session))
+      .primaryKeys()
+  ).map(String);
 
   if (daRimuovere.length > 0) await db.rapportini.bulkDelete(daRimuovere);
   return daRimuovere.length;

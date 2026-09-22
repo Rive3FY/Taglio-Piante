@@ -5,6 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { processSyncQueue, purgaRapportiniAltrui, subscribeOnline, voceCodaDiQuestoAccount } from "@/lib/sync";
 import { useSession } from "@/lib/SessionContext";
+import type { Rapportino } from "@/lib/types";
 
 type SyncContextValue = {
   online: boolean;
@@ -26,10 +27,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [pullError, setPullError] = useState<string | null>(null);
   const { session } = useSession();
   const userId = session?.userId;
-  const codaRaw = useLiveQuery(() => db.syncQueue.orderBy("createdAt").toArray(), []);
-  const coda = Array.isArray(codaRaw) ? codaRaw : [];
-  const fogliRaw = useLiveQuery(() => db.rapportini.toArray(), []);
-  const fogli = Array.isArray(fogliRaw) ? fogliRaw : [];
+  // Solo i fogli in coda: caricare l'archivio intero (firme comprese) a ogni
+  // modifica rallenterebbe il telefono man mano che crescono i rapportini.
+  const statoCoda = useLiveQuery(async () => {
+    const voci = await db.syncQueue.orderBy("createdAt").toArray();
+    const ids = [...new Set(voci.map((v) => v.rapportinoId))];
+    const inCoda = (await db.rapportini.bulkGet(ids)).filter((r): r is Rapportino => r != null);
+    return { voci, inCoda };
+  }, []);
+  const coda = statoCoda?.voci ?? [];
+  const fogli = statoCoda?.inCoda ?? [];
   const codaMia = coda.filter((item) => voceCodaDiQuestoAccount(item, session, fogli));
   const pending = codaMia.length;
   const queueError = codaMia.find((item) => item.lastError)?.lastError ?? null;
@@ -56,7 +63,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
     const unsub = subscribeOnline(refresh);
     const timer = window.setInterval(() => {
-      if (navigator.onLine) void syncNow();
+      if (navigator.onLine && document.visibilityState === "visible") void syncNow();
     }, 20_000);
     const onVisibile = () => {
       if (document.visibilityState === "visible" && navigator.onLine) void syncNow();
