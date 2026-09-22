@@ -895,10 +895,10 @@ export function CampateElenco({
                 <th>Maps</th>
                 <th>Priorità</th>
                 <th>Stato</th>
+                <th>Rapportino</th>
                 <th>Data</th>
                 <th>Operatore</th>
                 <th>Note</th>
-                <th />
               </tr>
             </thead>
             <tbody>
@@ -1172,11 +1172,6 @@ function CampataRiga({
             </span>
           ) : null}
         </td>
-        <td>{c.dataTaglio ? formatDate(c.dataTaglio) : "—"}</td>
-        <td>{c.operatore ?? "—"}</td>
-        <td>
-          {c.note?.trim() ? <span className="campata-note-preview">{c.note.trim()}</span> : "—"}
-        </td>
         <td className="campata-rap-cell">
           {mostraRapportino ? (
             c.rapportinoId ? (
@@ -1219,6 +1214,11 @@ function CampataRiga({
               </Link>
             )
           ) : null}
+        </td>
+        <td>{c.dataTaglio ? formatDate(c.dataTaglio) : "—"}</td>
+        <td>{c.operatore ?? "—"}</td>
+        <td>
+          {c.note?.trim() ? <span className="campata-note-preview">{c.note.trim()}</span> : "—"}
         </td>
       </tr>
       {aperta ? (
