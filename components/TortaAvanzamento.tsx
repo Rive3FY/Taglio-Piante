@@ -71,9 +71,14 @@ function percentuali(valori: number[], totale: number) {
   return tonde;
 }
 
-export function TortaAvanzamento({ dati }: { dati: AvanzamentoPriorita }) {
+export function TortaAvanzamento({
+  dati,
+  titolo = CAMPATA_PRIORITA_LABEL[dati.priorita],
+}: {
+  dati: AvanzamentoPriorita;
+  titolo?: string;
+}) {
   const uid = useId();
-  const titolo = CAMPATA_PRIORITA_LABEL[dati.priorita];
   const vuoto = dati.totale === 0;
   const quote = percentuali(
     FETTE.map((f) => dati[f.key]),

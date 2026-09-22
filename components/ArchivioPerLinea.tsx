@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
 import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
-import { etichettaOggettoFoglio, foglioEBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
+import { foglioEBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
 import { mostraCampata, mostraTestoCampate } from "@/lib/campate/normalize";
 import { useDialogBack } from "@/lib/useDialogBack";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
@@ -80,17 +80,6 @@ function vociDaFogli(items: Rapportino[], prestazioni: Prestazione[]) {
 function elenca(nomi: string[], max = 8) {
   if (nomi.length <= max) return nomi.join(", ");
   return `${nomi.slice(0, max).join(", ")} +${nomi.length - max}`;
-}
-
-function vociAnteprima(item: Rapportino, prestazioni: Prestazione[]) {
-  const byId = new Map(prestazioni.map((p) => [p.id, p]));
-  return (item.righe ?? [])
-    .filter((r) => r.quantita)
-    .map((r) => {
-      const p = byId.get(r.prestazioneId);
-      return `${p?.codice ?? "?"} × ${r.quantita}`;
-    })
-    .slice(0, 4);
 }
 
 export function ArchivioPerLinea({
@@ -360,8 +349,6 @@ export function ArchivioPerLinea({
                     </div>
                     <div className="form-stack">
                       {fogli.map((item) => {
-                        const anteprime = vociAnteprima(item, prestazioni);
-                        const oggetto = etichettaOggettoFoglio(item, prestazioni);
                         return (
                           <div key={item.id} className="archivio-riga">
                             <input
@@ -379,17 +366,6 @@ export function ArchivioPerLinea({
                               onDownload={() => void scaricaUno(item, g.linea)}
                               downloadBusy={busy === item.id}
                             />
-                            <button
-                              type="button"
-                              className="archivio-anteprima"
-                              onClick={() => setPreviewId(item.id)}
-                            >
-                              <span className="archivio-anteprima-kicker">Anteprima</span>
-                              <strong>{item.numero}</strong>
-                              <span>{formatDate(item.dataLavoro)}</span>
-                              {oggetto ? <span>{oggetto}</span> : null}
-                              {anteprime.length > 0 ? <span>{anteprime.join(" · ")}</span> : null}
-                            </button>
                           </div>
                         );
                       })}

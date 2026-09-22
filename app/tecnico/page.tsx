@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { TENSIONI, tensioneLabel, tensioneLinea } from "@/lib/format";
 import { FiltroGruppo } from "@/components/FiltroGruppo";
+import { TecnicoBacheca } from "@/components/TecnicoBacheca";
 import type { Linea } from "@/lib/types";
 
 type Filtro = number | "tutte";
@@ -66,6 +67,8 @@ export default function TecnicoLineePage() {
 
   return (
     <>
+      <TecnicoBacheca />
+      <div className="linee-classiche">
       <h2>Elenco linee</h2>
 
       <label>
@@ -146,6 +149,7 @@ export default function TecnicoLineePage() {
           </section>
         );
       })}
+      </div>
     </>
   );
 }
