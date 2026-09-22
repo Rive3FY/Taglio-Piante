@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSync } from "@/lib/SyncContext";
@@ -15,15 +16,36 @@ function iniziali(nome: string) {
 export function AppHeader({
   title,
   backHref,
+  nav,
 }: {
   title: string;
   backHref?: string;
+  /** Menu delle sezioni nella barra in alto: compare solo su schermo largo. */
+  nav?: ReactNode;
 }) {
   const { online, pending, lastError, lastSyncAt, syncing, syncNow } = useSync();
   const { session, offline, logout } = useSession();
   const router = useRouter();
   const area = useArea();
   const altraArea = area === "tecnico" ? "operatore" : "tecnico";
+  const [menuUtente, setMenuUtente] = useState(false);
+  const rifUtente = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuUtente) return;
+    const fuori = (e: MouseEvent) => {
+      if (rifUtente.current && !rifUtente.current.contains(e.target as Node)) setMenuUtente(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuUtente(false);
+    };
+    document.addEventListener("mousedown", fuori);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fuori);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menuUtente]);
 
   const pillClass = [
     "sync-pill",
@@ -75,6 +97,7 @@ export function AppHeader({
         )}
         <h1>{title}</h1>
       </div>
+      {nav ? <div className="app-header-nav">{nav}</div> : null}
       <div className="app-header-right">
         <button
           type="button"
@@ -89,10 +112,17 @@ export function AppHeader({
           </span>
         </button>
         {session ? (
-          <div className="user-chip">
-            <span className="user-avatar" aria-hidden="true">
+          <div ref={rifUtente} className={`user-chip${menuUtente ? " aperto" : ""}`}>
+            <button
+              type="button"
+              className="user-avatar"
+              aria-label={`Menu di ${session.nome}`}
+              aria-expanded={menuUtente}
+              onClick={() => setMenuUtente((v) => !v)}
+            >
               {iniziali(session.nome)}
-            </span>
+            </button>
+            <div className="user-menu">
             <span className="user-nome">
               {session.nome}
               <small>
@@ -137,6 +167,7 @@ export function AppHeader({
             >
               Esci
             </button>
+            </div>
             </div>
           </div>
         ) : null}

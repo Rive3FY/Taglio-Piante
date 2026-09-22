@@ -5,28 +5,23 @@ import type { AvanzamentoPriorita } from "@/lib/contabilita/aggrega";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 
 const FETTE = [
-  { key: "tagliate" as const, label: "Tagliate", da: "#22c55e", a: "#15803d" },
-  { key: "daTagliare" as const, label: "Da tagliare", da: "#f59e0b", a: "#b45309" },
+  { key: "tagliate" as const, label: "Tagliate", da: "#5ee7f5", a: "#06b6d4" },
+  { key: "daTagliare" as const, label: "Da tagliare", da: "#b9a6ff", a: "#7c5cf0" },
 ];
 
-const LARGHEZZA = 300;
-const CX = 150;
-const CY = 132;
-const RAGGIO_EST = 70;
-const RAGGIO_INT = 40;
-/** Spazio che serve alla scritta più lunga: i richiami non escono mai dal riquadro. */
-const LARGHEZZA_ETICHETTA = 70;
-/** Stacco tra le fette, in gradi: è quello che dà l'aria moderna alla torta. */
-const STACCO = 2;
+const LARGHEZZA = 340;
+const ALTEZZA = 240;
+const CX = LARGHEZZA / 2;
+const CY = ALTEZZA / 2;
+const RAGGIO_EST = 80;
+const RAGGIO_INT = 52;
+const RAGGIO_ETICHETTA = 94;
+/** Stacco tra le fette, in gradi. */
+const STACCO = 3;
 
 function punto(raggio: number, gradi: number) {
   const rad = ((gradi - 90) * Math.PI) / 180;
   return [CX + raggio * Math.cos(rad), CY + raggio * Math.sin(rad)] as const;
-}
-
-/** Mezza torta: si parte da sinistra e si gira in senso orario fino a destra. */
-function angolo(frazione: number) {
-  return 270 + frazione * 180;
 }
 
 function n(valore: number) {
@@ -37,7 +32,7 @@ function n(valore: number) {
 function fetta(da: number, a: number, stacco: number) {
   const s = Math.min(stacco, (a - da) * 0.35);
   const inizio = da + s / 2;
-  const fine = a - s / 2;
+  const fine = Math.min(a - s / 2, inizio + 359.99);
   const [xe1, ye1] = punto(RAGGIO_EST, inizio);
   const [xe2, ye2] = punto(RAGGIO_EST, fine);
   const [xi2, yi2] = punto(RAGGIO_INT, fine);
@@ -93,8 +88,8 @@ export function TortaAvanzamento({
       ...f,
       quantita,
       quota: quote[i],
-      inizio: angolo(prima / intero),
-      fine: angolo((prima + quantita) / intero),
+      inizio: (prima / intero) * 360,
+      fine: ((prima + quantita) / intero) * 360,
     };
   });
   const disegnate = fette.filter((f) => f.quantita > 0);
@@ -109,7 +104,7 @@ export function TortaAvanzamento({
       <div className="torta-layout">
         <svg
           className="torta-svg"
-          viewBox={`0 0 ${LARGHEZZA} 152`}
+          viewBox={`0 0 ${LARGHEZZA} ${ALTEZZA}`}
           role="img"
           aria-label={
             vuoto
@@ -119,24 +114,23 @@ export function TortaAvanzamento({
         >
           <defs>
             {FETTE.map((f) => (
-              <linearGradient key={f.key} id={`${uid}-${f.key}`} x1="0" y1="1" x2="1" y2="0">
+              <linearGradient key={f.key} id={`${uid}-${f.key}`} x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor={f.da} />
                 <stop offset="100%" stopColor={f.a} />
               </linearGradient>
             ))}
           </defs>
           {vuoto ? (
-            <path className="torta-vuota" d={fetta(270, 450, 0)} />
+            <path className="torta-vuota" d={fetta(0, 360, 0)} />
           ) : (
             disegnate.map((f) => {
               const meta = f.inizio + (f.fine - f.inizio) / 2;
-              const [xg1, yg1] = punto(RAGGIO_EST + 4, meta);
-              const [xg2, yg2] = punto(RAGGIO_EST + 14, meta);
-              const sinistra = xg2 < CX;
-              const xg3 = sinistra
-                ? Math.max(xg2 - 12, LARGHEZZA_ETICHETTA)
-                : Math.min(xg2 + 12, LARGHEZZA - LARGHEZZA_ETICHETTA);
-              const xt = xg3 + (sinistra ? -4 : 4);
+              const [xt, yt] = punto(RAGGIO_ETICHETTA, meta);
+              const laterale = Math.sin((meta * Math.PI) / 180);
+              const ancora = Math.abs(laterale) < 0.35 ? "middle" : laterale > 0 ? "start" : "end";
+              // Sopra e sotto l'anello le due righe si spostano per non toccarlo.
+              const verticale = Math.cos((meta * Math.PI) / 180);
+              const dy = verticale > 0.8 ? "-1.2em" : verticale < -0.8 ? "0.75em" : "-0.25em";
               return (
                 <g key={f.key}>
                   <path
@@ -144,13 +138,8 @@ export function TortaAvanzamento({
                     d={fetta(f.inizio, f.fine, stacco)}
                     fill={`url(#${uid}-${f.key})`}
                   />
-                  <path
-                    className="torta-guida"
-                    d={`M ${n(xg1)} ${n(yg1)} L ${n(xg2)} ${n(yg2)} L ${n(xg3)} ${n(yg2)}`}
-                    stroke={f.a}
-                  />
-                  <text x={xt} y={yg2} textAnchor={sinistra ? "end" : "start"}>
-                    <tspan className="torta-callout-nome" x={xt} dy="-0.25em">
+                  <text x={xt} y={yt} textAnchor={ancora}>
+                    <tspan className="torta-callout-nome" x={xt} dy={dy}>
                       {f.label}
                     </tspan>
                     <tspan className="torta-callout-quota" x={xt} dy="1.2em">
@@ -160,6 +149,16 @@ export function TortaAvanzamento({
                 </g>
               );
             })
+          )}
+          {vuoto ? null : (
+            <text x={CX} y={CY} textAnchor="middle">
+              <tspan className="torta-centro" x={CX} dy="0.1em">
+                {quote[0]}%
+              </tspan>
+              <tspan className="torta-centro-sotto" x={CX} dy="1.5em">
+                tagliate
+              </tspan>
+            </text>
           )}
         </svg>
         <ul className="torta-leggenda">
