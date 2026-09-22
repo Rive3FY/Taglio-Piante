@@ -47,6 +47,17 @@ const EMPTY_DITTE: Ditta[] = [];
 const EMPTY_PREST: Prestazione[] = [];
 const EMPTY_OPERATORI: Operatore[] = [];
 
+/** «Martedì 22 settembre 2026»: mezzogiorno evita che il fuso sposti il giorno. */
+function dataEstesa(iso: string) {
+  const testo = new Date(`${iso}T12:00:00`).toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return testo.charAt(0).toUpperCase() + testo.slice(1);
+}
+
 type Props = {
   existing?: Rapportino;
   /** Se valorizzato, il rapportino parte dalle campate pianificate di quella linea. */
@@ -394,17 +405,18 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     }
   }
 
-  function percorsoDopoBozza(id: string) {
-    if (existing) return "resta" as const;
-    return area === "tecnico" ? `/tecnico/rapportini/${id}` : `/operatore/${id}`;
+  /**
+   * Una bozza porta sempre alla sezione Bozze. Un foglio archiviato torna da dove
+   * si è partiti: elenco campate oppure schermata principale.
+   */
+  function percorsoDopoSalva(bozza: boolean) {
+    if (bozza) return area === "tecnico" ? "/tecnico/fogli?s=bozze" : "/operatore/elenco/bozze";
+    const daElencoCampate =
+      Boolean(precompilatoLineaId || precompilatoCampataId) ||
+      new URLSearchParams(window.location.search).get("da") === "campate";
+    if (daElencoCampate) return area === "tecnico" ? "/tecnico/campate" : "/operatore/campate";
+    return "home" as const;
   }
-
-  const daElencoCampate = Boolean(precompilatoLineaId || precompilatoCampataId);
-  const percorsoDopoCompletato = daElencoCampate
-    ? area === "tecnico"
-      ? "/tecnico/campate"
-      : "/operatore/campate"
-    : ("home" as const);
 
   async function salva() {
     if (!effectiveLineaId) {
@@ -437,12 +449,12 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           ? {
               titolo: "Inviato in bozza",
               testo: "Manca la firma della ditta. Il foglio resta in bozza: senza quella non va in archivio.",
-              dopo: percorsoDopoBozza(saved.id),
+              dopo: percorsoDopoSalva(stato === "bozza"),
             }
           : {
               titolo: "Salvato in bozza",
               testo: "Completa ditta, dipendente TERNA, la firma della ditta e almeno una quantità per archiviarlo.",
-              dopo: percorsoDopoBozza(saved.id),
+              dopo: percorsoDopoSalva(stato === "bozza"),
             },
       );
       return;
@@ -472,7 +484,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
-      dopo: percorsoDopoCompletato,
+      dopo: percorsoDopoSalva(false),
     });
   }
 
@@ -497,7 +509,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     mostraEsito({
       titolo: "Rapportino archiviato",
       testo: "Tutto a posto: foglio firmato e messo in archivio.",
-      dopo: percorsoDopoCompletato,
+      dopo: percorsoDopoSalva(false),
     });
   }
 
@@ -561,6 +573,28 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       }}
     >
       <section className="panel scheda-panel">
+        <label className="data-tendina">
+          <span className="data-tendina-label">Data del lavoro</span>
+          <span className="data-tendina-valore">
+            {dataLavoro ? dataEstesa(dataLavoro) : "Scegli la data"}
+            <span className="data-tendina-freccia" aria-hidden="true">
+              ▾
+            </span>
+          </span>
+          <input
+            type="date"
+            value={dataLavoro}
+            required
+            onChange={(e) => setDataLavoro(e.target.value || todayIso())}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker?.();
+              } catch {
+                // alcuni browser aprono il calendario da soli al tocco
+              }
+            }}
+          />
+        </label>
         <div className="scheda-head">
           <label>
             Codice linea
@@ -725,10 +759,6 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
 
           <section className="panel">
             <div className="scheda-foot">
-              <label>
-                Data
-                <input type="date" value={dataLavoro} onChange={(e) => setDataLavoro(e.target.value)} />
-              </label>
               {squadra ? (
                 <p className="muted" style={{ margin: 0 }}>
                   Personale della ditta — N° operatori:{" "}

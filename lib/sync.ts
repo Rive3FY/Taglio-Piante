@@ -11,6 +11,8 @@ import {
   pullReferenceData,
   pushCampatePending,
   pushRapportino,
+  segnaControlloCompleto,
+  serveControlloCompleto,
   supabaseAutenticato,
 } from "@/lib/supabase/remote";
 import { ripristinaCampateOrfane, unisciCampateDoppie } from "@/lib/campate/apply";
@@ -96,15 +98,20 @@ async function risolviNumeriDuplicati(autenticato: boolean, session: Session | n
   return corretti;
 }
 
-export async function processSyncQueue() {
+/**
+ * Di norma legge dal server solo ciò che è cambiato. `completo` rilegge tutto
+ * (cancellazioni comprese): parte da sé al primo accesso e ogni mezz'ora, oppure
+ * quando si tocca la pillola.
+ */
+export async function processSyncQueue(opts: { completo?: boolean } = {}) {
   if (syncInCorso) return syncInCorso;
-  syncInCorso = eseguiSyncQueue().finally(() => {
+  syncInCorso = eseguiSyncQueue(opts.completo ?? false).finally(() => {
     syncInCorso = null;
   });
   return syncInCorso;
 }
 
-async function eseguiSyncQueue(): Promise<SyncResult> {
+async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> {
   await compattaCodaSync();
 
   const profilo = readSession();
@@ -198,10 +205,12 @@ async function eseguiSyncQueue(): Promise<SyncResult> {
   let pulled = 0;
   let pullError: string | null = null;
   if (autenticato) {
+    const completo = richiestoCompleto || serveControlloCompleto();
     try {
-      await pullReferenceData();
+      await pullReferenceData(completo);
       const rimossi = await pullDeletedRapportini();
-      pulled = (await pullRapportini()) + rimossi;
+      pulled = (await pullRapportini(completo)) + rimossi;
+      if (completo) segnaControlloCompleto();
     } catch (error) {
       pullError =
         error instanceof Error ? error.message.slice(0, 280) : "Lettura dal server non riuscita.";

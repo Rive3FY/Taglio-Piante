@@ -1,10 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { processSyncQueue, purgaRapportiniAltrui, subscribeOnline, voceCodaDiQuestoAccount } from "@/lib/sync";
-import { clearPullCursor } from "@/lib/supabase/remote";
 import { useSession } from "@/lib/SessionContext";
 
 type SyncContextValue = {
@@ -13,7 +12,7 @@ type SyncContextValue = {
   lastError: string | null;
   lastSyncAt: string | null;
   syncing: boolean;
-  syncNow: () => Promise<void>;
+  syncNow: (opts?: { completo?: boolean }) => Promise<void>;
 };
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -36,11 +35,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const queueError = codaMia.find((item) => item.lastError)?.lastError ?? null;
   const lastError = queueError ?? pullError;
 
-  const syncNow = useCallback(async () => {
+  const syncNow = useCallback(async (opts: { completo?: boolean } = {}) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     setSyncing(true);
     try {
-      const result = await processSyncQueue();
+      const result = await processSyncQueue(opts);
       setPullError(result.pullError);
       if (result.processed > 0 || result.pulled > 0 || result.pending === 0) {
         setLastSyncAt(new Date().toISOString());
@@ -56,9 +55,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (navigator.onLine) void syncNow();
     };
     const unsub = subscribeOnline(refresh);
-    const bootTimer = window.setTimeout(() => {
-      if (navigator.onLine) void syncNow();
-    }, 2000);
     const timer = window.setInterval(() => {
       if (navigator.onLine) void syncNow();
     }, 20_000);
@@ -68,7 +64,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisibile);
     return () => {
       unsub();
-      window.clearTimeout(bootTimer);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibile);
     };
@@ -85,11 +80,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(t);
   }, [pending, lastError, online, syncNow]);
 
-  // Dopo il login serve una passata subito, altrimenti i dati arrivano solo al giro successivo.
+  // Una passata sola quando entra un account: la sessione si aggiorna due volte
+  // all'avvio (copia locale, poi conferma online) e non deve ripartire da capo.
+  const ultimoUtente = useRef<string | null>(null);
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      ultimoUtente.current = null;
+      return;
+    }
+    if (ultimoUtente.current === userId) return;
+    ultimoUtente.current = userId;
     void (async () => {
-      clearPullCursor();
       await purgaRapportiniAltrui(session);
       await syncNow();
     })();

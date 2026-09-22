@@ -1,8 +1,7 @@
 import { db } from "@/lib/db";
 import { getSupabase } from "@/lib/supabase/client";
-import { messaggioErroreSupabase } from "@/lib/supabase/remote";
+import { clearPullCursor, messaggioErroreSupabase } from "@/lib/supabase/remote";
 
-const LAST_PULL_KEY = "rt.lastPullAt";
 const DELETE_PAGE = 500;
 
 async function deleteAllRows(tabella: string) {
@@ -55,9 +54,7 @@ export async function resetOperativoPerImport() {
     },
   );
 
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(LAST_PULL_KEY);
-  }
+  clearPullCursor();
 }
 
 /** Toglie solo il piano di un anno: rapportini e gli altri anni restano. */

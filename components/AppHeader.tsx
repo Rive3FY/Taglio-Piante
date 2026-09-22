@@ -6,6 +6,12 @@ import { useSync } from "@/lib/SyncContext";
 import { useSession } from "@/lib/SessionContext";
 import { homeArea, useArea, writeArea } from "@/lib/area";
 
+function iniziali(nome: string) {
+  const parole = nome.trim().split(/\s+/).filter(Boolean);
+  const lettere = parole.length > 1 ? [parole[0][0], parole.at(-1)![0]] : [nome.trim().slice(0, 2)];
+  return lettere.join("").toUpperCase();
+}
+
 export function AppHeader({
   title,
   backHref,
@@ -73,7 +79,7 @@ export function AppHeader({
         <button
           type="button"
           className={pillClass}
-          onClick={() => void syncNow()}
+          onClick={() => void syncNow({ completo: true })}
           title={pillTitle}
         >
           <span className="dot" />
@@ -84,7 +90,10 @@ export function AppHeader({
         </button>
         {session ? (
           <div className="user-chip">
-            <span>
+            <span className="user-avatar" aria-hidden="true">
+              {iniziali(session.nome)}
+            </span>
+            <span className="user-nome">
               {session.nome}
               <small>
                 {session.ruolo === "tecnico" ? "Tecnico" : "Operatore"}
@@ -92,6 +101,7 @@ export function AppHeader({
                 {offline ? " · accesso offline" : ""}
               </small>
             </span>
+            <div className="user-azioni">
             {session.ruolo === "tecnico" ? (
               <button
                 type="button"
@@ -127,6 +137,7 @@ export function AppHeader({
             >
               Esci
             </button>
+            </div>
           </div>
         ) : null}
       </div>

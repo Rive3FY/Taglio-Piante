@@ -20,16 +20,64 @@ import {
   type RapportinoRow,
 } from "./mappers";
 import { SEED_DITTE, SEED_LINEE, SEED_PRESTAZIONI } from "@/lib/seed";
+import { readSession } from "@/lib/session";
 
-const LAST_PULL_KEY = "rt.lastPullAt";
+const CURSOR_PREFIX = "rt.pull.";
+const LEGACY_PULL_KEY = "rt.lastPullAt";
 const SIGNATURE_BUCKET = "firme";
 const PULL_OVERLAP_MS = 5 * 60 * 1000;
 const PULL_PAGE = 1000;
+/**
+ * Il controllo completo (tutte le righe, cancellazioni comprese) costa: si fa al
+ * primo accesso dell'account sul dispositivo e poi ogni tanto. Nel mezzo arriva
+ * solo ciò che è cambiato dall'ultima lettura.
+ */
+const FULL_PULL_EVERY_MS = 30 * 60 * 1000;
 let lastReferencePullAt = 0;
 
+/**
+ * I cursori sono per account e ruolo: un altro utente sullo stesso telefono, o lo
+ * stesso utente promosso a tecnico, vede righe diverse e deve ripartire da zero.
+ */
+function cursorKey(nome: "rapportini" | "campate" | "storico" | "completo") {
+  const profilo = readSession();
+  const chi = profilo ? `${profilo.userId}.${profilo.ruolo}` : "anon";
+  return `${CURSOR_PREFIX}${chi}.${nome}`;
+}
+
+function leggiCursore(nome: Parameters<typeof cursorKey>[0]) {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(cursorKey(nome));
+}
+
+function scriviCursore(nome: Parameters<typeof cursorKey>[0], iso: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(cursorKey(nome), iso);
+}
+
+/** Azzera i cursori di tutti gli account: al prossimo giro si rilegge tutto. */
 export function clearPullCursor() {
   lastReferencePullAt = 0;
-  if (typeof window !== "undefined") localStorage.removeItem(LAST_PULL_KEY);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LEGACY_PULL_KEY);
+  const chiavi: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith(CURSOR_PREFIX)) chiavi.push(k);
+  }
+  for (const k of chiavi) localStorage.removeItem(k);
+}
+
+/** Vero se tocca il controllo completo: primo accesso, dopo 30 minuti o su richiesta. */
+export function serveControlloCompleto() {
+  const ultimo = leggiCursore("completo");
+  if (!ultimo) return true;
+  const t = new Date(ultimo).getTime();
+  return !Number.isFinite(t) || Date.now() - t > FULL_PULL_EVERY_MS;
+}
+
+export function segnaControlloCompleto() {
+  scriviCursore("completo", new Date().toISOString());
 }
 
 function pullCursorWithOverlap(iso: string) {
@@ -308,12 +356,13 @@ export async function pushCampatePending(rapportinoId?: string) {
   }
 }
 
-export async function pullRapportini() {
+export async function pullRapportini(completo = false) {
   const supabase = getSupabase();
   if (!supabase) return 0;
 
-  const lastPull =
-    typeof window !== "undefined" ? localStorage.getItem(LAST_PULL_KEY) : null;
+  // Archivio locale vuoto (dati del browser cancellati): il cursore non vale più.
+  const vuoto = (await db.rapportini.count()) === 0;
+  const lastPull = completo || vuoto ? null : leggiCursore("rapportini");
 
   const rows: RapportinoRow[] = [];
   for (let from = 0; ; from += PULL_PAGE) {
@@ -337,7 +386,17 @@ export async function pullRapportini() {
 
   for (const row of rows) {
     const local = await db.rapportini.get(row.id);
+    newest = maxIso(newest, row.updated_at);
     if (local?.syncStatus === "pending") continue;
+
+    // Stessa versione già in locale, firme comprese: niente da riscaricare.
+    const giaAggiornato =
+      local &&
+      local.syncStatus === "synced" &&
+      new Date(row.updated_at).getTime() <= new Date(local.updatedAt).getTime() &&
+      (!row.firma_operatore_path || Boolean(local.firmaOperatore)) &&
+      (!row.firma_terna_path || Boolean(local.firmaTerna));
+    if (giaAggiornato) continue;
 
     const firmaOperatore = await downloadSignature(row.firma_operatore_path);
     const firmaTerna = await downloadSignature(row.firma_terna_path);
@@ -347,15 +406,12 @@ export async function pullRapportini() {
       await db.rapportini.put(remote);
       merged += 1;
     }
-    newest = maxIso(newest, row.updated_at);
   }
 
-  if (typeof window !== "undefined") {
-    if (newest) {
-      localStorage.setItem(LAST_PULL_KEY, newest);
-    } else if (!lastPull) {
-      localStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
-    }
+  if (newest) {
+    scriviCursore("rapportini", newest);
+  } else if (!lastPull) {
+    scriviCursore("rapportini", new Date().toISOString());
   }
 
   return merged;
@@ -365,9 +421,9 @@ export async function pullDeletedRapportini() {
   const supabase = getSupabase();
   if (!supabase) return 0;
 
-  // Il login azzera rt.lastPullAt: se qui si usciva senza cursore, i fogli già
-  // cancellati sul server restavano per sempre nella copia Dexie del tablet.
-  // Allineamento: ciò che è synced in locale ma non è più vivo sul server si toglie.
+  // Il pull a cursore non vede le cancellazioni: si confrontano gli id vivi sul
+  // server (solo la colonna id, pochi byte) e ciò che è synced in locale ma non
+  // c'è più si toglie.
   const vivi = new Set<string>();
   for (let from = 0; ; from += PULL_PAGE) {
     const { data, error } = await supabase
@@ -410,16 +466,44 @@ async function fetchAllRows(tabella: string) {
   return { data: all, error: null };
 }
 
-export async function pullReferenceData() {
+async function fetchRowsSince(tabella: string, colonna: string, since: string) {
+  const supabase = getSupabase();
+  if (!supabase) return { data: [] as Record<string, unknown>[], error: null as { message: string } | null };
+  const all: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PULL_PAGE) {
+    const { data, error } = await supabase
+      .from(tabella)
+      .select("*")
+      .gte(colonna, since)
+      .order(colonna, { ascending: true })
+      .range(from, from + PULL_PAGE - 1);
+    if (error) return { data: null, error };
+    const rows = (data ?? []) as Record<string, unknown>[];
+    all.push(...rows);
+    if (rows.length < PULL_PAGE) break;
+  }
+  return { data: all, error: null };
+}
+
+function piuRecente(rows: Record<string, unknown>[], colonna: string, attuale: string | null) {
+  let newest = attuale;
+  for (const row of rows) {
+    const v = row[colonna];
+    if (typeof v === "string") newest = maxIso(newest, v);
+  }
+  return newest;
+}
+
+export async function pullReferenceData(completo = false) {
   const supabase = getSupabase();
   if (!supabase) return;
 
   const now = Date.now();
-  const skipAnagrafiche = now - lastReferencePullAt < 5 * 60 * 1000;
+  const skipAnagrafiche = !completo && now - lastReferencePullAt < 5 * 60 * 1000;
   if (!skipAnagrafiche) lastReferencePullAt = now;
 
   if (skipAnagrafiche) {
-    await pullCampateLavoro();
+    await pullCampateLavoro(completo);
     return;
   }
 
@@ -467,16 +551,24 @@ export async function pullReferenceData() {
   if (rimossi.length > 0) await db.operatori.bulkDelete(rimossi);
   if (operatori.length > 0) await db.operatori.bulkPut(operatori);
 
-  await pullCampateLavoro();
+  await pullCampateLavoro(completo);
 }
 
-export async function pullCampateLavoro() {
+export async function pullCampateLavoro(completo = false) {
   const supabase = getSupabase();
   if (!supabase) return;
 
+  const vuoto = (await db.campateLavoro.count()) === 0;
+  const sinceCampate = completo || vuoto ? null : leggiCursore("campate");
+  const sinceStorico = completo || vuoto ? null : leggiCursore("storico");
+
   const [campRes, stoRes, impRes] = await Promise.all([
-    fetchAllRows("campate_lavoro"),
-    fetchAllRows("campate_storico"),
+    sinceCampate
+      ? fetchRowsSince("campate_lavoro", "updated_at", pullCursorWithOverlap(sinceCampate))
+      : fetchAllRows("campate_lavoro"),
+    sinceStorico
+      ? fetchRowsSince("campate_storico", "created_at", pullCursorWithOverlap(sinceStorico))
+      : fetchAllRows("campate_storico"),
     fetchAllRows("import_campate"),
   ]);
 
@@ -489,14 +581,21 @@ export async function pullCampateLavoro() {
   const remote = (campRes.data ?? []).map((row) =>
     rowToCampataLavoro(row as Parameters<typeof rowToCampataLavoro>[0]),
   );
-  if (remote.length > 0) {
+  // Le cancellazioni si vedono solo confrontando l'elenco intero: si fa nel controllo completo.
+  if (!sinceCampate && remote.length > 0) {
     const idsRemoti = new Set(remote.map((c) => c.id));
     const locali = await db.campateLavoro.toArray();
-    const localiById = new Map(locali.map((c) => [c.id, c]));
     const daRimuovere = locali
       .filter((c) => c.syncStatus === "synced" && !idsRemoti.has(c.id) && !tombstones.has(c.id))
       .map((c) => c.id);
     if (daRimuovere.length > 0) await db.campateLavoro.bulkDelete(daRimuovere);
+  }
+  if (remote.length > 0) {
+    const localiById = new Map(
+      (await db.campateLavoro.bulkGet(remote.map((c) => c.id)))
+        .filter((c): c is CampataLavoro => Boolean(c))
+        .map((c) => [c.id, c]),
+    );
 
     const fogliEliminati = await fogliInCancellazione();
     const daScrivere: CampataLavoro[] = [];
@@ -507,6 +606,8 @@ export async function pullCampateLavoro() {
         daScrivere.push(unisciCampataLocaleRemoto(locale, altra, { fogliEliminati }));
         continue;
       }
+      // Riscrivere righe identiche fa ridisegnare elenchi e torte per niente.
+      if (locale && locale.updatedAt === altra.updatedAt && locale.syncStatus === "synced") continue;
       daScrivere.push(altra);
     }
     if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
@@ -522,6 +623,12 @@ export async function pullCampateLavoro() {
       (impRes.data ?? []).map((row) => rowToImportCampate(row as Parameters<typeof rowToImportCampate>[0])),
     );
   }
+
+  const nuovoCursoreCampate = piuRecente(campRes.data ?? [], "updated_at", sinceCampate);
+  const nuovoCursoreStorico = piuRecente(stoRes.data ?? [], "created_at", sinceStorico);
+  const adesso = new Date().toISOString();
+  scriviCursore("campate", nuovoCursoreCampate ?? adesso);
+  scriviCursore("storico", nuovoCursoreStorico ?? adesso);
 }
 
 export async function upsertCatalogoPrestazioni() {

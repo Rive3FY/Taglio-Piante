@@ -184,7 +184,7 @@ export default function ContabilitaPage() {
       : lineeFiltrate.slice(0, ANTEPRIMA_ELENCO);
 
   return (
-    <>
+    <div className="report">
       <div className="elenco-head">
         <div>
           <h2>Contabilità</h2>
@@ -240,6 +240,8 @@ export default function ContabilitaPage() {
         </div>
       </div>
 
+      <div className="report-griglia">
+      <div className="report-col">
       <section className="panel">
         <h2>Report del mese</h2>
         <div className="contab-estrai">
@@ -277,49 +279,6 @@ export default function ContabilitaPage() {
         ) : null}
       </section>
 
-      <h2>Avanzamento campate · piano {annoPianoEff}</h2>
-      {anniCampate.length > 1 ? (
-        <div className="chip-row" style={{ marginBottom: 12 }}>
-          {anniCampate.map((a) => (
-            <button
-              key={a}
-              type="button"
-              className={`chip ${annoPianoEff === a ? "on" : ""}`}
-              onClick={() => setAnnoPiano(a)}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div className="contab-torte">
-        {URGENZE_VISIBILI ? (
-          <TortaAvanzamento
-            key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
-            dati={urgente}
-          />
-        ) : null}
-        <TortaAvanzamento
-          key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.tralasciate}`}
-          dati={differibile}
-        />
-      </div>
-
-      <GraficoBasi
-        key={meseEffettivo}
-        totale={basiMese.totale}
-        perLinea={basiMese.perLinea}
-      />
-      <section className="panel">
-        <h2>Prestazioni sulle basi</h2>
-        <TabellaVoci
-          key={`${meseEffettivo}-basi`}
-          voci={aggregato.vociBasi}
-          vuoto="Nessuna prestazione su fogli basi in questo mese."
-          totaleLabel="Totale basi"
-        />
-      </section>
-
       <section className="panel">
         <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>
         <CalendarioMese
@@ -344,6 +303,46 @@ export default function ContabilitaPage() {
           </div>
         ) : null}
       </section>
+      </div>
+
+      <div className="report-col">
+      <section className="panel">
+        <h2>Avanzamento campate · piano {annoPianoEff}</h2>
+        {anniCampate.length > 1 ? (
+          <div className="chip-row">
+            {anniCampate.map((a) => (
+              <button
+                key={a}
+                type="button"
+                className={`chip ${annoPianoEff === a ? "on" : ""}`}
+                onClick={() => setAnnoPiano(a)}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="contab-torte">
+          {URGENZE_VISIBILI ? (
+            <TortaAvanzamento
+              key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
+              dati={urgente}
+            />
+          ) : null}
+          <TortaAvanzamento
+            key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.tralasciate}`}
+            dati={differibile}
+          />
+        </div>
+      </section>
+
+      <GraficoBasi
+        key={meseEffettivo}
+        totale={basiMese.totale}
+        perLinea={basiMese.perLinea}
+      />
+      </div>
+      </div>
 
       <section className="panel">
         <h2>Prestazioni del mese</h2>
@@ -352,6 +351,16 @@ export default function ContabilitaPage() {
           voci={aggregato.voci}
           vuoto="Nessuna quantità di campate in questo mese."
           totaleLabel="Totale campate"
+        />
+      </section>
+
+      <section className="panel">
+        <h2>Prestazioni sulle basi</h2>
+        <TabellaVoci
+          key={`${meseEffettivo}-basi`}
+          voci={aggregato.vociBasi}
+          vuoto="Nessuna prestazione su fogli basi in questo mese."
+          totaleLabel="Totale basi"
         />
       </section>
 
@@ -476,6 +485,6 @@ export default function ContabilitaPage() {
           </div>
         )}
       </section>
-    </>
+    </div>
   );
 }

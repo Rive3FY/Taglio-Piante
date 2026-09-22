@@ -54,7 +54,7 @@ export function haChiamataBase(item: Pick<Rapportino, "righe">, prestazioni: Pre
 export function numeriDaTestoCampata(testo: string) {
   const visti = new Set<string>();
   const out: string[] = [];
-  for (const pezzo of testo.split(/[,;/|\n]+/)) {
+  for (const pezzo of spezzaCampateTesto(testo)) {
     for (const n of numeriDiPezzo(pezzo)) {
       if (visti.has(n)) continue;
       visti.add(n);
@@ -68,8 +68,8 @@ function numeriDiPezzo(pezzo: string) {
   const pulito = pezzo.trim().replace(/–/g, "-").replace(/\s+/g, "");
   if (!pulito) return [];
   const parti = pulito.split("-").filter(Boolean);
-  if (parti.length === 0 || !parti.every((p) => /^\d+$/.test(p))) return [];
-  return parti.map((p) => String(Number(p)));
+  if (parti.length === 0 || !parti.every((p) => /^\d+(\/[a-z]{1,2})?$/i.test(p))) return [];
+  return parti.map((p) => (p.includes("/") ? normalizzaCampata(p) : String(Number(p))));
 }
 
 /**

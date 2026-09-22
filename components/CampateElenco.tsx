@@ -965,7 +965,8 @@ export function CampateElenco({
 
 function hrefRapportino(ruolo: "tecnico" | "operatore", c: CampataLavoro) {
   if (c.rapportinoId) {
-    return ruolo === "tecnico" ? `/tecnico/rapportini/${c.rapportinoId}` : `/operatore/${c.rapportinoId}`;
+    const base = ruolo === "tecnico" ? `/tecnico/rapportini/${c.rapportinoId}` : `/operatore/${c.rapportinoId}`;
+    return `${base}?da=campate`;
   }
   return hrefNuovoRapportino(ruolo, c);
 }

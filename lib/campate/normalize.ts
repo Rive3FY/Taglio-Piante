@@ -11,6 +11,9 @@ export function normalizzaCampata(valore: string) {
   const intervallo = pulito.match(/^(\d+)\s*-\s*(\d+)$/);
   if (intervallo) return String(Number(intervallo[2]));
 
+  const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z]{1,2})$/i);
+  if (conLettera) return `${Number(conLettera[1])}/${conLettera[2].toUpperCase()}`;
+
   const soloCifre = pulito.replace(/\s/g, "");
   if (/^\d+$/.test(soloCifre)) return String(Number(soloCifre));
 
@@ -48,11 +51,16 @@ export function idCampataLavoro(
   return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
-/** Spezza il campo libero del rapportino: 22, 23 / 54 oppure 78\2 80. */
+/** La barra davanti a una lettera fa parte del numero: 17/A è un sostegno solo. */
+const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z]{1,2})(?![a-z0-9])/gi;
+const BARRA_PROTETTA = "\u0001";
+
+/** Spezza il campo libero del rapportino: 22, 23 / 54, 17/A oppure 78\2 80. */
 export function spezzaCampateTesto(testo: string) {
   return testo
+    .replace(SOSTEGNO_CON_LETTERA, (_, n: string, l: string) => `${n}${BARRA_PROTETTA}${l}`)
     .split(/[,;/|\n]+/)
-    .map((p) => p.trim())
+    .map((p) => p.split(BARRA_PROTETTA).join("/").trim())
     .filter(Boolean);
 }
 

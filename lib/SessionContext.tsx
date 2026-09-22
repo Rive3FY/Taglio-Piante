@@ -5,7 +5,6 @@ import type { Session as SupabaseSession } from "@supabase/supabase-js";
 import type { Ruolo, Session } from "@/lib/types";
 import { clearSession, readSession, writeSession } from "@/lib/session";
 import { ensureSeeded } from "@/lib/db";
-import { clearPullCursor } from "@/lib/supabase/remote";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type SessionContextValue = {
@@ -212,7 +211,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const supabase = getSupabase();
     clearSession();
-    clearPullCursor();
     setSessionState(null);
     setOffline(false);
     if (supabase) {
