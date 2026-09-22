@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/SessionContext";
-import { useSync } from "@/lib/SyncContext";
 import { useArea } from "@/lib/area";
-import { applicaSquadraAiRapportini, readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { readSquadra, writeSquadra, type PrefsSquadra } from "@/lib/squadra";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 
 export function SquadraDialog() {
   const { session } = useSession();
-  const { syncNow } = useSync();
   const area = useArea();
   const inCampo = Boolean(session) && area === "operatore";
   const [aperto, setAperto] = useState(false);
@@ -60,13 +58,12 @@ export function SquadraDialog() {
     setErrore(null);
     try {
       const prefs: PrefsSquadra = { rappresentanteDitta: nome, nOperatori: Math.round(n) };
-      await applicaSquadraAiRapportini(sessione, prefs);
-      void syncNow();
+      writeSquadra(sessione.userId, prefs);
       setAperto(false);
       setForzato(false);
       mostraEsito({
         titolo: "Squadra aggiornata",
-        testo: "Sig. e numero operatori sono impostati per i rapportini di oggi.",
+        testo: "Sig. e numero operatori valgono per i prossimi rapportini. Quelli già salvati restano come sono.",
         dopo: "resta",
       });
     } finally {
@@ -87,8 +84,8 @@ export function SquadraDialog() {
       >
         <h2 id="squadra-titolo">Squadra di oggi</h2>
         <p className="muted">
-          Sig. e numero operatori vanno su tutti i rapportini che compilerai. Se confermi, gli stessi
-          dati vengono riportati anche sui rapportini già salvati.
+          Sig. e numero operatori vanno sui prossimi rapportini che compilerai. Quelli già salvati,
+          bozze comprese, non vengono modificati.
         </p>
         <label>
           Sig. — rappresentante della ditta

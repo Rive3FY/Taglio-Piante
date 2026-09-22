@@ -1,7 +1,7 @@
-import { db, enqueueSync } from "@/lib/db";
-import { rapportinoVisibile } from "@/lib/sezioni";
-import { rapportinoEChiuso, type Session } from "@/lib/types";
-
+/**
+ * Squadra del giorno: vale per i rapportini nuovi. Quelli già salvati tengono
+ * Sig. e numero operatori con cui sono stati compilati.
+ */
 export type PrefsSquadra = {
   rappresentanteDitta: string;
   nOperatori: number;
@@ -33,22 +33,3 @@ export function writeSquadra(userId: string, prefs: PrefsSquadra) {
   }
 }
 
-/** Aggiorna Sig. e n. operatori sui rapportini di questo account, mai su quelli altrui. */
-export async function applicaSquadraAiRapportini(session: Session, prefs: PrefsSquadra) {
-  writeSquadra(session.userId, prefs);
-  const tutti = await db.rapportini.toArray();
-  const miei = tutti.filter((r) => rapportinoVisibile(r, session, "operatore"));
-  const now = new Date().toISOString();
-  for (const r of miei) {
-    await db.rapportini.update(r.id, {
-      rappresentanteDitta: prefs.rappresentanteDitta,
-      nOperatori: prefs.nOperatori,
-      updatedAt: now,
-      syncStatus: "pending",
-    });
-    await enqueueSync(
-      r.id,
-      rapportinoEChiuso(r.stato) ? "archive" : "upsert",
-    );
-  }
-}
