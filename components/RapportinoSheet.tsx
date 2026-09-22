@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
 import { downloadOfficialScheda } from "@/lib/fillScheda";
 import { officialSchedaPagine } from "@/lib/renderScheda";
@@ -31,10 +31,13 @@ export function RapportinoSheet({
   item,
   linea,
   prestazioni,
+  azioni,
 }: {
   item: Rapportino;
   linea?: Linea;
   prestazioni: Prestazione[];
+  /** Bottoni della finestra (Firma ditta, Chiudi): stanno sulla stessa barra del download. */
+  azioni?: ReactNode;
 }) {
   const [pagine, setPagine] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -82,6 +85,7 @@ export function RapportinoSheet({
         <button type="button" className="btn btn-primary" onClick={() => void download()} disabled={busy}>
           {busy ? "Preparazione PDF…" : "Download foglio ufficiale"}
         </button>
+        {azioni ? <div className="sheet-toolbar-azioni">{azioni}</div> : null}
       </div>
       {error ? <p className="form-error">{error}</p> : null}
       {pagine.length === 0 && !error ? <p className="muted">Preparazione anteprima…</p> : null}

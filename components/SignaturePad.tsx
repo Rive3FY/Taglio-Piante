@@ -71,11 +71,11 @@ export function SignaturePad({ value, onChange, label, hint }: Props) {
       <div className="sign-head">
         <div>
           <div className="sign-label">{label}</div>
-          <div className="muted">
-            {aperto
-              ? (hint ?? "Firma con S Pen, dito o mouse. Il tratto resta sul dispositivo.")
-              : "Tocca Firma per abilitare il riquadro: così scorrendo la pagina non si sporca."}
-          </div>
+          {aperto ? (
+            <div className="muted">
+              {hint ?? "Firma con S Pen, dito o mouse. Il tratto resta sul dispositivo."}
+            </div>
+          ) : null}
         </div>
         <button
           type="button"

@@ -398,24 +398,30 @@ export function ArchivioPerLinea({
               aria-modal="true"
               aria-label={`Rapportino ${preview.numero}`}
             >
-              <div className="scheda-overlay-bar">
-                {haFirmaDitta(preview.firmaOperatore) ? null : (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setFirmaId(preview.id);
-                      setPreviewId(null);
-                    }}
-                  >
-                    Firma ditta
-                  </button>
-                )}
-                <button type="button" className="btn btn-secondary" onClick={chiudiPreview}>
-                  Chiudi
-                </button>
-              </div>
-              <RapportinoSheet item={preview} linea={previewLinea} prestazioni={prestazioni} />
+              <RapportinoSheet
+                item={preview}
+                linea={previewLinea}
+                prestazioni={prestazioni}
+                azioni={
+                  <>
+                    {haFirmaDitta(preview.firmaOperatore) ? null : (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setFirmaId(preview.id);
+                          setPreviewId(null);
+                        }}
+                      >
+                        Firma ditta
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-secondary" onClick={chiudiPreview}>
+                      Chiudi
+                    </button>
+                  </>
+                }
+              />
             </div>,
             document.body,
           )
