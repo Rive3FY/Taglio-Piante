@@ -34,6 +34,7 @@ export async function resetOperativoPerImport() {
     "rw",
     [
       db.rapportini,
+      db.firme,
       db.campateLavoro,
       db.campateStorico,
       db.importCampate,
@@ -44,6 +45,7 @@ export async function resetOperativoPerImport() {
     ],
     async () => {
       await db.rapportini.clear();
+      await db.firme.clear();
       await db.campateLavoro.clear();
       await db.campateStorico.clear();
       await db.importCampate.clear();

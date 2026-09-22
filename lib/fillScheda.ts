@@ -2,6 +2,7 @@
 
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { Linea, Prestazione, Rapportino } from "./types";
+import { conFirme } from "./db";
 import { mostraTestoCampate } from "@/lib/campate/normalize";
 import { scaricaBlob } from "./download";
 import {
@@ -255,10 +256,11 @@ export async function fillOfficialScheda(opts: {
   linea?: Linea;
   prestazioni?: Prestazione[] | null;
 }) {
-  const { item, linea } = opts;
+  const { linea } = opts;
   const prestazioni = asArray(opts.prestazioni);
 
   try {
+    const item = await conFirme(opts.item);
     const pdf = await PDFDocument.load(await loadTemplateBytes());
     const page = pdf.getPages()[0];
     if (!page) throw new Error("Il foglio ufficiale non contiene pagine.");

@@ -2,7 +2,7 @@
 
 import { use, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { db, getRapportinoCompleto } from "@/lib/db";
 import { RapportinoForm } from "@/components/RapportinoForm";
 import { RapportinoSheet } from "@/components/RapportinoSheet";
 import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
@@ -17,7 +17,7 @@ export default function TecnicoRapportinoPage({
 }) {
   const { id } = use(params);
   const { syncNow } = useSync();
-  const item = useLiveQuery(() => db.rapportini.get(id), [id]);
+  const item = useLiveQuery(() => getRapportinoCompleto(id), [id]);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
 

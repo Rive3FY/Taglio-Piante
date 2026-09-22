@@ -1,4 +1,4 @@
-import { db, enqueueSync } from "@/lib/db";
+import { db, enqueueSync, salvaRapportino } from "@/lib/db";
 import { rapportinoEChiuso, type Rapportino, type Session } from "@/lib/types";
 
 export function rapportinoProntoPerArchivio(item: Pick<Rapportino, "dipendenteTerna" | "ditta" | "righe">) {
@@ -29,7 +29,7 @@ export async function riportaInBozzaSeMancaFirma(item: Rapportino) {
     updatedAt: new Date().toISOString(),
     syncStatus: "pending",
   };
-  await db.rapportini.put(next);
+  await salvaRapportino(next);
   await enqueueSync(next.id, "upsert");
   return next;
 }
@@ -53,7 +53,7 @@ export async function applicaFirmaDitta(
     updatedAt: now,
     syncStatus: "pending",
   };
-  await db.rapportini.put(next);
+  await salvaRapportino(next);
   await enqueueSync(next.id, pronto ? "archive" : "upsert");
   if (session && rapportinoEChiuso(next.stato)) {
     const { applicaEsitiDaRapportino } = await import("./campate/apply");

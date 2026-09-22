@@ -1,9 +1,10 @@
-import { compattaCodaSync, db, enqueueSync, nextNumero } from "@/lib/db";
+import { compattaCodaSync, db, eliminaFirme, enqueueSync, nextNumero } from "@/lib/db";
 import { rapportinoVisibile } from "@/lib/sezioni";
 import { readSession } from "@/lib/session";
 import type { Rapportino, Session, SyncQueueItem } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import {
+  compattaNumeri,
   deleteRemoteRapportino,
   idsConNumero,
   pullDeletedRapportini,
@@ -164,6 +165,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   const falliti = new Set<string>();
   const saltati = new Set<string>();
   let processed = 0;
+  let cancellati = 0;
 
   while (true) {
     const items = (await db.syncQueue.orderBy("createdAt").toArray()).filter(
@@ -181,6 +183,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
           if (item.action === "delete") {
             await deleteRemoteRapportino(item.rapportinoId);
             await pushCampatePending(item.rapportinoId);
+            cancellati += 1;
           } else if (item.action === "campate") {
             await pushCampatePending(item.rapportinoId);
           } else {
@@ -189,6 +192,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
               await deleteRemoteRapportino(item.rapportinoId);
               await db.syncQueue.delete(item.id);
               processed += 1;
+              cancellati += 1;
               continue;
             }
             await pushRapportino(rapportino);
@@ -216,6 +220,9 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
       }
     }
   }
+
+  // I successivi scalano di uno: il pull subito dopo porta i numeri nuovi su questo dispositivo.
+  if (autenticato && cancellati > 0) await compattaNumeri();
 
   const completo = richiestoCompleto || serveControlloCompleto();
 
@@ -285,7 +292,10 @@ export async function purgaRapportiniAltrui(session: Session | null) {
       .primaryKeys()
   ).map(String);
 
-  if (daRimuovere.length > 0) await db.rapportini.bulkDelete(daRimuovere);
+  if (daRimuovere.length > 0) {
+    await db.rapportini.bulkDelete(daRimuovere);
+    await eliminaFirme(daRimuovere);
+  }
   return daRimuovere.length;
 }
 

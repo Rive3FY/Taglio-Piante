@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, enqueueSync, nextNumero } from "@/lib/db";
+import { db, enqueueSync, nextNumero, salvaRapportino } from "@/lib/db";
 import { formatDate, todayIso, uid } from "@/lib/format";
 import { RapportinoSheet } from "./RapportinoSheet";
 import { matchOperatore } from "@/lib/operatori";
@@ -385,7 +385,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         inviatoAt: extra.inviatoAt ?? existing?.inviatoAt,
         archiviatoAt: stato === "bozza" ? undefined : extra.archiviatoAt ?? existing?.archiviatoAt,
       };
-      await db.rapportini.put(record);
+      await salvaRapportino(record);
       await enqueueSync(
         id,
         extra.archiviatoAt ? "archive" : extra.inviatoAt ? "submit" : extra.presoAt ? "take" : "upsert",
@@ -853,12 +853,16 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               aria-modal="true"
               aria-label="Foglio ufficiale"
             >
-              <div className="scheda-overlay-bar">
-                <button type="button" className="btn btn-secondary" onClick={() => setPreview(null)}>
-                  Chiudi
-                </button>
-              </div>
-              <RapportinoSheet item={preview} linea={linea} prestazioni={prestazioni} />
+              <RapportinoSheet
+                item={preview}
+                linea={linea}
+                prestazioni={prestazioni}
+                azioni={
+                  <button type="button" className="btn btn-secondary" onClick={() => setPreview(null)}>
+                    Chiudi
+                  </button>
+                }
+              />
             </div>,
             document.body,
           )

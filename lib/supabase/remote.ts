@@ -1,5 +1,12 @@
 import { unisciCampataLocaleRemoto } from "@/lib/campate/merge";
-import { db } from "@/lib/db";
+import {
+  conFirme,
+  db,
+  eliminaFirme,
+  FIRMA_SEPARATA,
+  salvaRapportino,
+  segnaPercorsiFirme,
+} from "@/lib/db";
 import type { CampataLavoro, Rapportino } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
@@ -178,7 +185,9 @@ function dataUrlToBlob(dataUrl: string) {
 async function uploadSignature(rapportinoId: string, kind: "operatore" | "terna", dataUrl?: string) {
   const supabase = getSupabase();
   if (!supabase || !dataUrl?.startsWith("data:image")) return undefined;
-  const path = `${rapportinoId}/${kind}.png`;
+  if (dataUrl === FIRMA_SEPARATA) throw new Error("Firma non caricata: invio rimandato.");
+  // Nome nuovo a ogni firma: se il percorso non cambia, anche l'immagine è la stessa.
+  const path = `${rapportinoId}/${kind}-${Date.now()}.png`;
   const blob = dataUrlToBlob(dataUrl);
   const { error } = await supabase.storage.from(SIGNATURE_BUCKET).upload(path, blob, {
     upsert: true,
@@ -216,8 +225,19 @@ export async function pushRapportino(item: Rapportino) {
   } = await supabase.auth.getSession();
   const authUid = authSession?.user?.id;
 
-  const firmaOperatorePath = await uploadSignature(item.id, "operatore", item.firmaOperatore);
-  const firmaTernaPath = await uploadSignature(item.id, "terna", item.firmaTerna);
+  const conImmagini = await conFirme(item, { obbligatorie: true });
+  const giaInviate = await db.firme.get(item.id);
+  const firmaOperatorePath =
+    giaInviate?.operatorePath && conImmagini.firmaOperatore === giaInviate.operatore
+      ? giaInviate.operatorePath
+      : await uploadSignature(item.id, "operatore", conImmagini.firmaOperatore);
+  const firmaTernaPath =
+    giaInviate?.ternaPath && conImmagini.firmaTerna === giaInviate.terna
+      ? giaInviate.ternaPath
+      : await uploadSignature(item.id, "terna", conImmagini.firmaTerna);
+  if (giaInviate) {
+    await segnaPercorsiFirme(item.id, { operatorePath: firmaOperatorePath, ternaPath: firmaTernaPath });
+  }
 
   const row = rapportinoToRow(item, {
     firmaOperatore: firmaOperatorePath,
@@ -235,7 +255,30 @@ export async function pushRapportino(item: Rapportino) {
   await upsertOmettendoColonneMancanti("rapportini", [
     { ...row, owner_id, deleted_at: null, updated_at: now } as Record<string, unknown>,
   ]);
-  await db.rapportini.update(item.id, { updatedAt: now });
+  // Il numero di un foglio già presente lo tiene il server (può averlo rinumerato).
+  const { data: salvato } = await supabase
+    .from("rapportini")
+    .select("numero")
+    .eq("id", item.id)
+    .maybeSingle();
+  const numero = (salvato as { numero?: string } | null)?.numero;
+  await db.rapportini.update(item.id, {
+    updatedAt: now,
+    ...(numero && numero !== item.numero ? { numero } : {}),
+  });
+}
+
+/** Chiude i buchi di numerazione lasciati dai rapportini cancellati. */
+export async function compattaNumeri() {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const { data, error } = await supabase.rpc("compatta_numeri");
+  if (error) {
+    // Funzione non ancora installata sul database: la numerazione resta com'è.
+    console.warn("Rinumerazione non riuscita:", error.message);
+    return 0;
+  }
+  return Number(data ?? 0);
 }
 
 export async function deleteRemoteRapportino(id: string) {
@@ -477,12 +520,24 @@ export async function pullRapportini(completo = false, vivi?: Map<string, string
       (!row.firma_terna_path || Boolean(local.firmaTerna));
     if (giaAggiornato) continue;
 
-    const firmaOperatore = await downloadSignature(row.firma_operatore_path);
-    const firmaTerna = await downloadSignature(row.firma_terna_path);
+    // Stesso file sul server dell'immagine già qui (es. foglio solo rinumerato): niente download.
+    const firmeLocali = local ? await db.firme.get(row.id) : undefined;
+    const firmaOperatore =
+      row.firma_operatore_path && firmeLocali?.operatorePath === row.firma_operatore_path
+        ? firmeLocali.operatore
+        : await downloadSignature(row.firma_operatore_path);
+    const firmaTerna =
+      row.firma_terna_path && firmeLocali?.ternaPath === row.firma_terna_path
+        ? firmeLocali.terna
+        : await downloadSignature(row.firma_terna_path);
     const remote = rowToRapportino(row, { firmaOperatore, firmaTerna });
 
     if (!local || new Date(remote.updatedAt) >= new Date(local.updatedAt)) {
-      await db.rapportini.put(remote);
+      await salvaRapportino(remote);
+      await segnaPercorsiFirme(row.id, {
+        operatorePath: firmaOperatore ? row.firma_operatore_path ?? undefined : undefined,
+        ternaPath: firmaTerna ? row.firma_terna_path ?? undefined : undefined,
+      });
       merged += 1;
     }
   }
@@ -508,6 +563,7 @@ export async function pullDeletedRapportini(vivi: Map<string, string>) {
   const daTogliere = tutti.filter((id) => !nonInviati.has(id) && !vivi.has(id));
   if (daTogliere.length === 0) return 0;
   await db.rapportini.bulkDelete(daTogliere);
+  await eliminaFirme(daTogliere);
   return daTogliere.length;
 }
 
@@ -787,7 +843,11 @@ export async function fetchNextNumero() {
 export async function idsConNumero(numero: string) {
   const supabase = getSupabase();
   if (!supabase || !numero) return [];
-  const { data, error } = await supabase.from("rapportini").select("id").eq("numero", numero);
+  const { data, error } = await supabase
+    .from("rapportini")
+    .select("id")
+    .eq("numero", numero)
+    .is("deleted_at", null);
   if (error) throw new Error(messaggioErroreSupabase(error.message));
   return (data ?? []).map((row) => String((row as { id: string }).id));
 }

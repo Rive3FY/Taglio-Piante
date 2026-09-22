@@ -3,7 +3,7 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, enqueueSync } from "@/lib/db";
+import { db, enqueueSync, getRapportinoCompleto } from "@/lib/db";
 import { useSync } from "@/lib/SyncContext";
 import { RapportinoForm } from "@/components/RapportinoForm";
 import { RapportinoSheet } from "@/components/RapportinoSheet";
@@ -22,7 +22,7 @@ export default function OperatoreRapportinoPage({
   const router = useRouter();
   const { session } = useSession();
   const { syncNow } = useSync();
-  const item = useLiveQuery(() => db.rapportini.get(id), [id]);
+  const item = useLiveQuery(() => getRapportinoCompleto(id), [id]);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { conFirme, db, FIRMA_SEPARATA } from "@/lib/db";
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { applicaFirmaDitta, haFirmaDitta } from "@/lib/rapportinoFirma";
@@ -32,7 +32,19 @@ export function FirmaDittaOverlay({
   const { session } = useSession();
   const { syncNow } = useSync();
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
-  const [firma, setFirma] = useState<string | undefined>(item.firmaOperatore);
+  const [firma, setFirma] = useState<string | undefined>(
+    item.firmaOperatore === FIRMA_SEPARATA ? undefined : item.firmaOperatore,
+  );
+  useEffect(() => {
+    if (item.firmaOperatore !== FIRMA_SEPARATA) return;
+    let annullato = false;
+    void conFirme(item).then((completo) => {
+      if (!annullato && completo.firmaOperatore !== FIRMA_SEPARATA) setFirma(completo.firmaOperatore);
+    });
+    return () => {
+      annullato = true;
+    };
+  }, [item]);
   const [busy, setBusy] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [domanda, setDomanda] = useState<CampataDaChiudere[] | null>(null);
@@ -99,12 +111,16 @@ export function FirmaDittaOverlay({
       aria-modal="true"
       aria-label={`Firma ditta ${item.numero}`}
     >
-      <div className="scheda-overlay-bar">
-        <button type="button" className="btn btn-secondary" onClick={onChiudi}>
-          Chiudi
-        </button>
-      </div>
-      <RapportinoSheet item={item} linea={linea} prestazioni={prestazioni} />
+      <RapportinoSheet
+        item={item}
+        linea={linea}
+        prestazioni={prestazioni}
+        azioni={
+          <button type="button" className="btn btn-secondary" onClick={onChiudi}>
+            Chiudi
+          </button>
+        }
+      />
       <div className="firma-ditta-dock">
         <SignaturePad
           label="Il Designato Ditta"

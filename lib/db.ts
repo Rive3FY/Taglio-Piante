@@ -24,7 +24,27 @@ import {
 } from "./seed";
 import { supabaseReady } from "./supabase/remote";
 
+/**
+ * Segno lasciato nel rapportino al posto dell'immagine: vale come «firmato» per
+ * elenchi e controlli, l'immagine vera sta in `firme` e si legge solo quando serve.
+ */
+export const FIRMA_SEPARATA = "data:image/png;rif,";
+
+/** `*Path`: file sul server che corrisponde all'immagine locale, per non riscaricarla né reinviarla. */
+export type FirmeRapportino = {
+  id: string;
+  operatore?: string;
+  terna?: string;
+  operatorePath?: string;
+  ternaPath?: string;
+};
+
+function eImmagineFirma(v: unknown): v is string {
+  return typeof v === "string" && v.startsWith("data:image/") && v !== FIRMA_SEPARATA;
+}
+
 class RapportiniDB extends Dexie {
+  firme!: EntityTable<FirmeRapportino, "id">;
   linee!: EntityTable<Linea, "id">;
   campate!: EntityTable<Campata, "id">;
   operatoriTerna!: EntityTable<OperatoreTerna, "id">;
@@ -320,7 +340,121 @@ class RapportiniDB extends Dexie {
       campateDeleteQueue: "id",
       syncQueue: "id, rapportinoId, createdAt",
     });
+    this.version(19)
+      .stores({
+        linee: "id, codice, nome",
+        campate: "id, lineaId, codice, tipo",
+        operatoriTerna: "id, matricola",
+        operatori: "id, nome, email",
+        ditte: "id, ragioneSociale",
+        prestazioni: "id, codice",
+        rapportini: "id, numero, lineaId, stato, syncStatus, dataLavoro, updatedAt",
+        campateLavoro:
+          "id, lineaId, codiceLinea, normalizzata, stato, priorita, origine, tipo, anno, rinvioMese, rapportinoId, updatedAt",
+        campateStorico: "id, campataId, createdAt",
+        importCampate: "id, createdAt, anno",
+        campateDeleteQueue: "id",
+        syncQueue: "id, rapportinoId, createdAt",
+        firme: "id",
+      })
+      .upgrade(async (tx) => {
+        const tutti = (await tx.table("rapportini").toArray()) as Rapportino[];
+        const firme: FirmeRapportino[] = [];
+        const alleggeriti: Rapportino[] = [];
+        for (const r of tutti) {
+          const operatore = eImmagineFirma(r.firmaOperatore) ? r.firmaOperatore : undefined;
+          const terna = eImmagineFirma(r.firmaTerna) ? r.firmaTerna : undefined;
+          if (!operatore && !terna) continue;
+          firme.push({ id: r.id, operatore, terna });
+          alleggeriti.push({
+            ...r,
+            firmaOperatore: operatore ? FIRMA_SEPARATA : r.firmaOperatore,
+            firmaTerna: terna ? FIRMA_SEPARATA : r.firmaTerna,
+          });
+        }
+        if (firme.length > 0) await tx.table("firme").bulkPut(firme);
+        if (alleggeriti.length > 0) await tx.table("rapportini").bulkPut(alleggeriti);
+      });
   }
+}
+
+/**
+ * Scrive i rapportini tenendo le immagini delle firme fuori dal record. Se arriva
+ * il segno `FIRMA_SEPARATA` la firma già salvata resta com'è.
+ */
+export async function salvaRapportini(items: Rapportino[]) {
+  if (items.length === 0) return;
+  await db.transaction("rw", [db.rapportini, db.firme], async () => {
+    const attuali = await db.firme.bulkGet(items.map((r) => r.id));
+    const firme: FirmeRapportino[] = [];
+    const senza: string[] = [];
+    const record = items.map((r, i) => {
+      const prima = attuali[i];
+      const operatore = r.firmaOperatore === FIRMA_SEPARATA ? prima?.operatore : r.firmaOperatore;
+      const terna = r.firmaTerna === FIRMA_SEPARATA ? prima?.terna : r.firmaTerna;
+      const opImg = eImmagineFirma(operatore) ? operatore : undefined;
+      const teImg = eImmagineFirma(terna) ? terna : undefined;
+      if (opImg || teImg) {
+        firme.push({
+          id: r.id,
+          operatore: opImg,
+          terna: teImg,
+          operatorePath: opImg && opImg === prima?.operatore ? prima.operatorePath : undefined,
+          ternaPath: teImg && teImg === prima?.terna ? prima.ternaPath : undefined,
+        });
+      }
+      else if (prima) senza.push(r.id);
+      return {
+        ...r,
+        firmaOperatore: opImg ? FIRMA_SEPARATA : operatore,
+        firmaTerna: teImg ? FIRMA_SEPARATA : terna,
+      };
+    });
+    await db.rapportini.bulkPut(record);
+    if (firme.length > 0) await db.firme.bulkPut(firme);
+    if (senza.length > 0) await db.firme.bulkDelete(senza);
+  });
+}
+
+export function salvaRapportino(item: Rapportino) {
+  return salvaRapportini([item]);
+}
+
+/**
+ * Rimette le immagini delle firme nel foglio: serve al form, al PDF e all'invio.
+ * Una firma introvabile resta segnata (il foglio non deve tornare «senza firma»);
+ * con `obbligatorie` blocca invece di proseguire.
+ */
+export async function conFirme<T extends Rapportino>(item: T, opts: { obbligatorie?: boolean } = {}): Promise<T> {
+  const op = item.firmaOperatore === FIRMA_SEPARATA;
+  const te = item.firmaTerna === FIRMA_SEPARATA;
+  if (!op && !te) return item;
+  const f = await db.firme.get(item.id);
+  if (opts.obbligatorie && ((op && !f?.operatore) || (te && !f?.terna))) {
+    throw new Error("Firma del foglio non trovata sul dispositivo: riaprilo e firma di nuovo.");
+  }
+  return {
+    ...item,
+    firmaOperatore: op ? (f?.operatore ?? item.firmaOperatore) : item.firmaOperatore,
+    firmaTerna: te ? (f?.terna ?? item.firmaTerna) : item.firmaTerna,
+  };
+}
+
+/** Il foglio singolo, con le immagini delle firme: per le pagine che lo aprono. */
+export async function getRapportinoCompleto(id: string) {
+  const item = await db.rapportini.get(id);
+  return item ? conFirme(item) : item;
+}
+
+export async function segnaPercorsiFirme(
+  id: string,
+  percorsi: { operatorePath?: string; ternaPath?: string },
+) {
+  await db.firme.update(id, percorsi);
+}
+
+export async function eliminaFirme(ids: string[]) {
+  if (ids.length > 0) await db.firme.bulkDelete(ids);
 }
 
 async function allineaPrestazioniTabella(table: {
@@ -480,12 +614,13 @@ export async function deleteRapportino(id: string) {
   const item = await db.rapportini.get(id);
   await annullaEsitiDaRapportino(id, item, false);
   await enqueueSync(id, "delete");
-  await db.transaction("rw", [db.rapportini, db.syncQueue], async () => {
+  await db.transaction("rw", [db.rapportini, db.syncQueue, db.firme], async () => {
     const pending = await db.syncQueue.where("rapportinoId").equals(id).toArray();
     for (const queueItem of pending) {
       if (queueItem.action !== "delete") await db.syncQueue.delete(queueItem.id);
     }
     await db.rapportini.delete(id);
+    await db.firme.delete(id);
   });
 }
 
