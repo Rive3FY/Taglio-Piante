@@ -21,7 +21,8 @@ import { PRIORITA_VISIBILI, URGENZE_VISIBILI, soloCampateVisibili } from "@/lib/
 import { useSession } from "@/lib/SessionContext";
 import { useSync } from "@/lib/SyncContext";
 import { FiltroGruppo } from "./FiltroGruppo";
-import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, type Periodo } from "./FiltroPeriodo";
+import { FiltroPeriodo, PERIODO_VUOTO, nelPeriodo, periodoAttivo, type Periodo } from "./FiltroPeriodo";
+import { PannelloFiltri, type FiltroAttivo } from "./PannelloFiltri";
 import { PopupRinvio } from "./PopupRinvio";
 import { PopupNuovaCampata } from "./PopupNuovaCampata";
 import { LinkMaps } from "./LinkMaps";
@@ -358,6 +359,86 @@ export function CampateElenco({
     return [...set].sort((a, b) => a - b);
   }, [delPiano]);
 
+  const filtriAttivi: FiltroAttivo[] = [];
+  const annoDiPartenza = soloRinvii ? null : (anni[0] ?? null);
+  if (annoEffettivo !== annoDiPartenza) {
+    filtriAttivi.push({
+      id: "anno",
+      label: annoEffettivo == null ? "Tutti gli anni" : `Anno ${annoEffettivo}`,
+      togli: () => setAnno(null),
+    });
+  }
+  if (ordine !== "linea") {
+    filtriAttivi.push({ id: "ordine", label: ORDINE_LABEL[ordine], togli: () => setOrdine("linea") });
+  }
+  if (kv !== "tutte") filtriAttivi.push({ id: "kv", label: tensioneLabel(kv), togli: () => setKv("tutte") });
+  if (priorita !== "tutte") {
+    filtriAttivi.push({
+      id: "priorita",
+      label: CAMPATA_PRIORITA_LABEL[priorita],
+      togli: () => setPriorita("tutte"),
+    });
+  }
+  if (stato !== "tutte") {
+    filtriAttivi.push({ id: "stato", label: CAMPATA_STATO_LABEL[stato], togli: () => setStato("tutte") });
+  }
+  if (!soloRinvii && soloAttenzione) {
+    filtriAttivi.push({ id: "attenzione", label: "Da attenzionare", togli: () => setSoloAttenzione(false) });
+  }
+  if (soloDaNonTagliare) {
+    filtriAttivi.push({ id: "non-tagliare", label: "Da non tagliare", togli: () => setSoloDaNonTagliare(false) });
+  }
+  if (origine !== "tutte") {
+    filtriAttivi.push({ id: "origine", label: CAMPATA_ORIGINE_LABEL[origine], togli: () => setOrigine("tutte") });
+  }
+  if (soloRinvii && genere !== "tutti") {
+    filtriAttivi.push({ id: "genere", label: GENERE_LABEL[genere], togli: () => setGenere("tutti") });
+  }
+  if (soloRinvii && meseRinvio !== "tutti") {
+    const nome = MESI_LABEL[meseRinvio - 1];
+    filtriAttivi.push({
+      id: "mese",
+      label: nome.charAt(0).toUpperCase() + nome.slice(1),
+      togli: () => setMeseRinvio("tutti"),
+    });
+  }
+  if (soloRinvii && ripresa !== "tutte") {
+    filtriAttivi.push({
+      id: "ripresa",
+      label: ripresa === "da_fare" ? "Da fare" : "Fatte",
+      togli: () => setRipresa("tutte"),
+    });
+  }
+  if (linea) filtriAttivi.push({ id: "linea", label: `Linea ${linea}`, togli: () => setLinea("") });
+  if (operatore) filtriAttivi.push({ id: "operatore", label: operatore, togli: () => setOperatore("") });
+  if (periodoAttivo(periodo)) {
+    const label =
+      periodo.da && periodo.a
+        ? `${formatDate(periodo.da)} – ${formatDate(periodo.a)}`
+        : periodo.da
+          ? `Dal ${formatDate(periodo.da)}`
+          : `Fino al ${formatDate(periodo.a)}`;
+    filtriAttivi.push({ id: "periodo", label, togli: () => setPeriodo(PERIODO_VUOTO) });
+  }
+
+  function azzeraFiltri() {
+    setAnno(null);
+    setOrdine("linea");
+    setKv("tutte");
+    setPriorita("tutte");
+    setStato("tutte");
+    setSoloAttenzione(false);
+    setSoloDaNonTagliare(false);
+    setOrigine("tutte");
+    setGenere("tutti");
+    setMeseRinvio("tutti");
+    setRipresa("tutte");
+    setLinea("");
+    setOperatore("");
+    setPeriodo(PERIODO_VUOTO);
+    setVisibili(40);
+  }
+
   const campataPopup = popup ? campate.find((c) => c.id === popup) : undefined;
   const mostraSugg =
     suggAperti && (suggerimenti.linee.length > 0 || suggerimenti.campate.length > 0);
@@ -555,9 +636,15 @@ export function CampateElenco({
         ) : null}
       </div>
 
+      <PannelloFiltri
+        attivi={filtriAttivi}
+        risultati={filtrate.length}
+        onAzzera={azzeraFiltri}
+      >
       <div className="filtri-gruppi">
         {anni.length > 0 ? (
           <FiltroGruppo
+            etichetta="Anno del piano"
             titolo={annoEffettivo == null ? "Tutti gli anni" : `Anno ${annoEffettivo}`}
             attivo={soloRinvii ? annoEffettivo != null : anni.length > 1}
           >
@@ -589,7 +676,7 @@ export function CampateElenco({
           </FiltroGruppo>
         ) : null}
 
-        <FiltroGruppo titolo={ORDINE_LABEL[ordine]} attivo={ordine !== "linea"}>
+        <FiltroGruppo etichetta="Ordina per" titolo={ORDINE_LABEL[ordine]} attivo={ordine !== "linea"}>
           {(["linea", "dist_asc", "dist_desc"] as const).map((o) => (
             <button
               key={o}
@@ -606,6 +693,7 @@ export function CampateElenco({
         </FiltroGruppo>
 
         <FiltroGruppo
+          etichetta="Tensione"
           titolo={kv === "tutte" ? "Tutte le tensioni" : tensioneLabel(kv)}
           attivo={kv !== "tutte"}
         >
@@ -626,6 +714,7 @@ export function CampateElenco({
 
         {URGENZE_VISIBILI ? (
           <FiltroGruppo
+            etichetta="Priorità"
             titolo={priorita === "tutte" ? "Tutte le priorità" : CAMPATA_PRIORITA_LABEL[priorita]}
             attivo={priorita !== "tutte"}
           >
@@ -643,6 +732,7 @@ export function CampateElenco({
         ) : null}
 
         <FiltroGruppo
+          etichetta="Stato"
           titolo={stato === "tutte" ? "Tutti gli stati" : CAMPATA_STATO_LABEL[stato]}
           attivo={stato !== "tutte"}
         >
@@ -655,6 +745,7 @@ export function CampateElenco({
 
         {!soloRinvii ? (
           <FiltroGruppo
+            etichetta="Attenzione"
             titolo={soloAttenzione ? "Da attenzionare" : "Attenzione"}
             attivo={soloAttenzione}
           >
@@ -676,6 +767,7 @@ export function CampateElenco({
         ) : null}
 
         <FiltroGruppo
+          etichetta="Da non tagliare"
           titolo={soloDaNonTagliare ? "Da non tagliare" : "Non tagliare"}
           attivo={soloDaNonTagliare}
         >
@@ -696,6 +788,7 @@ export function CampateElenco({
         </FiltroGruppo>
 
         <FiltroGruppo
+          etichetta="Origine"
           titolo={origine === "tutte" ? "Tutte le origini" : CAMPATA_ORIGINE_LABEL[origine]}
           attivo={origine !== "tutte"}
         >
@@ -713,7 +806,7 @@ export function CampateElenco({
 
         {soloRinvii ? (
           <>
-            <FiltroGruppo titolo={GENERE_LABEL[genere]} attivo={genere !== "tutti"}>
+            <FiltroGruppo etichetta="Promemoria" titolo={GENERE_LABEL[genere]} attivo={genere !== "tutti"}>
               {(["tutti", "rinvio", "attenzione"] as const).map((g) => (
                 <button
                   key={g}
@@ -730,6 +823,7 @@ export function CampateElenco({
             </FiltroGruppo>
 
             <FiltroGruppo
+              etichetta="Mese"
               titolo={meseRinvio === "tutti" ? "Tutti i mesi" : MESI_LABEL[meseRinvio - 1]}
               attivo={meseRinvio !== "tutti"}
             >
@@ -753,6 +847,7 @@ export function CampateElenco({
             </FiltroGruppo>
 
             <FiltroGruppo
+              etichetta="Fatte o da fare"
               titolo={ripresa === "tutte" ? "Da fare e fatte" : ripresa === "da_fare" ? "Da fare" : "Fatte"}
               attivo={ripresa !== "tutte"}
             >
@@ -817,6 +912,7 @@ export function CampateElenco({
       </div>
 
       <FiltroPeriodo periodo={periodo} onChange={setPeriodo} />
+      </PannelloFiltri>
 
       <div className="elenco-head">
         <span className="muted">

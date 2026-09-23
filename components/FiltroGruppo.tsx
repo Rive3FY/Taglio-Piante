@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useFiltriEspansi } from "./PannelloFiltri";
 
 const CHIUDI_ALTRI = "filtro-gruppo-open";
 
 export function FiltroGruppo({
   titolo,
+  etichetta,
   attivo = false,
   children,
 }: {
   titolo: string;
+  /** Nome del gruppo, mostrato sopra le scelte quando i filtri sono aperti tutti insieme. */
+  etichetta?: string;
   attivo?: boolean;
   children: ReactNode;
 }) {
+  const espanso = useFiltriEspansi();
   const [aperto, setAperto] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (espanso) return;
     function chiudiSeFuori(e: PointerEvent) {
       if (!rootRef.current?.contains(e.target as Node)) setAperto(false);
     }
@@ -29,7 +35,16 @@ export function FiltroGruppo({
       document.removeEventListener("pointerdown", chiudiSeFuori);
       window.removeEventListener(CHIUDI_ALTRI, chiudiDaAltro);
     };
-  }, []);
+  }, [espanso]);
+
+  if (espanso) {
+    return (
+      <div className="filtro-sezione" role="group" aria-label={etichetta ?? titolo}>
+        <span className="filtro-sezione-titolo">{etichetta ?? titolo}</span>
+        <div className="filtro-sezione-scelte">{children}</div>
+      </div>
+    );
+  }
 
   function toggle() {
     if (aperto) {
