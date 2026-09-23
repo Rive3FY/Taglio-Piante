@@ -441,9 +441,13 @@ export async function pushCampatePending(rapportinoId?: string) {
     // Senza da_non_tagliare il tecnico vedrebbe la campata come normale, senza
     // rinvio_mese o attenzionare la riga sparirebbe dall'elenco parallelo: meglio
     // fallire con un messaggio chiaro che perdere il segno in silenzio.
-    await upsertCampateLavoro(daInviare.map(campataLavoroToRow), {
-      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"],
-    });
+    // Data d'invio, non di modifica: un foglio chiuso offline giorni fa deve
+    // comparire nella lettura a cursore degli altri dispositivi.
+    const inviateIl = new Date().toISOString();
+    await upsertCampateLavoro(
+      daInviare.map((c) => ({ ...campataLavoroToRow(c), updated_at: inviateIl })),
+      { vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"] },
+    );
 
     const ids = new Set(daInviare.map((c) => c.id));
     const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
@@ -459,10 +463,9 @@ export async function pushCampatePending(rapportinoId?: string) {
       }
     }
 
-    const now = new Date().toISOString();
-    for (const c of daInviare) {
-      await db.campateLavoro.put({ ...c, syncStatus: "synced", updatedAt: now });
-    }
+    await db.campateLavoro.bulkPut(
+      daInviare.map((c) => ({ ...c, syncStatus: "synced" as const, updatedAt: inviateIl })),
+    );
   }
 
   try {

@@ -18,7 +18,11 @@ import {
   supabaseAutenticato,
   versioniRapportiniRemote,
 } from "@/lib/supabase/remote";
-import { ripristinaCampateOrfane, unisciCampateDoppie } from "@/lib/campate/apply";
+import {
+  riallineaCampateDaRapportini,
+  ripristinaCampateOrfane,
+  unisciCampateDoppie,
+} from "@/lib/campate/apply";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -228,8 +232,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   const completo = richiestoCompleto || serveControlloCompleto();
 
   if (autenticato && (completo || processed > 0 || !riparazioniFatte)) {
-    const sistematePrima = (await ripristinaCampateOrfane()) + (await unisciCampateDoppie());
-    if (sistematePrima > 0) await pushCampatePending();
+    if ((await unisciCampateDoppie()) > 0) await pushCampatePending();
   }
 
   let pulled = 0;
@@ -253,8 +256,16 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
     }
   }
 
-  if (autenticato && (completo || pulled > 0 || !riparazioniFatte)) {
-    const sistemateDopo = (await ripristinaCampateOrfane()) + (await unisciCampateDoppie());
+  if (autenticato && !pullError && (completo || pulled > 0 || !riparazioniFatte)) {
+    // Solo il tecnico ha tutti i fogli: per un operatore i fogli degli altri non
+    // sono sul telefono e le loro campate sembrerebbero orfane. Serve anche una
+    // lettura riuscita, altrimenti mancano fogli appena arrivati sul server.
+    let sistemateDopo = 0;
+    if (profilo?.ruolo === "tecnico") {
+      sistemateDopo += await ripristinaCampateOrfane();
+      sistemateDopo += await riallineaCampateDaRapportini();
+    }
+    sistemateDopo += await unisciCampateDoppie();
     if (sistemateDopo > 0) await pushCampatePending();
     riparazioniFatte = true;
   }

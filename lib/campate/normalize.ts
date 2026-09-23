@@ -55,11 +55,15 @@ export function idCampataLavoro(
 const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z]{1,2})(?![a-z0-9])/gi;
 const BARRA_PROTETTA = "\u0001";
 
-/** Spezza il campo libero del rapportino: 22, 23 / 54, 17/A oppure 78\2 80. */
+/**
+ * Spezza il campo libero del rapportino: 22, 23 / 54, 17/A oppure 78\2 80.
+ * Anche «22 23» e «22 e 23» sono due campate: unite diventerebbero la 2223.
+ */
 export function spezzaCampateTesto(testo: string) {
   return testo
     .replace(SOSTEGNO_CON_LETTERA, (_, n: string, l: string) => `${n}${BARRA_PROTETTA}${l}`)
-    .split(/[,;/|\n]+/)
+    .split(/[,;/|\n]+|\s+e\s+/i)
+    .flatMap((p) => (/^\s*\d+(\s+\d+)+\s*$/.test(p) ? p.trim().split(/\s+/) : [p]))
     .map((p) => p.split(BARRA_PROTETTA).join("/").trim())
     .filter(Boolean);
 }
