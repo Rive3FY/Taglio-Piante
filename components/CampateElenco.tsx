@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, formatDistInt, TENSIONI, tensioneLabel } from "@/lib/format";
-import { aggiornaDettagliCampata, eliminaCampataLavoro, type PatchRinvio } from "@/lib/campate/apply";
+import {
+  aggiornaDettagliCampata,
+  eliminaCampataLavoro,
+  fogliApertiPerCampata,
+  type PatchRinvio,
+} from "@/lib/campate/apply";
 import { scaricaVistaCampate } from "@/lib/campate/export";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { annoDi, annoPianoPiuRecente, anniPiani, anniTaglioPrecedenti, etichettaAnniTaglio } from "@/lib/campate/anno";
@@ -42,12 +47,31 @@ import {
   promemoriaChiuso,
   puoModificareSceltaCampata,
   rinvioRipreso,
+  STATO_LABEL,
   type CampataLavoro,
   type CampataOrigine,
   type CampataPriorita,
   type CampataStatoLavoro,
   type CampataStorico,
+  type Rapportino,
 } from "@/lib/types";
+
+const STATI_APERTI: Rapportino["stato"][] = ["bozza", "da_prendere"];
+
+type Pallino = { tono: "rosso" | "giallo" | "verde" | "arancione" | "grigio"; titolo: string };
+
+function pallinoCampata(c: CampataLavoro, aperti: Rapportino[]): Pallino {
+  if (aperti.length > 0) {
+    const fogli = aperti
+      .map((r) => `${r.numero || "senza numero"} (${STATO_LABEL[r.stato].toLowerCase()})`)
+      .join(", ");
+    return { tono: "giallo", titolo: `Rapportino non ancora archiviato: ${fogli}` };
+  }
+  if (campataDaNonTagliare(c)) return { tono: "grigio", titolo: "Da non tagliare: il rapportino non serve" };
+  if (campataNonTerminata(c)) return { tono: "arancione", titolo: "Non terminata: serve un altro rapportino" };
+  if (c.rapportinoId && campataETagliata(c)) return { tono: "verde", titolo: "Rapportino archiviato" };
+  return { tono: "rosso", titolo: "Nessun rapportino" };
+}
 
 type OrigineFiltro = CampataOrigine | "tutte";
 type PrioritaFiltro = CampataPriorita | "tutte";
@@ -186,6 +210,21 @@ export function CampateElenco({
   // Le urgenze restano nel database ma finché sono nascoste non entrano in nessun conto.
   const campate = useMemo(() => soloCampateVisibili(campateTutte), [campateTutte]);
   const storico = useLiveQuery(() => db.campateStorico.toArray(), []) ?? [];
+  const fogliAperti = useLiveQuery(
+    () => db.rapportini.where("stato").anyOf(STATI_APERTI).toArray(),
+    [],
+  );
+  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []);
+  const linee = useLiveQuery(() => db.linee.toArray(), []);
+  const apertiPer = useMemo(() => {
+    if (!fogliAperti?.length || !prestazioni || !linee) return new Map<string, Rapportino[]>();
+    return fogliApertiPerCampata(
+      fogliAperti,
+      campate,
+      prestazioni,
+      new Map(linee.map((l) => [l.id, l.codice])),
+    );
+  }, [fogliAperti, campate, prestazioni, linee]);
   const vistaSalvata = useMemo(
     () => readElencoVista(session?.userId, chiaveVista),
     [session?.userId, chiaveVista],
@@ -827,6 +866,13 @@ export function CampateElenco({
             ? ` · ${basiVista.length} ${basiVista.length === 1 ? "base" : "basi"} nel file`
             : ""}
         </span>
+        <span className="pallini-legenda" aria-label="Legenda pallini rapportino">
+          <span><i className="pallino-campata pallino-rosso" />Da fare</span>
+          <span><i className="pallino-campata pallino-giallo" />In bozza</span>
+          <span><i className="pallino-campata pallino-verde" />Archiviato</span>
+          <span><i className="pallino-campata pallino-arancione" />Non terminata</span>
+          <span><i className="pallino-campata pallino-grigio" />Non serve</span>
+        </span>
         <span className="elenco-azioni">
           {!soloRinvii ? (
             <button type="button" className="btn btn-primary" onClick={() => setNuovaAperta(true)}>
@@ -910,6 +956,7 @@ export function CampateElenco({
                   soloRinvii={soloRinvii}
                   sessionUserId={session?.userId}
                   storico={storicoPer.get(c.id) ?? []}
+                  pallino={pallinoCampata(c, apertiPer.get(c.id) ?? [])}
                   anniPrecedenti={anniTaglioPrecedenti(campate, c.codiceLinea, c.normalizzata, annoRiferimento)}
                   aperta={aperta === c.id}
                   onToggle={() => setAperta(aperta === c.id ? null : c.id)}
@@ -1037,6 +1084,7 @@ function CampataRiga({
   soloRinvii,
   sessionUserId,
   storico,
+  pallino,
   anniPrecedenti,
   aperta,
   onToggle,
@@ -1049,6 +1097,7 @@ function CampataRiga({
   soloRinvii: boolean;
   sessionUserId?: string;
   storico: CampataStorico[];
+  pallino: Pallino;
   anniPrecedenti: number[];
   aperta: boolean;
   onToggle: () => void;
@@ -1133,6 +1182,12 @@ function CampataRiga({
         <td>{c.nomeLinea}</td>
         <td>{c.tensioneKv ?? "—"}</td>
         <td>
+          <span
+            className={`pallino-campata pallino-${pallino.tono}`}
+            title={pallino.titolo}
+            aria-label={pallino.titolo}
+            role="img"
+          />
           <strong>{mostraCampata(c.normalizzata)}</strong>
           {c.origine === "aggiuntiva" ? <span className="badge badge-aggiuntiva">Aggiuntiva</span> : null}
           {anniPrecedenti.length > 0 ? (

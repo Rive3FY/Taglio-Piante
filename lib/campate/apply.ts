@@ -616,6 +616,36 @@ export async function riallineaCampateDaRapportini() {
   return sistemati;
 }
 
+/**
+ * Fogli non ancora archiviati per campata (id → fogli). Le bozze non toccano le
+ * campate, quindi il collegamento si ricava dal testo come farà l'archiviazione.
+ */
+export function fogliApertiPerCampata(
+  aperti: Rapportino[],
+  campate: CampataLavoro[],
+  prestazioni: Prestazione[],
+  codiciLinea: Map<string, string>,
+) {
+  const out = new Map<string, Rapportino[]>();
+  for (const item of aperti) {
+    if (rapportinoEChiuso(item.stato)) continue;
+    const codice = codiciLinea.get(item.lineaId);
+    const anno = annoDaDataLavoro(item.dataLavoro);
+    const tutte = campate.filter((c) => annoDi(c) === anno && stessaLinea(item.lineaId, codice, c));
+    if (tutte.length === 0) continue;
+    for (const esito of esitiDaRapportino(item, prestazioni)) {
+      if (!esito.normalizzata) continue;
+      const trovati = espandiFratelliPriorita(tutte, bersagliPerEsito(tutte, esito, codice ?? "", anno));
+      for (const c of trovati) {
+        const lista = out.get(c.id) ?? [];
+        if (!lista.includes(item)) lista.push(item);
+        out.set(c.id, lista);
+      }
+    }
+  }
+  return out;
+}
+
 function copreCampata(
   item: Rapportino,
   presente: CampataLavoro,
