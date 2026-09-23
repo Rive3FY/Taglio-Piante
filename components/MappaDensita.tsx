@@ -12,27 +12,30 @@ const NOMI =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 const ATTRIBUZIONE = "Immagini &copy; Esri, Maxar, Earthstar Geographics";
 
-const GRADIENTE_ROSSO = { 0.2: "#7f1d1d", 0.45: "#dc2626", 0.75: "#f87171", 1: "#fee2e2" };
-const GRADIENTE_VERDE = { 0.2: "#14532d", 0.45: "#16a34a", 0.75: "#4ade80", 1: "#dcfce7" };
-/** Da questo zoom in su compaiono anche i puntini delle singole campate. */
-const ZOOM_PUNTI = 13;
+const ROSSO = "#ef4444";
+const VERDE = "#22c55e";
 
 type Livelli = {
-  mappa: Leaflet.Map;
-  caldoRosso: Leaflet.HeatLayer;
-  caldoVerde: Leaflet.HeatLayer;
-  puntiRossi: Leaflet.LayerGroup;
-  puntiVerdi: Leaflet.LayerGroup;
   L: typeof Leaflet;
+  mappa: Leaflet.Map;
+  rosse: Leaflet.LayerGroup;
+  verdi: Leaflet.LayerGroup;
+  marker: Leaflet.CircleMarker[];
+  rendererRosse: Leaflet.Renderer;
+  rendererVerdi: Leaflet.Renderer;
 };
 
 async function caricaLeaflet() {
   const mod = await import("leaflet");
-  const L = (mod as unknown as { default?: typeof Leaflet }).default ?? mod;
-  // leaflet.heat si aggancia al Leaflet globale.
-  (window as unknown as { L: typeof Leaflet }).L = L;
-  await import("leaflet.heat");
-  return L;
+  return (mod as unknown as { default?: typeof Leaflet }).default ?? mod;
+}
+
+/** Da lontano puntini piccoli senza bordo, così il tracciato della linea resta leggibile. */
+function stileZoom(zoom: number) {
+  if (zoom <= 9) return { radius: 2.5, weight: 0 };
+  if (zoom <= 11) return { radius: 3.5, weight: 0.5 };
+  if (zoom <= 13) return { radius: 5, weight: 1.5 };
+  return { radius: 7, weight: 2 };
 }
 
 function escape(testo: string) {
@@ -44,25 +47,25 @@ function popup(p: PuntoMappa) {
 }
 
 function riempi(livelli: Livelli, punti: PuntoMappa[]) {
-  const { L, caldoRosso, caldoVerde, puntiRossi, puntiVerdi } = livelli;
-  const rossi = punti.filter((p) => !p.tagliata);
-  const verdi = punti.filter((p) => p.tagliata);
-  caldoRosso.setLatLngs(rossi.map((p) => [p.lat, p.lng, 1] as Leaflet.HeatLatLngTuple));
-  caldoVerde.setLatLngs(verdi.map((p) => [p.lat, p.lng, 1] as Leaflet.HeatLatLngTuple));
-  puntiRossi.clearLayers();
-  puntiVerdi.clearLayers();
-  const renderer = L.canvas({ padding: 0.3 });
+  const { L, mappa, rosse, verdi, rendererRosse, rendererVerdi } = livelli;
+  rosse.clearLayers();
+  verdi.clearLayers();
+  const stile = stileZoom(mappa.getZoom());
+  const marker: Leaflet.CircleMarker[] = [];
   for (const p of punti) {
-    const marker = L.circleMarker([p.lat, p.lng], {
-      renderer,
-      radius: 6,
-      weight: 2,
+    const m = L.circleMarker([p.lat, p.lng], {
+      pane: p.tagliata ? "campateVerdi" : "campateRosse",
+      renderer: p.tagliata ? rendererVerdi : rendererRosse,
+      radius: stile.radius,
+      weight: stile.weight,
       color: "#ffffff",
-      fillColor: p.tagliata ? "#22c55e" : "#ef4444",
-      fillOpacity: 0.95,
+      fillColor: p.tagliata ? VERDE : ROSSO,
+      fillOpacity: p.tagliata ? 1 : 0.9,
     }).bindPopup(popup(p));
-    (p.tagliata ? puntiVerdi : puntiRossi).addLayer(marker);
+    (p.tagliata ? verdi : rosse).addLayer(m);
+    marker.push(m);
   }
+  livelli.marker = marker;
 }
 
 export function MappaDensita({
@@ -91,11 +94,13 @@ export function MappaDensita({
         center: [41.0, 14.5],
         zoom: 8,
         scrollWheelZoom: false,
-        attributionControl: true,
       });
       L.tileLayer(SATELLITE, { maxZoom: 19, attribution: ATTRIBUZIONE }).addTo(mappa);
       L.tileLayer(NOMI, { maxZoom: 19, opacity: 0.85 }).addTo(mappa);
       mappa.attributionControl.setPrefix(false);
+      // Le tagliate stanno sempre sopra: dove hai lavorato il verde non viene coperto dal rosso.
+      mappa.createPane("campateRosse").style.zIndex = "410";
+      mappa.createPane("campateVerdi").style.zIndex = "420";
       // La rotella zooma solo dopo un clic sulla mappa, così la pagina scorre normalmente.
       mappa.on("click", () => mappa?.scrollWheelZoom.enable());
       mappa.on("mouseout", () => mappa?.scrollWheelZoom.disable());
@@ -103,11 +108,16 @@ export function MappaDensita({
       const livelli: Livelli = {
         L,
         mappa,
-        caldoRosso: L.heatLayer([], { radius: 22, blur: 18, minOpacity: 0.35, max: 3, maxZoom: 12, gradient: GRADIENTE_ROSSO }),
-        caldoVerde: L.heatLayer([], { radius: 22, blur: 18, minOpacity: 0.4, max: 2, maxZoom: 12, gradient: GRADIENTE_VERDE }),
-        puntiRossi: L.layerGroup(),
-        puntiVerdi: L.layerGroup(),
+        rosse: L.layerGroup(),
+        verdi: L.layerGroup(),
+        marker: [],
+        rendererRosse: L.canvas({ pane: "campateRosse", padding: 0.3 }),
+        rendererVerdi: L.canvas({ pane: "campateVerdi", padding: 0.3 }),
       };
+      mappa.on("zoomend", () => {
+        const stile = stileZoom(livelli.mappa.getZoom());
+        for (const m of livelli.marker) m.setStyle(stile).setRadius(stile.radius);
+      });
       livelliRef.current = livelli;
       setPronta(true);
     });
@@ -133,24 +143,13 @@ export function MappaDensita({
   useEffect(() => {
     const livelli = livelliRef.current;
     if (!pronta || !livelli) return;
-    const { mappa, caldoRosso, caldoVerde, puntiRossi, puntiVerdi } = livelli;
-
-    const aggiorna = () => {
-      const vicino = mappa.getZoom() >= ZOOM_PUNTI;
-      const mostra = (livello: Leaflet.Layer, si: boolean) => {
-        if (si && !mappa.hasLayer(livello)) livello.addTo(mappa);
-        if (!si && mappa.hasLayer(livello)) mappa.removeLayer(livello);
-      };
-      mostra(caldoRosso, mostraRosse);
-      mostra(caldoVerde, mostraVerdi);
-      mostra(puntiRossi, mostraRosse && vicino);
-      mostra(puntiVerdi, mostraVerdi && vicino);
+    const { mappa, rosse, verdi } = livelli;
+    const mostra = (livello: Leaflet.Layer, si: boolean) => {
+      if (si && !mappa.hasLayer(livello)) livello.addTo(mappa);
+      if (!si && mappa.hasLayer(livello)) mappa.removeLayer(livello);
     };
-    aggiorna();
-    mappa.on("zoomend", aggiorna);
-    return () => {
-      mappa.off("zoomend", aggiorna);
-    };
+    mostra(rosse, mostraRosse);
+    mostra(verdi, mostraVerdi);
   }, [pronta, mostraRosse, mostraVerdi]);
 
   function inquadraTutte() {
@@ -167,8 +166,8 @@ export function MappaDensita({
         {anno ? <span className="grafici-anno">Piano {anno}</span> : null}
       </header>
       <p className="muted">
-        Trascina e usa lo zoom per muoverti. Da vicino compaiono le singole campate: toccane una per
-        vedere linea e campata.
+        Un puntino per campata: rosso da tagliare, verde tagliata. Trascina e usa lo zoom per
+        muoverti; tocca un puntino per vedere linea e campata.
       </p>
       <div className="mappa-wrap">
         <div ref={contenitore} className="mappa-leaflet" aria-label={`Mappa satellitare ${titolo}`} />
