@@ -4,10 +4,12 @@ import {
   db,
   eliminaFirme,
   FIRMA_SEPARATA,
-  salvaRapportino,
+  salvaRapportiniDalServer,
   segnaPercorsiFirme,
+  type FirmeRapportino,
+  type RapportinoDalServer,
 } from "@/lib/db";
-import type { CampataLavoro, Rapportino } from "@/lib/types";
+import type { CampataLavoro, Rapportino, Session } from "@/lib/types";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import {
   campataLavoroToRow,
@@ -216,6 +218,78 @@ async function downloadSignature(path?: string | null) {
   }
 }
 
+const FIRME_IN_PARALLELO = 6;
+const GIORNI_FIRME_OFFLINE = 30;
+const firmeInCorso = new Map<string, Promise<void>>();
+
+async function scaricaFirmeFoglio(id: string) {
+  const f = await db.firme.get(id);
+  if (!f) return;
+  const [operatore, terna] = await Promise.all([
+    !f.operatore && f.operatorePath ? downloadSignature(f.operatorePath) : undefined,
+    !f.terna && f.ternaPath ? downloadSignature(f.ternaPath) : undefined,
+  ]);
+  if (!operatore && !terna) return;
+  await db.transaction("rw", db.firme, async () => {
+    // Nel frattempo il foglio può essere stato rifirmato: si scrive solo sul percorso scaricato.
+    const ora = await db.firme.get(id);
+    if (!ora) return;
+    const patch: Partial<FirmeRapportino> = {};
+    if (operatore && !ora.operatore && ora.operatorePath === f.operatorePath) patch.operatore = operatore;
+    if (terna && !ora.terna && ora.ternaPath === f.ternaPath) patch.terna = terna;
+    if (Object.keys(patch).length > 0) await db.firme.update(id, patch);
+  });
+}
+
+/**
+ * Porta sul dispositivo le immagini delle firme non ancora scaricate, qualche
+ * foglio alla volta. Lo stesso foglio chiesto due volte si scarica una volta sola.
+ */
+export async function scaricaFirmeMancanti(ids: string[]) {
+  if (!getSupabase() || ids.length === 0) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  const coda = [...new Set(ids)];
+  const lavora = async () => {
+    for (let id = coda.shift(); id; id = coda.shift()) {
+      let inCorso = firmeInCorso.get(id);
+      if (!inCorso) {
+        const nuovo = scaricaFirmeFoglio(id).finally(() => firmeInCorso.delete(id));
+        firmeInCorso.set(id, nuovo);
+        inCorso = nuovo;
+      }
+      await inCorso.catch(() => undefined);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(FIRME_IN_PARALLELO, coda.length) }, lavora));
+}
+
+let precaricoInCorso = false;
+
+/**
+ * L'operatore può aprire i suoi fogli anche senza rete: le firme dei fogli
+ * recenti si scaricano in sottofondo. Il tecnico le scarica solo quando apre.
+ */
+export async function precaricaFirmeRecenti(session: Session | null) {
+  if (!session || session.ruolo === "tecnico" || precaricoInCorso) return;
+  precaricoInCorso = true;
+  try {
+    const da = new Date(Date.now() - GIORNI_FIRME_OFFLINE * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const ids = (await db.rapportini.where("dataLavoro").aboveOrEqual(da).primaryKeys()).map(String);
+    const firme = await db.firme.bulkGet(ids);
+    const mancanti = firme
+      .filter(
+        (f): f is FirmeRapportino =>
+          Boolean(f && ((!f.operatore && f.operatorePath) || (!f.terna && f.ternaPath))),
+      )
+      .map((f) => f.id);
+    await scaricaFirmeMancanti(mancanti);
+  } finally {
+    precaricoInCorso = false;
+  }
+}
+
 export async function pushRapportino(item: Rapportino) {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -225,7 +299,7 @@ export async function pushRapportino(item: Rapportino) {
   } = await supabase.auth.getSession();
   const authUid = authSession?.user?.id;
 
-  const conImmagini = await conFirme(item, { obbligatorie: true });
+  const conImmagini = await conFirme(item, { obbligatorie: true, scarica: true });
   const giaInviate = await db.firme.get(item.id);
   const firmaOperatorePath =
     giaInviate?.operatorePath && conImmagini.firmaOperatore === giaInviate.operatore
@@ -504,43 +578,29 @@ export async function pullRapportini(completo = false, vivi?: Map<string, string
       if (page.length < PULL_PAGE) break;
     }
   }
-  let merged = 0;
-
-  for (const row of rows) {
-    const local = await db.rapportini.get(row.id);
+  const locali = await db.rapportini.bulkGet(rows.map((r) => r.id));
+  const daSalvare: RapportinoDalServer[] = [];
+  rows.forEach((row, i) => {
+    const local = locali[i];
     newest = maxIso(newest, row.updated_at);
-    if (local?.syncStatus === "pending") continue;
+    if (local?.syncStatus === "pending") return;
 
-    // Stessa versione già in locale, firme comprese: niente da riscaricare.
+    // Stessa versione già in locale, firme comprese: niente da riscrivere.
     const giaAggiornato =
       local &&
       local.syncStatus === "synced" &&
       new Date(row.updated_at).getTime() <= new Date(local.updatedAt).getTime() &&
       (!row.firma_operatore_path || Boolean(local.firmaOperatore)) &&
       (!row.firma_terna_path || Boolean(local.firmaTerna));
-    if (giaAggiornato) continue;
+    if (giaAggiornato) return;
 
-    // Stesso file sul server dell'immagine già qui (es. foglio solo rinumerato): niente download.
-    const firmeLocali = local ? await db.firme.get(row.id) : undefined;
-    const firmaOperatore =
-      row.firma_operatore_path && firmeLocali?.operatorePath === row.firma_operatore_path
-        ? firmeLocali.operatore
-        : await downloadSignature(row.firma_operatore_path);
-    const firmaTerna =
-      row.firma_terna_path && firmeLocali?.ternaPath === row.firma_terna_path
-        ? firmeLocali.terna
-        : await downloadSignature(row.firma_terna_path);
-    const remote = rowToRapportino(row, { firmaOperatore, firmaTerna });
-
-    if (!local || new Date(remote.updatedAt) >= new Date(local.updatedAt)) {
-      await salvaRapportino(remote);
-      await segnaPercorsiFirme(row.id, {
-        operatorePath: firmaOperatore ? row.firma_operatore_path ?? undefined : undefined,
-        ternaPath: firmaTerna ? row.firma_terna_path ?? undefined : undefined,
-      });
-      merged += 1;
-    }
-  }
+    daSalvare.push({
+      rapportino: rowToRapportino(row, {}),
+      operatorePath: row.firma_operatore_path ?? undefined,
+      ternaPath: row.firma_terna_path ?? undefined,
+    });
+  });
+  const merged = await salvaRapportiniDalServer(daSalvare);
 
   if (newest) {
     scriviCursore("rapportini", newest);

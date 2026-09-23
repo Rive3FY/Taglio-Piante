@@ -19,6 +19,7 @@ import {
 import { TortaAvanzamento } from "./TortaAvanzamento";
 
 const MAX_RIGHE = 6;
+const STATI_CHIUSI: Rapportino["stato"][] = ["archiviato", "in_attesa"];
 const GIORNI = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
 function isoGiorno(anno: number, mese: number, giorno: number) {
@@ -47,12 +48,6 @@ function hrefRapportino(r: Rapportino) {
 }
 
 export function TecnicoBacheca() {
-  const lineeQuery = useLiveQuery(() => db.linee.toArray(), []);
-  const rapportiniQuery = useLiveQuery(() => db.rapportini.toArray(), []);
-  const campateQuery = useLiveQuery(() => db.campateLavoro.toArray(), []);
-  const linee = useMemo(() => lineeQuery ?? [], [lineeQuery]);
-  const rapportini = useMemo(() => rapportiniQuery ?? [], [rapportiniQuery]);
-  const campate = useMemo(() => campateQuery ?? [], [campateQuery]);
   const oggi = todayIso();
   const adesso = new Date();
   const [vista, setVista] = useState({ anno: adesso.getFullYear(), mese: adesso.getMonth() });
@@ -61,13 +56,37 @@ export function TecnicoBacheca() {
   const [filtro, setFiltro] = useState<number | "tutte">("tutte");
   const [lineeAperte, setLineeAperte] = useState(false);
 
+  const lineeQuery = useLiveQuery(() => db.linee.toArray(), []);
+  // Solo i fogli aperti e quelli del mese a calendario: l'archivio intero non serve qui.
+  const apertiQuery = useLiveQuery(
+    () => db.rapportini.where("stato").noneOf(STATI_CHIUSI).toArray(),
+    [],
+  );
+  const delMeseQuery = useLiveQuery(
+    () =>
+      db.rapportini
+        .where("dataLavoro")
+        .between(
+          isoGiorno(vista.anno, vista.mese, 1),
+          isoGiorno(vista.anno, vista.mese, new Date(vista.anno, vista.mese + 1, 0).getDate()),
+          true,
+          true,
+        )
+        .toArray(),
+    [vista.anno, vista.mese],
+  );
+  const campateQuery = useLiveQuery(() => db.campateLavoro.toArray(), []);
+  const linee = useMemo(() => lineeQuery ?? [], [lineeQuery]);
+  const delMese = useMemo(() => delMeseQuery ?? [], [delMeseQuery]);
+  const campate = useMemo(() => campateQuery ?? [], [campateQuery]);
+
   const lineeById = useMemo(() => new Map(linee.map((l) => [l.id, l])), [linee]);
 
   const aperti = useMemo(() => {
-    return rapportini
-      .filter((r) => !rapportinoEChiuso(r.stato))
-      .sort((a, b) => b.dataLavoro.localeCompare(a.dataLavoro) || b.createdAt.localeCompare(a.createdAt));
-  }, [rapportini]);
+    return [...(apertiQuery ?? [])].sort(
+      (a, b) => b.dataLavoro.localeCompare(a.dataLavoro) || b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [apertiQuery]);
 
   const annoPiano = useMemo(() => annoPianoPiuRecente(campate), [campate]);
   const delPiano = useMemo(
@@ -83,7 +102,7 @@ export function TecnicoBacheca() {
 
   const perGiorno = useMemo(() => {
     const mappa = new Map<string, Rapportino[]>();
-    for (const r of rapportini) {
+    for (const r of delMese) {
       if (!r.dataLavoro) continue;
       const lista = mappa.get(r.dataLavoro) ?? [];
       lista.push(r);
@@ -93,7 +112,7 @@ export function TecnicoBacheca() {
       lista.sort((a, b) => a.numero.localeCompare(b.numero, "it"));
     }
     return mappa;
-  }, [rapportini]);
+  }, [delMese]);
 
   const celle = useMemo(() => celleMese(vista.anno, vista.mese), [vista]);
   const delGiorno = giornoScelto ? (perGiorno.get(giornoScelto) ?? []) : [];

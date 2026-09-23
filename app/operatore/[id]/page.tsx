@@ -12,6 +12,7 @@ import { useSession } from "@/lib/SessionContext";
 import { rapportinoVisibile } from "@/lib/sezioni";
 import { rapportinoEChiuso } from "@/lib/types";
 import { haFirmaDitta, riportaInBozzaSeMancaFirma } from "@/lib/rapportinoFirma";
+import { useFirmePronte } from "@/lib/useFirmePronte";
 
 export default function OperatoreRapportinoPage({
   params,
@@ -23,6 +24,7 @@ export default function OperatoreRapportinoPage({
   const { session } = useSession();
   const { syncNow } = useSync();
   const item = useLiveQuery(() => getRapportinoCompleto(id), [id]);
+  const firmePronte = useFirmePronte(item);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
 
@@ -48,6 +50,7 @@ export default function OperatoreRapportinoPage({
   if (!rapportinoVisibile(item, session, "operatore")) {
     return <p className="muted">Questo rapportino è di un altro operatore.</p>;
   }
+  if (!firmePronte) return <p className="muted">Caricamento firme…</p>;
 
   const readOnly = rapportinoEChiuso(item.stato) && haFirmaDitta(item.firmaOperatore);
 

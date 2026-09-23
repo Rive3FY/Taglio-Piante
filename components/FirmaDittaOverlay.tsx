@@ -38,7 +38,7 @@ export function FirmaDittaOverlay({
   useEffect(() => {
     if (item.firmaOperatore !== FIRMA_SEPARATA) return;
     let annullato = false;
-    void conFirme(item).then((completo) => {
+    void conFirme(item, { scarica: true }).then((completo) => {
       if (!annullato && completo.firmaOperatore !== FIRMA_SEPARATA) setFirma(completo.firmaOperatore);
     });
     return () => {

@@ -9,6 +9,7 @@ import { DeleteRapportinoButton } from "@/components/DeleteRapportinoButton";
 import { useSync } from "@/lib/SyncContext";
 import { rapportinoEChiuso } from "@/lib/types";
 import { haFirmaDitta, riportaInBozzaSeMancaFirma } from "@/lib/rapportinoFirma";
+import { useFirmePronte } from "@/lib/useFirmePronte";
 
 export default function TecnicoRapportinoPage({
   params,
@@ -18,6 +19,7 @@ export default function TecnicoRapportinoPage({
   const { id } = use(params);
   const { syncNow } = useSync();
   const item = useLiveQuery(() => getRapportinoCompleto(id), [id]);
+  const firmePronte = useFirmePronte(item);
   const linea = useLiveQuery(() => (item ? db.linee.get(item.lineaId) : undefined), [item?.lineaId]);
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
 
@@ -27,6 +29,7 @@ export default function TecnicoRapportinoPage({
   }, [item, syncNow]);
 
   if (!item) return <p className="muted">Caricamento…</p>;
+  if (!firmePronte) return <p className="muted">Caricamento firme…</p>;
 
   if (rapportinoEChiuso(item.stato) && haFirmaDitta(item.firmaOperatore)) {
     return (

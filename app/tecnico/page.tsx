@@ -13,18 +13,19 @@ type Filtro = number | "tutte";
 
 export default function TecnicoLineePage() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
-  const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
+  // Conteggi dall'indice sulla linea: i fogli non vengono caricati.
+  const conteggiQuery = useLiveQuery(async () => {
+    const mappa = new Map<string, number>();
+    await db.rapportini.orderBy("lineaId").eachKey((key) => {
+      const lineaId = String(key);
+      mappa.set(lineaId, (mappa.get(lineaId) ?? 0) + 1);
+    });
+    return mappa;
+  }, []);
+  const conteggi = conteggiQuery ?? new Map<string, number>();
   const [q, setQ] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("tutte");
   const [aperti, setAperti] = useState<number[]>([]);
-
-  const conteggi = useMemo(() => {
-    const mappa = new Map<string, number>();
-    for (const r of rapportini) {
-      mappa.set(r.lineaId, (mappa.get(r.lineaId) ?? 0) + 1);
-    }
-    return mappa;
-  }, [rapportini]);
 
   const cercate = useMemo(() => {
     const term = q.trim().toLowerCase();
