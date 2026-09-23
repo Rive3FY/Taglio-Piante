@@ -1,6 +1,6 @@
 import { rapportinoEChiuso, type Rapportino } from "@/lib/types";
 
-export type ScalaRitmo = "mese" | "settimana";
+export type ScalaRitmo = "giorno" | "settimana" | "mese";
 
 export type ColonnaRitmo = {
   chiave: string;
@@ -26,6 +26,8 @@ const MESI_LUNGHI = [
 ];
 
 export const FINESTRA_RITMO = 12;
+export const FINESTRA_GIORNI = 14;
+const GIORNI_SETTIMANA = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -72,6 +74,20 @@ function ultimeSettimane(oggi: Date, quanti: number) {
   return chiavi;
 }
 
+function ultimiGiorni(oggi: Date, quanti: number) {
+  const chiavi: string[] = [];
+  for (let i = quanti - 1; i >= 0; i--) {
+    chiavi.push(isoLocale(new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - i)));
+  }
+  return chiavi;
+}
+
+function titoloGiorno(chiave: string) {
+  const data = dataLocale(chiave);
+  const testo = `${GIORNI_SETTIMANA[data.getDay()]} ${data.getDate()} ${MESI_LUNGHI[data.getMonth()]} ${data.getFullYear()}`;
+  return testo.charAt(0).toUpperCase() + testo.slice(1);
+}
+
 function etichettaMese(chiave: string, mostraAnno: boolean) {
   const [anno, mese] = chiave.split("-").map(Number);
   const nome = MESI_CORTI[(mese || 1) - 1] ?? chiave;
@@ -85,7 +101,7 @@ function titoloMese(chiave: string) {
   return testo.charAt(0).toUpperCase() + testo.slice(1);
 }
 
-function etichettaSettimana(chiave: string) {
+function etichettaData(chiave: string) {
   const data = dataLocale(chiave);
   return `${data.getDate()} ${MESI_CORTI[data.getMonth()]}`;
 }
@@ -97,7 +113,7 @@ function titoloSettimana(chiave: string) {
 }
 
 /**
- * Dodici colonne, ciascuna con i soli rapportini archiviati di quel mese o di quella settimana.
+ * Una colonna per periodo (14 giorni, 12 settimane o 12 mesi), con i soli rapportini archiviati di quel periodo.
  * I periodi senza fogli restano a zero, così il ritmo si legge anche quando ci si ferma.
  */
 export function colonneRitmo(
@@ -108,8 +124,22 @@ export function colonneRitmo(
   const conteggi = new Map<string, number>();
   for (const r of rapportini) {
     if (!rapportinoEChiuso(r.stato) || !r.dataLavoro) continue;
-    const chiave = scala === "mese" ? r.dataLavoro.slice(0, 7) : lunediIso(r.dataLavoro);
+    const chiave =
+      scala === "mese"
+        ? r.dataLavoro.slice(0, 7)
+        : scala === "settimana"
+          ? lunediIso(r.dataLavoro)
+          : r.dataLavoro.slice(0, 10);
     conteggi.set(chiave, (conteggi.get(chiave) ?? 0) + 1);
+  }
+
+  if (scala === "giorno") {
+    return ultimiGiorni(oggi, FINESTRA_GIORNI).map((chiave) => ({
+      chiave,
+      etichetta: etichettaData(chiave),
+      titolo: titoloGiorno(chiave),
+      rapportini: conteggi.get(chiave) ?? 0,
+    }));
   }
 
   if (scala === "mese") {
@@ -128,7 +158,7 @@ export function colonneRitmo(
 
   return ultimeSettimane(oggi, FINESTRA_RITMO).map((chiave) => ({
     chiave,
-    etichetta: etichettaSettimana(chiave),
+    etichetta: etichettaData(chiave),
     titolo: titoloSettimana(chiave),
     rapportini: conteggi.get(chiave) ?? 0,
   }));

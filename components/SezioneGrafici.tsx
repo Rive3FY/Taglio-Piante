@@ -6,12 +6,12 @@ import { db } from "@/lib/db";
 import { annoPianoPiuRecente, campateDellAnno } from "@/lib/campate/anno";
 import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
 import { avanzamentoPriorita } from "@/lib/contabilita/aggrega";
-import { riepilogoMappa } from "@/lib/grafici/densita";
+import { riepilogoMappa, type RiepilogoMappa } from "@/lib/grafici/mappa";
 import { inizioFinestraMesi } from "@/lib/grafici/ritmo";
 import { GraficoRitmo } from "./GraficoRitmo";
 import { MappaDensita } from "./MappaDensita";
 
-const VUOTO = { punti: [], senzaCoordinate: 0, daTagliare: 0, tagliate: 0 };
+const VUOTO: RiepilogoMappa = { punti: [], senzaCoordinate: 0, daTagliare: 0, tagliate: 0 };
 
 export function SezioneGrafici() {
   const da = useMemo(() => inizioFinestraMesi(), []);

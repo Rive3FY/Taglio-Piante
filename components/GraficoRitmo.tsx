@@ -12,6 +12,18 @@ const PAD_DESTRA = 18;
 const PAD_ALTO = 20;
 const PAD_BASSO = 48;
 
+const SCALE: Array<{ valore: ScalaRitmo; label: string }> = [
+  { valore: "giorno", label: "Giornaliero" },
+  { valore: "settimana", label: "Settimanale" },
+  { valore: "mese", label: "Mensile" },
+];
+
+const TESTI: Record<ScalaRitmo, { periodo: string; descrizione: string }> = {
+  giorno: { periodo: "negli ultimi 14 giorni", descrizione: "Rapportini archiviati in ciascun giorno." },
+  settimana: { periodo: "nelle dodici settimane", descrizione: "Rapportini archiviati in ciascuna settimana." },
+  mese: { periodo: "nei dodici mesi", descrizione: "Rapportini archiviati in ciascun mese." },
+};
+
 function EtichettaColonna({ x, testo }: { x: number; testo: string }) {
   const [prima, seconda] = testo.split(" ");
   return (
@@ -56,35 +68,28 @@ export function GraficoRitmo({
   for (let valore = 0; valore <= tetto; valore += passo) livelli.push(valore);
 
   const totale = colonne.reduce((s, c) => s + c.rapportini, 0);
-  const periodo = scala === "mese" ? "nei dodici mesi" : "nelle dodici settimane";
+  const { periodo, descrizione } = TESTI[scala];
 
   return (
     <section className="panel grafici-card">
       <header className="grafici-head">
         <h2>Ritmo</h2>
         <div className="chip-row grafici-filtri">
-          <button
-            type="button"
-            className={`chip ${scala === "mese" ? "on" : ""}`}
-            aria-pressed={scala === "mese"}
-            onClick={() => setScala("mese")}
-          >
-            Mensile
-          </button>
-          <button
-            type="button"
-            className={`chip ${scala === "settimana" ? "on" : ""}`}
-            aria-pressed={scala === "settimana"}
-            onClick={() => setScala("settimana")}
-          >
-            Settimanale
-          </button>
+          {SCALE.map((s) => (
+            <button
+              key={s.valore}
+              type="button"
+              className={`chip ${scala === s.valore ? "on" : ""}`}
+              aria-pressed={scala === s.valore}
+              onClick={() => setScala(s.valore)}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </header>
       <p className="muted">
-        {scala === "mese"
-          ? "Rapportini archiviati in ciascun mese."
-          : "Rapportini archiviati in ciascuna settimana."}{" "}
+        {descrizione}{" "}
         {totale === 0
           ? `Nessuno ${periodo}.`
           : `${totale} ${totale === 1 ? "foglio" : "fogli"} ${periodo}.`}

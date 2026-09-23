@@ -1,7 +1,69 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { rasterDensita, type RiepilogoMappa } from "@/lib/grafici/densita";
+import { useEffect, useRef, useState } from "react";
+import type * as Leaflet from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { urlGoogleMaps } from "@/lib/campate/geo";
+import type { PuntoMappa, RiepilogoMappa } from "@/lib/grafici/mappa";
+
+const SATELLITE =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const NOMI =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+const ATTRIBUZIONE = "Immagini &copy; Esri, Maxar, Earthstar Geographics";
+
+const GRADIENTE_ROSSO = { 0.2: "#7f1d1d", 0.45: "#dc2626", 0.75: "#f87171", 1: "#fee2e2" };
+const GRADIENTE_VERDE = { 0.2: "#14532d", 0.45: "#16a34a", 0.75: "#4ade80", 1: "#dcfce7" };
+/** Da questo zoom in su compaiono anche i puntini delle singole campate. */
+const ZOOM_PUNTI = 13;
+
+type Livelli = {
+  mappa: Leaflet.Map;
+  caldoRosso: Leaflet.HeatLayer;
+  caldoVerde: Leaflet.HeatLayer;
+  puntiRossi: Leaflet.LayerGroup;
+  puntiVerdi: Leaflet.LayerGroup;
+  L: typeof Leaflet;
+};
+
+async function caricaLeaflet() {
+  const mod = await import("leaflet");
+  const L = (mod as unknown as { default?: typeof Leaflet }).default ?? mod;
+  // leaflet.heat si aggancia al Leaflet globale.
+  (window as unknown as { L: typeof Leaflet }).L = L;
+  await import("leaflet.heat");
+  return L;
+}
+
+function escape(testo: string) {
+  return testo.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+function popup(p: PuntoMappa) {
+  return `<strong>${escape(p.codiceLinea)} · ${escape(p.campata)}</strong><br/>${escape(p.nomeLinea)}<br/><span class="mappa-popup-stato ${p.tagliata ? "ok" : "da"}">${p.tagliata ? "Tagliata" : "Da tagliare"}</span><br/><a href="${urlGoogleMaps(p.lat, p.lng)}" target="_blank" rel="noopener noreferrer">Apri in Google Maps</a>`;
+}
+
+function riempi(livelli: Livelli, punti: PuntoMappa[]) {
+  const { L, caldoRosso, caldoVerde, puntiRossi, puntiVerdi } = livelli;
+  const rossi = punti.filter((p) => !p.tagliata);
+  const verdi = punti.filter((p) => p.tagliata);
+  caldoRosso.setLatLngs(rossi.map((p) => [p.lat, p.lng, 1] as Leaflet.HeatLatLngTuple));
+  caldoVerde.setLatLngs(verdi.map((p) => [p.lat, p.lng, 1] as Leaflet.HeatLatLngTuple));
+  puntiRossi.clearLayers();
+  puntiVerdi.clearLayers();
+  const renderer = L.canvas({ padding: 0.3 });
+  for (const p of punti) {
+    const marker = L.circleMarker([p.lat, p.lng], {
+      renderer,
+      radius: 6,
+      weight: 2,
+      color: "#ffffff",
+      fillColor: p.tagliata ? "#22c55e" : "#ef4444",
+      fillOpacity: 0.95,
+    }).bindPopup(popup(p));
+    (p.tagliata ? puntiVerdi : puntiRossi).addLayer(marker);
+  }
+}
 
 export function MappaDensita({
   titolo,
@@ -12,54 +74,91 @@ export function MappaDensita({
   anno?: number;
   riepilogo: RiepilogoMappa;
 }) {
-  const ref = useRef<HTMLCanvasElement>(null);
+  const contenitore = useRef<HTMLDivElement>(null);
+  const livelliRef = useRef<Livelli | null>(null);
+  const inquadrata = useRef(false);
+  const [pronta, setPronta] = useState(false);
+  const [mostraRosse, setMostraRosse] = useState(true);
+  const [mostraVerdi, setMostraVerdi] = useState(true);
   const punti = riepilogo.punti;
 
   useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    let frame = 0;
+    let annullato = false;
+    let mappa: Leaflet.Map | null = null;
+    void caricaLeaflet().then((L) => {
+      if (annullato || !contenitore.current) return;
+      mappa = L.map(contenitore.current, {
+        center: [41.0, 14.5],
+        zoom: 8,
+        scrollWheelZoom: false,
+        attributionControl: true,
+      });
+      L.tileLayer(SATELLITE, { maxZoom: 19, attribution: ATTRIBUZIONE }).addTo(mappa);
+      L.tileLayer(NOMI, { maxZoom: 19, opacity: 0.85 }).addTo(mappa);
+      mappa.attributionControl.setPrefix(false);
+      // La rotella zooma solo dopo un clic sulla mappa, così la pagina scorre normalmente.
+      mappa.on("click", () => mappa?.scrollWheelZoom.enable());
+      mappa.on("mouseout", () => mappa?.scrollWheelZoom.disable());
 
-    const disegna = () => {
-      const cssW = canvas.clientWidth;
-      const cssH = canvas.clientHeight;
-      if (cssW < 10 || cssH < 10) return;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const w = Math.round(cssW * dpr);
-      const h = Math.round(cssH * dpr);
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-      }
-      const cols = Math.max(180, Math.round(cssW));
-      const rows = Math.max(120, Math.round((cssH * cols) / cssW));
-      const pixels = rasterDensita(punti, cols, rows);
-      const fuori = document.createElement("canvas");
-      fuori.width = cols;
-      fuori.height = rows;
-      const sorgente = fuori.getContext("2d");
-      const ctx = canvas.getContext("2d");
-      if (!sorgente || !ctx) return;
-      sorgente.putImageData(new ImageData(pixels, cols, rows), 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(fuori, 0, 0, w, h);
-    };
-
-    const osserva = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(disegna);
+      const livelli: Livelli = {
+        L,
+        mappa,
+        caldoRosso: L.heatLayer([], { radius: 22, blur: 18, minOpacity: 0.35, max: 3, maxZoom: 12, gradient: GRADIENTE_ROSSO }),
+        caldoVerde: L.heatLayer([], { radius: 22, blur: 18, minOpacity: 0.4, max: 2, maxZoom: 12, gradient: GRADIENTE_VERDE }),
+        puntiRossi: L.layerGroup(),
+        puntiVerdi: L.layerGroup(),
+      };
+      livelliRef.current = livelli;
+      setPronta(true);
     });
-    osserva.observe(canvas);
-    frame = requestAnimationFrame(disegna);
     return () => {
-      cancelAnimationFrame(frame);
-      osserva.disconnect();
+      annullato = true;
+      livelliRef.current = null;
+      inquadrata.current = false;
+      mappa?.remove();
     };
-  }, [punti]);
+  }, []);
 
-  const inMappa = punti.length;
-  const vuota = inMappa === 0;
+  useEffect(() => {
+    const livelli = livelliRef.current;
+    if (!pronta || !livelli) return;
+    riempi(livelli, punti);
+    if (!inquadrata.current && punti.length > 0) {
+      const bordi = livelli.L.latLngBounds(punti.map((p) => [p.lat, p.lng] as [number, number]));
+      livelli.mappa.fitBounds(bordi, { padding: [24, 24], maxZoom: 14 });
+      inquadrata.current = true;
+    }
+  }, [pronta, punti]);
+
+  useEffect(() => {
+    const livelli = livelliRef.current;
+    if (!pronta || !livelli) return;
+    const { mappa, caldoRosso, caldoVerde, puntiRossi, puntiVerdi } = livelli;
+
+    const aggiorna = () => {
+      const vicino = mappa.getZoom() >= ZOOM_PUNTI;
+      const mostra = (livello: Leaflet.Layer, si: boolean) => {
+        if (si && !mappa.hasLayer(livello)) livello.addTo(mappa);
+        if (!si && mappa.hasLayer(livello)) mappa.removeLayer(livello);
+      };
+      mostra(caldoRosso, mostraRosse);
+      mostra(caldoVerde, mostraVerdi);
+      mostra(puntiRossi, mostraRosse && vicino);
+      mostra(puntiVerdi, mostraVerdi && vicino);
+    };
+    aggiorna();
+    mappa.on("zoomend", aggiorna);
+    return () => {
+      mappa.off("zoomend", aggiorna);
+    };
+  }, [pronta, mostraRosse, mostraVerdi]);
+
+  function inquadraTutte() {
+    const livelli = livelliRef.current;
+    if (!livelli || punti.length === 0) return;
+    const bordi = livelli.L.latLngBounds(punti.map((p) => [p.lat, p.lng] as [number, number]));
+    livelli.mappa.fitBounds(bordi, { padding: [24, 24], maxZoom: 14 });
+  }
 
   return (
     <section className="panel grafici-card">
@@ -68,25 +167,38 @@ export function MappaDensita({
         {anno ? <span className="grafici-anno">Piano {anno}</span> : null}
       </header>
       <p className="muted">
-        Rosso: ancora da tagliare. Verde: già tagliate. La macchia è più intensa dove le campate
-        sono più vicine.
+        Trascina e usa lo zoom per muoverti. Da vicino compaiono le singole campate: toccane una per
+        vedere linea e campata.
       </p>
       <div className="mappa-wrap">
-        <canvas ref={ref} className="mappa-canvas" role="img" aria-label={etichettaMappa(titolo, riepilogo)} />
-        {vuota ? <p className="mappa-vuota">Nessuna coordinata in questo piano.</p> : null}
+        <div ref={contenitore} className="mappa-leaflet" aria-label={`Mappa satellitare ${titolo}`} />
+        {pronta && punti.length === 0 ? (
+          <p className="mappa-vuota">Nessuna coordinata in questo piano.</p>
+        ) : null}
       </div>
-      <ul className="mappa-legenda">
-        <li>
+      <div className="mappa-legenda">
+        <button
+          type="button"
+          className={`chip mappa-chip${mostraRosse ? " on-rosso" : ""}`}
+          aria-pressed={mostraRosse}
+          onClick={() => setMostraRosse((v) => !v)}
+        >
           <span className="mappa-dot mappa-dot-rosso" />
-          Da tagliare
-          <strong>{riepilogo.daTagliare}</strong>
-        </li>
-        <li>
+          Da tagliare <strong>{riepilogo.daTagliare}</strong>
+        </button>
+        <button
+          type="button"
+          className={`chip mappa-chip${mostraVerdi ? " on-verde" : ""}`}
+          aria-pressed={mostraVerdi}
+          onClick={() => setMostraVerdi((v) => !v)}
+        >
           <span className="mappa-dot mappa-dot-verde" />
-          Tagliate
-          <strong>{riepilogo.tagliate}</strong>
-        </li>
-      </ul>
+          Tagliate <strong>{riepilogo.tagliate}</strong>
+        </button>
+        <button type="button" className="btn btn-sm btn-secondary mappa-tutte" onClick={inquadraTutte}>
+          Inquadra tutte
+        </button>
+      </div>
       {riepilogo.senzaCoordinate > 0 ? (
         <p className="muted">
           {riepilogo.senzaCoordinate}{" "}
@@ -96,9 +208,4 @@ export function MappaDensita({
       ) : null}
     </section>
   );
-}
-
-function etichettaMappa(titolo: string, riepilogo: RiepilogoMappa) {
-  if (riepilogo.punti.length === 0) return `${titolo}: nessuna coordinata da mostrare.`;
-  return `${titolo}: ${riepilogo.daTagliare} da tagliare in rosso, ${riepilogo.tagliate} tagliate in verde.`;
 }
