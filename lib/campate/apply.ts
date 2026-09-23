@@ -19,6 +19,7 @@ import {
   campataDaAttenzionare,
   campataDaNonTagliare,
   campataDaRiprendere,
+  campataETagliata,
   campataInElencoParallelo,
   esitoRapportinoToStato,
   etichettaRinvio,
@@ -325,6 +326,30 @@ export async function aggiornaDistanzeDaFile(opts: { anteprima: AnteprimaImport;
   return { aggiornate: daScrivere.length };
 }
 
+/**
+ * Campate della linea del foglio in quell'anno. Si cerca anche per codice: la
+ * stessa linea può esistere con due id (anagrafica iniziale e import del piano).
+ */
+async function campateLineaAnno(lineaId: string, codice: string | undefined, anno: number) {
+  const trovate = new Map<string, CampataLavoro>();
+  for (const c of await db.campateLavoro.where("lineaId").equals(lineaId).toArray()) trovate.set(c.id, c);
+  if (codice?.trim()) {
+    for (const c of await db.campateLavoro.where("codiceLinea").equalsIgnoreCase(codice.trim()).toArray()) {
+      trovate.set(c.id, c);
+    }
+  }
+  return [...trovate.values()].filter((c) => annoDi(c) === anno);
+}
+
+function stessaLinea(
+  lineaId: string,
+  codice: string | undefined,
+  c: Pick<CampataLavoro, "lineaId" | "codiceLinea">,
+) {
+  if (c.lineaId === lineaId) return true;
+  return Boolean(codice?.trim()) && c.codiceLinea.trim().toUpperCase() === codice!.trim().toUpperCase();
+}
+
 function testoEsiti(item: Rapportino) {
   return (
     item.campata ||
@@ -372,7 +397,7 @@ function espandiFratelliPriorita(tutte: CampataLavoro[], bersagli: CampataLavoro
     out.set(b.id, b);
     if (isBaseLavoro(b)) continue;
     for (const c of tutte) {
-      if (c.lineaId !== b.lineaId) continue;
+      if (!stessaLinea(b.lineaId, b.codiceLinea, c)) continue;
       if (!stessaNormalizzata(c.normalizzata, b.normalizzata)) continue;
       if (annoDi(c) !== annoDi(b)) continue;
       if (isBaseLavoro(c)) continue;
@@ -398,9 +423,7 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
 
   const linea = await db.linee.get(item.lineaId);
   const anno = annoDaDataLavoro(item.dataLavoro);
-  const tutte = (await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray()).filter(
-    (c) => annoDi(c) === anno,
-  );
+  const tutte = await campateLineaAnno(item.lineaId, linea?.codice, anno);
   for (const esito of esiti) {
     if (!esito.campataId || tutte.some((c) => c.id === esito.campataId)) continue;
     const extra = await db.campateLavoro.get(esito.campataId);
@@ -538,15 +561,71 @@ export async function applicaEsitiDaRapportino(item: Rapportino, session: Sessio
   if (daScrivere.length > 0 || storico.length > 0) await enqueueSync(item.id, "campate");
 }
 
+/**
+ * Ogni foglio archiviato deve lasciare le sue campate tagliate. Se una non lo è
+ * (riga persa o rimessa da tagliare per errore) si riapplica il foglio, solo
+ * per quelle campate. I fogli si ripassano dal più vecchio: una campata che un
+ * foglio più recente dice «non terminata» resta arancione.
+ */
+export async function riallineaCampateDaRapportini() {
+  const chiusi = (await db.rapportini.where("stato").anyOf("archiviato", "in_attesa").toArray()).sort(
+    (a, b) =>
+      (a.dataLavoro ?? "").localeCompare(b.dataLavoro ?? "") ||
+      (a.archiviatoAt ?? a.updatedAt ?? "").localeCompare(b.archiviatoAt ?? b.updatedAt ?? ""),
+  );
+  if (chiusi.length === 0) return 0;
+  const prestazioni = await db.prestazioni.toArray();
+  const linee = new Map((await db.linee.toArray()).map((l) => [l.id, l]));
+  const dataFoglio = new Map(chiusi.map((r) => [r.id, r.dataLavoro ?? ""]));
+  let sistemati = 0;
+
+  for (const item of chiusi) {
+    const classificati = esitiDaRapportino(item, prestazioni).filter((e) => e.normalizzata);
+    const soloBasi = classificati.some((e) => e.tipo === "base");
+    const esiti = classificati.filter(
+      (e) => (soloBasi ? e.tipo === "base" : e.tipo !== "base") && esitoETerminato(e),
+    );
+    if (esiti.length === 0) continue;
+
+    const linea = linee.get(item.lineaId);
+    const anno = annoDaDataLavoro(item.dataLavoro);
+    const tutte = await campateLineaAnno(item.lineaId, linea?.codice, anno);
+    const mancanti = esiti.filter((esito) => {
+      const trovati = espandiFratelliPriorita(
+        tutte,
+        bersagliPerEsito(tutte, esito, linea?.codice ?? "", anno),
+      );
+      if (trovati.length === 0) return Boolean(linea);
+      const cercaBase = esito.tipo === "base";
+      return trovati
+        .filter((c) => !campataDaNonTagliare(c) && isBaseLavoro(c) === cercaBase)
+        .some((c) => {
+          if (campataETagliata(c)) return false;
+          if (c.nonTerminata && c.rapportinoId && c.rapportinoId !== item.id) {
+            const altro = dataFoglio.get(c.rapportinoId);
+            if (altro != null && altro >= (item.dataLavoro ?? "")) return false;
+          }
+          return true;
+        });
+    });
+    if (mancanti.length === 0) continue;
+
+    await applicaEsitiDaRapportino(soloBasi ? item : { ...item, esitiCampate: mancanti }, null);
+    sistemati += 1;
+  }
+  return sistemati;
+}
+
 function copreCampata(
   item: Rapportino,
   presente: CampataLavoro,
   tutte: CampataLavoro[],
   prestazioni: Prestazione[],
   codiceLinea: string,
+  codiceFoglio?: string,
 ) {
   if (!rapportinoEChiuso(item.stato)) return false;
-  if (item.lineaId !== presente.lineaId) return false;
+  if (!stessaLinea(item.lineaId, codiceFoglio, presente)) return false;
   for (const esito of esitiDaRapportino(item, prestazioni)) {
     const trovati = espandiFratelliPriorita(
       tutte,
@@ -570,15 +649,19 @@ async function fogliCheAncoraCoprono(
       .filter((id): id is string => Boolean(id) && id !== esclusoId),
   );
   const linea = await db.linee.get(presente.lineaId);
-  const tutte = (await db.campateLavoro.where("lineaId").equals(presente.lineaId).toArray()).filter(
-    (c) => annoDi(c) === annoDi(presente),
-  );
   const codice = linea?.codice ?? presente.codiceLinea;
+  const tutte = await campateLineaAnno(presente.lineaId, codice, annoDi(presente));
+  const codiciLinea = new Map((await db.linee.toArray()).map((l) => [l.id, l.codice]));
   const out: Rapportino[] = [];
   for (const r of altri) {
     if (r.id === esclusoId) continue;
     if (!rapportinoEChiuso(r.stato)) continue;
-    if (daLog.has(r.id) || copreCampata(r, presente, tutte, prestazioni, codice)) out.push(r);
+    if (
+      daLog.has(r.id) ||
+      copreCampata(r, presente, tutte, prestazioni, codice, codiciLinea.get(r.lineaId))
+    ) {
+      out.push(r);
+    }
   }
   return out.sort((a, b) => (b.dataLavoro ?? "").localeCompare(a.dataLavoro ?? ""));
 }
@@ -633,9 +716,7 @@ async function campateCollegateAlRapportino(rapportinoId: string, item?: Rapport
 
   if (item) {
     const linea = await db.linee.get(item.lineaId);
-    const tutte = (await db.campateLavoro.where("lineaId").equals(item.lineaId).toArray()).filter(
-      (c) => annoDi(c) === annoDaDataLavoro(item.dataLavoro),
-    );
+    const tutte = await campateLineaAnno(item.lineaId, linea?.codice, annoDaDataLavoro(item.dataLavoro));
     const prestazioni = await db.prestazioni.toArray();
     for (const esito of esitiDaRapportino(item, prestazioni)) {
       for (const c of bersagliPerEsito(tutte, esito, linea?.codice ?? "", annoDaDataLavoro(item.dataLavoro))) {
