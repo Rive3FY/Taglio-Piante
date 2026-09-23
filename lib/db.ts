@@ -394,20 +394,23 @@ export async function salvaRapportini(items: Rapportino[]) {
       const terna = r.firmaTerna === FIRMA_SEPARATA ? prima?.terna : r.firmaTerna;
       const opImg = eImmagineFirma(operatore) ? operatore : undefined;
       const teImg = eImmagineFirma(terna) ? terna : undefined;
-      if (opImg || teImg) {
+      // Firma rimasta sul server (non ancora scaricata): si tiene il segno e il percorso.
+      const opRemota = !opImg && r.firmaOperatore === FIRMA_SEPARATA ? prima?.operatorePath : undefined;
+      const teRemota = !teImg && r.firmaTerna === FIRMA_SEPARATA ? prima?.ternaPath : undefined;
+      if (opImg || teImg || opRemota || teRemota) {
         firme.push({
           id: r.id,
           operatore: opImg,
           terna: teImg,
-          operatorePath: opImg && opImg === prima?.operatore ? prima.operatorePath : undefined,
-          ternaPath: teImg && teImg === prima?.terna ? prima.ternaPath : undefined,
+          operatorePath: opRemota ?? (opImg && opImg === prima?.operatore ? prima.operatorePath : undefined),
+          ternaPath: teRemota ?? (teImg && teImg === prima?.terna ? prima.ternaPath : undefined),
         });
       }
       else if (prima) senza.push(r.id);
       return {
         ...r,
-        firmaOperatore: opImg ? FIRMA_SEPARATA : operatore,
-        firmaTerna: teImg ? FIRMA_SEPARATA : terna,
+        firmaOperatore: opImg || opRemota ? FIRMA_SEPARATA : operatore,
+        firmaTerna: teImg || teRemota ? FIRMA_SEPARATA : terna,
       };
     });
     await db.rapportini.bulkPut(record);
@@ -420,18 +423,112 @@ export function salvaRapportino(item: Rapportino) {
   return salvaRapportini([item]);
 }
 
+export type RapportinoDalServer = {
+  rapportino: Rapportino;
+  operatorePath?: string;
+  ternaPath?: string;
+};
+
+/**
+ * Fogli letti dal server, in una sola scrittura: elenchi e calendario si
+ * aggiornano una volta. Le immagini delle firme non arrivano qui: resta il
+ * percorso sul server e si scaricano quando il foglio si apre o si stampa.
+ * Si salta ciò che nel frattempo è cambiato sul dispositivo.
+ */
+export async function salvaRapportiniDalServer(voci: RapportinoDalServer[]) {
+  if (voci.length === 0) return 0;
+  return db.transaction("rw", [db.rapportini, db.firme], async () => {
+    const ids = voci.map((v) => v.rapportino.id);
+    const locali = await db.rapportini.bulkGet(ids);
+    const attuali = await db.firme.bulkGet(ids);
+    const record: Rapportino[] = [];
+    const firme: FirmeRapportino[] = [];
+    const senza: string[] = [];
+
+    voci.forEach(({ rapportino, operatorePath, ternaPath }, i) => {
+      const locale = locali[i];
+      if (locale?.syncStatus === "pending") return;
+      if (locale && new Date(rapportino.updatedAt) < new Date(locale.updatedAt)) return;
+      const prima = attuali[i];
+      record.push({
+        ...rapportino,
+        firmaOperatore: operatorePath ? FIRMA_SEPARATA : undefined,
+        firmaTerna: ternaPath ? FIRMA_SEPARATA : undefined,
+      });
+      if (operatorePath || ternaPath) {
+        firme.push({
+          id: rapportino.id,
+          operatore: operatorePath && prima?.operatorePath === operatorePath ? prima.operatore : undefined,
+          terna: ternaPath && prima?.ternaPath === ternaPath ? prima.terna : undefined,
+          operatorePath,
+          ternaPath,
+        });
+      } else if (prima) {
+        senza.push(rapportino.id);
+      }
+    });
+
+    if (record.length > 0) await db.rapportini.bulkPut(record);
+    if (firme.length > 0) await db.firme.bulkPut(firme);
+    if (senza.length > 0) await db.firme.bulkDelete(senza);
+    return record.length;
+  });
+}
+
+function firmeDaScaricare(item: Rapportino, f: FirmeRapportino | undefined) {
+  return (
+    (item.firmaOperatore === FIRMA_SEPARATA && !f?.operatore && Boolean(f?.operatorePath)) ||
+    (item.firmaTerna === FIRMA_SEPARATA && !f?.terna && Boolean(f?.ternaPath))
+  );
+}
+
+/** Vero se il foglio è firmato ma le immagini non sono ancora sul dispositivo. */
+export async function firmeMancanti(item: Rapportino) {
+  if (item.firmaOperatore !== FIRMA_SEPARATA && item.firmaTerna !== FIRMA_SEPARATA) return false;
+  return firmeDaScaricare(item, await db.firme.get(item.id));
+}
+
+/** Scarica in anticipo le firme di più fogli (PDF multipli, backup). */
+export async function preparaFirme(items: Rapportino[]) {
+  const ids = items
+    .filter((r) => r.firmaOperatore === FIRMA_SEPARATA || r.firmaTerna === FIRMA_SEPARATA)
+    .map((r) => r.id);
+  if (ids.length === 0) return;
+  const { scaricaFirmeMancanti } = await import("./supabase/remote");
+  await scaricaFirmeMancanti(ids);
+}
+
 /**
  * Rimette le immagini delle firme nel foglio: serve al form, al PDF e all'invio.
+ * Con `scarica` prende dal server le immagini non ancora sul dispositivo.
  * Una firma introvabile resta segnata (il foglio non deve tornare «senza firma»);
- * con `obbligatorie` blocca invece di proseguire.
+ * con `obbligatorie` blocca invece di proseguire, con `"sul-server"` blocca solo
+ * se l'immagine esiste sul server ma non si è potuta scaricare.
  */
-export async function conFirme<T extends Rapportino>(item: T, opts: { obbligatorie?: boolean } = {}): Promise<T> {
+export async function conFirme<T extends Rapportino>(
+  item: T,
+  opts: { obbligatorie?: boolean | "sul-server"; scarica?: boolean } = {},
+): Promise<T> {
   const op = item.firmaOperatore === FIRMA_SEPARATA;
   const te = item.firmaTerna === FIRMA_SEPARATA;
   if (!op && !te) return item;
-  const f = await db.firme.get(item.id);
-  if (opts.obbligatorie && ((op && !f?.operatore) || (te && !f?.terna))) {
+  let f = await db.firme.get(item.id);
+  if (opts.scarica && firmeDaScaricare(item, f)) {
+    const { scaricaFirmeMancanti } = await import("./supabase/remote");
+    await scaricaFirmeMancanti([item.id]);
+    f = await db.firme.get(item.id);
+  }
+  const mancaOp = op && !f?.operatore;
+  const mancaTe = te && !f?.terna;
+  if (opts.obbligatorie === true && (mancaOp || mancaTe)) {
     throw new Error("Firma del foglio non trovata sul dispositivo: riaprilo e firma di nuovo.");
+  }
+  if (opts.obbligatorie === "sul-server" && firmeDaScaricare(item, f)) {
+    throw new Error(
+      typeof navigator !== "undefined" && !navigator.onLine
+        ? "Firma non disponibile senza rete: riprova quando torna la connessione."
+        : "Firma non scaricata dal server: riprova tra poco.",
+    );
   }
   return {
     ...item,
@@ -440,7 +537,10 @@ export async function conFirme<T extends Rapportino>(item: T, opts: { obbligator
   };
 }
 
-/** Il foglio singolo, con le immagini delle firme: per le pagine che lo aprono. */
+/**
+ * Il foglio singolo, con le immagini delle firme già sul dispositivo: per le
+ * pagine che lo aprono. Il download delle mancanti lo avvia `useFirmePronte`.
+ */
 export async function getRapportinoCompleto(id: string) {
   const item = await db.rapportini.get(id);
   return item ? conFirme(item) : item;

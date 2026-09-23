@@ -1,6 +1,7 @@
 "use client";
 
 import JSZip from "jszip";
+import { preparaFirme } from "@/lib/db";
 import { fillOfficialScheda } from "@/lib/fillScheda";
 import { scaricaBlob } from "@/lib/download";
 import { formatDate, todayIso } from "@/lib/format";
@@ -87,6 +88,7 @@ export async function scaricaBackupZip(
 ) {
   if (fogli.length === 0) throw new Error("Nessun rapportino chiuso nei mesi scelti.");
 
+  await preparaFirme(fogli.map((f) => f.item));
   const zip = new JSZip();
   const usatiPerCartella = new Map<string, Set<string>>();
   let ok = 0;

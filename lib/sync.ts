@@ -7,6 +7,7 @@ import {
   compattaNumeri,
   deleteRemoteRapportino,
   idsConNumero,
+  precaricaFirmeRecenti,
   pullDeletedRapportini,
   pullRapportini,
   pullReferenceData,
@@ -258,7 +259,12 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
     riparazioniFatte = true;
   }
 
-  if (autenticato) await riparaRapportiniSenzaCoda(true, profilo);
+  if (autenticato) {
+    await riparaRapportiniSenzaCoda(true, profilo);
+    void precaricaFirmeRecenti(profilo).catch((error) =>
+      console.warn("Firme recenti non scaricate:", error),
+    );
+  }
 
   return { processed, pending: await pendingDiQuestoAccount(), pulled, pullError };
 }
