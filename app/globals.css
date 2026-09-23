@@ -1891,3 +1891,116 @@ button.rap-card-link {
   font-weight: 700;
   color: var(--accent);
 }
+
+.grafici { display: grid; gap: 16px; }
+.grafici-titolo { margin: 4px 0 0; font-size: 18px; }
+.tecnico-main .grafici .panel.grafici-card {
+  --pad: 16px;
+  padding: 0 var(--pad) 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+.tecnico-main .grafici .panel h2 { font-size: 16px; color: #ececf4; }
+.grafici-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 calc(-1 * var(--pad, 16px)) 2px;
+  padding: 11px var(--pad, 16px);
+  background: linear-gradient(90deg, #22203d 0%, #1a1930 60%, #16161f 100%);
+  border-bottom: 1px solid #2d2a4d;
+  color: #ececf4;
+}
+.grafici-head h2 { margin: 0; }
+.grafici-filtri { margin-left: auto; }
+.grafici-filtri .chip { padding: 6px 12px; min-height: 32px; }
+.grafici-anno {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c4bbff;
+}
+.grafici-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  gap: 12px;
+  align-items: stretch;
+}
+.ritmo-svg { width: 100%; height: auto; display: block; }
+.ritmo-griglia { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+.ritmo-asse, .ritmo-etichetta { fill: var(--muted); font-size: 11px; }
+.ritmo-valore { fill: #ececf4; font-size: 11px; font-weight: 700; }
+.grafici-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.grafici-stat strong {
+  font-size: 34px;
+  line-height: 1.05;
+  color: var(--danger-ink);
+}
+.grafici-stat-ok { color: var(--ok-ink); }
+.grafici-stat-urg { margin-top: 10px; color: var(--warn); }
+.grafici-stat-voce { font-size: 13px; color: var(--muted); }
+.mappa-wrap { position: relative; }
+.mappa-canvas {
+  width: 100%;
+  height: 320px;
+  display: block;
+  border-radius: 12px;
+  background: #101018;
+  border: 1px solid var(--line);
+}
+.mappa-vuota {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+  padding: 16px;
+}
+.mappa-legenda {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.mappa-legenda li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.mappa-legenda strong { margin-left: 2px; }
+.mappa-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.mappa-dot-rosso { background: radial-gradient(circle at 40% 40%, #ffbab0, #c6362a); }
+.mappa-dot-verde { background: radial-gradient(circle at 40% 40%, #b0ecc6, #228c4e); }
+
+@media (max-width: 720px) {
+  .grafici-corpo { grid-template-columns: 1fr; }
+  .grafici-stat { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; text-align: left; gap: 6px 10px; }
+  .grafici-stat strong { font-size: 28px; }
+  .grafici-stat-urg { margin-top: 0; }
+}
+
+@media (min-width: 960px) {
+  .mappa-canvas { height: 460px; }
+  .grafici-titolo { font-size: 20px; }
+}
