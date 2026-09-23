@@ -1125,7 +1125,8 @@ select.inline-field { width: auto; min-width: 160px; }
   height: 36px;
   border-radius: 10px;
 }
-.maps-link:hover { background: var(--panel-3); }
+.maps-link { color: var(--accent); }
+.maps-link:hover { background: var(--panel-3); color: var(--accent-2); }
 .maps-link.incerto { outline: 2px dashed #d97706; outline-offset: 1px; }
 .campata-note-preview {
   display: inline-block;
