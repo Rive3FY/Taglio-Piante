@@ -1083,7 +1083,15 @@ select.inline-field { width: auto; min-width: 160px; }
 
 .campate-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
 .campate-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.campate-table th, .campate-table td { text-align: left; padding: 8px 10px; vertical-align: top; }
+/* Righe tutte uguali: niente va a capo, se non ci sta la tabella scorre di lato. */
+.campate-table th, .campate-table td {
+  text-align: left;
+  padding: 8px 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.campate-table td .badge + .badge { margin-left: 4px; }
+.campate-table td > strong + .badge { margin-left: 6px; }
 .campate-table th { background: var(--panel-2); color: var(--accent-2); position: sticky; top: 0; }
 .campate-table tbody tr + tr td { border-top: 1px solid var(--line); }
 .campate-table th .th-sort {
@@ -1946,6 +1954,8 @@ button.rap-card-link {
     gap: 18px;
   }
   .tecnico-main .panel { padding: 22px; }
+  .page:has(.campate-table-wrap),
+  .tecnico-main.page:has(.campate-table-wrap) { width: min(1440px, calc(100% - 40px)); }
   .tecnico-main .elenco-head h2,
   .tecnico-main .panel h2 { font-size: 20px; }
   .bacheca {
