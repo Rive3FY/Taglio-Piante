@@ -1950,78 +1950,6 @@ button.rap-card-link {
 .grafici-stat-ok { color: var(--ok-ink); }
 .grafici-stat-urg { margin-top: 10px; color: var(--warn); }
 .grafici-stat-voce { font-size: 13px; color: var(--muted); }
-.mappa-wrap { position: relative; }
-.mappa-leaflet {
-  width: 100%;
-  height: 380px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #101018;
-  border: 1px solid var(--line);
-  z-index: 0;
-}
-.mappa-vuota {
-  position: absolute;
-  inset: 0;
-  z-index: 500;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  color: #ececf4;
-  background: rgba(10, 10, 15, 0.55);
-  border-radius: 12px;
-  text-align: center;
-  padding: 16px;
-  pointer-events: none;
-}
-.mappa-legenda {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.mappa-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  opacity: 0.6;
-}
-.mappa-chip.on-rosso { opacity: 1; border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.14); }
-.mappa-chip.on-verde { opacity: 1; border-color: rgba(34, 197, 94, 0.6); background: rgba(34, 197, 94, 0.14); }
-.mappa-tutte { margin-left: auto; }
-.mappa-leaflet .leaflet-popup-content-wrapper,
-.mappa-leaflet .leaflet-popup-tip {
-  background: var(--panel);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-}
-.mappa-leaflet .leaflet-popup-content { margin: 12px 14px; font-size: 13px; line-height: 1.5; }
-.mappa-leaflet .leaflet-popup-content a { color: var(--accent-2); font-weight: 700; }
-.mappa-leaflet .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
-.mappa-popup-stato { font-weight: 700; }
-.mappa-popup-stato.da { color: #f87171; }
-.mappa-popup-stato.ok { color: #4ade80; }
-.mappa-leaflet .leaflet-control-attribution {
-  background: rgba(10, 10, 15, 0.7);
-  color: #9d9db5;
-  font-size: 10px;
-}
-.mappa-leaflet .leaflet-control-attribution a { color: #c4bbff; }
-.mappa-leaflet .leaflet-bar a {
-  background: var(--panel);
-  color: var(--ink);
-  border-bottom-color: var(--line);
-}
-.mappa-leaflet .leaflet-bar a:hover { background: var(--panel-3); }
-.mappa-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-}
-.mappa-dot-rosso { background: radial-gradient(circle at 40% 40%, #ffbab0, #c6362a); }
-.mappa-dot-verde { background: radial-gradient(circle at 40% 40%, #b0ecc6, #228c4e); }
 
 @media (max-width: 720px) {
   .grafici-corpo { grid-template-columns: 1fr; }
@@ -2031,6 +1959,5 @@ button.rap-card-link {
 }
 
 @media (min-width: 960px) {
-  .mappa-leaflet { height: 520px; }
   .grafici-titolo { font-size: 20px; }
 }

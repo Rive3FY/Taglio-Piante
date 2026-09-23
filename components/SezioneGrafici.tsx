@@ -6,12 +6,8 @@ import { db } from "@/lib/db";
 import { annoPianoPiuRecente, campateDellAnno } from "@/lib/campate/anno";
 import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
 import { avanzamentoPriorita } from "@/lib/contabilita/aggrega";
-import { riepilogoMappa, type RiepilogoMappa } from "@/lib/grafici/mappa";
 import { inizioFinestraMesi } from "@/lib/grafici/ritmo";
 import { GraficoRitmo } from "./GraficoRitmo";
-import { MappaDensita } from "./MappaDensita";
-
-const VUOTO: RiepilogoMappa = { punti: [], senzaCoordinate: 0, daTagliare: 0, tagliate: 0 };
 
 export function SezioneGrafici() {
   const da = useMemo(() => inizioFinestraMesi(), []);
@@ -23,16 +19,13 @@ export function SezioneGrafici() {
 
   const rapportini = useMemo(() => rapportiniQuery ?? [], [rapportiniQuery]);
   const campate = useMemo(() => campateQuery ?? [], [campateQuery]);
-  const anno = useMemo(() => annoPianoPiuRecente(campate), [campate]);
-  const delPiano = useMemo(() => campateDellAnno(campate, anno), [campate, anno]);
+  const delPiano = useMemo(
+    () => campateDellAnno(campate, annoPianoPiuRecente(campate)),
+    [campate],
+  );
   const differibili = useMemo(() => avanzamentoPriorita(delPiano, "differibile"), [delPiano]);
   const urgenze = useMemo(
     () => (URGENZE_VISIBILI ? avanzamentoPriorita(delPiano, "urgente") : null),
-    [delPiano],
-  );
-  const mappaDifferibili = useMemo(() => riepilogoMappa(delPiano, "differibile"), [delPiano]);
-  const mappaUrgenze = useMemo(
-    () => (URGENZE_VISIBILI ? riepilogoMappa(delPiano, "urgente") : VUOTO),
     [delPiano],
   );
 
@@ -53,10 +46,6 @@ export function SezioneGrafici() {
         daTagliare={differibili.daTagliare}
         urgenzeDaTagliare={urgenze?.daTagliare}
       />
-      <MappaDensita titolo="Differibili" anno={anno} riepilogo={mappaDifferibili} />
-      {URGENZE_VISIBILI ? (
-        <MappaDensita titolo="Urgenze" anno={anno} riepilogo={mappaUrgenze} />
-      ) : null}
     </section>
   );
 }
