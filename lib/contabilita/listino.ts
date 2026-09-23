@@ -114,6 +114,19 @@ export function importoVoce(quantita: number, codice: string, unitaMisura: strin
   return arrotondaEuro(base * prezzo);
 }
 
+/** Totale di un foglio con i prezzi del listino; le voci senza prezzo si contano a parte. */
+export function totaleVoci(voci: { quantita: number; codice: string; unitaMisura: string }[]) {
+  let totale = 0;
+  let senzaPrezzo = 0;
+  for (const v of voci) {
+    if (!(v.quantita > 0)) continue;
+    const importo = importoVoce(v.quantita, v.codice, v.unitaMisura);
+    if (importo == null) senzaPrezzo += 1;
+    else totale += importo;
+  }
+  return { totale: arrotondaEuro(totale), senzaPrezzo };
+}
+
 export function listinoCaricato() {
   return Object.keys(LISTINO).length > 0;
 }

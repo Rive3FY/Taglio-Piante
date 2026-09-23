@@ -37,6 +37,8 @@ import {
   type CampataDaChiudere,
 } from "@/lib/campate/terminata";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
+import { formatEuro } from "@/lib/contabilita/aggrega";
+import { totaleVoci } from "@/lib/contabilita/listino";
 import { useArea } from "@/lib/area";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
@@ -135,6 +137,21 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
     for (const r of existing?.righe ?? []) m[r.prestazioneId] = r.quantita;
     return m;
   });
+  // Solo il tecnico vede quanto vale il foglio mentre lo compila.
+  const mostraTotale = session?.ruolo === "tecnico";
+  const totaleFoglio = useMemo(
+    () =>
+      mostraTotale
+        ? totaleVoci(
+            prestazioni.map((p) => ({
+              quantita: qty[p.id] ?? 0,
+              codice: p.codice,
+              unitaMisura: p.unitaMisura,
+            })),
+          )
+        : null,
+    [mostraTotale, prestazioni, qty],
+  );
   const [firmaOperatore, setFirmaOperatore] = useState(existing?.firmaOperatore);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -837,6 +854,19 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       {dockReady
         ? createPortal(
             <div className="form-actions-dock">
+              {totaleFoglio ? (
+                <div className="totale-foglio" aria-live="polite">
+                  <span>Totale</span>
+                  <strong>{formatEuro(totaleFoglio.totale)}</strong>
+                  {totaleFoglio.senzaPrezzo > 0 ? (
+                    <small>
+                      {totaleFoglio.senzaPrezzo === 1
+                        ? "1 voce senza prezzo"
+                        : `${totaleFoglio.senzaPrezzo} voci senza prezzo`}
+                    </small>
+                  ) : null}
+                </div>
+              ) : null}
               <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving || Boolean(erroreDaNonTagliare || erroreBasi)}>
                 {saving ? "Salvataggio…" : "Salva"}
               </button>
