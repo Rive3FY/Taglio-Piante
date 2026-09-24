@@ -327,69 +327,29 @@ export default function ContabilitaPage() {
       </section>
 
       <section className="panel">
-        <h2>Periodo e giorni · {etichettaMese(meseEffettivo)}</h2>
-        <p className="periodo-riepilogo">
-          Dal <strong className="verde">{formatDate(dal)}</strong> al{" "}
-          <strong className="rosso">{formatDate(al)}</strong>
-          {!periodo.inizioScelto && !periodo.chiusuraScelta ? (
-            <span className="muted"> · periodo di partenza, scegli tu inizio e chiusura</span>
-          ) : null}
-        </p>
-        <div className="periodo-barra">
-          <button
-            type="button"
-            className={`chip periodo-inizio ${modoCal === "inizio" ? "on" : ""}`}
-            aria-pressed={modoCal === "inizio"}
-            onClick={() => {
-              setModoCal(modoCal === "inizio" ? "giorno" : "inizio");
-              setAvvisoPeriodo(null);
-            }}
-          >
-            <span className="periodo-dot verde" />
-            Scegli inizio
-          </button>
-          <button
-            type="button"
-            className={`chip periodo-chiusura ${modoCal === "chiusura" ? "on" : ""}`}
-            aria-pressed={modoCal === "chiusura"}
-            onClick={() => {
-              setModoCal(modoCal === "chiusura" ? "giorno" : "chiusura");
-              setAvvisoPeriodo(null);
-            }}
-          >
-            <span className="periodo-dot rosso" />
-            Scegli chiusura
-          </button>
-          {periodo.inizioScelto || periodo.chiusuraScelta ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm periodo-azzera"
-              onClick={() => {
-                salvaPeriodo(meseEffettivo, { dal: null, al: null });
-                setModoCal("giorno");
-                setAvvisoPeriodo("Periodo riportato a quello di partenza.");
-              }}
-            >
-              Ripristina
-            </button>
-          ) : null}
-        </div>
-        <p className="muted" style={{ margin: 0 }}>
-          {avvisoPeriodo ??
-            (modoCal === "inizio"
-              ? "Tocca il giorno di inizio: diventa verde."
-              : modoCal === "chiusura"
-                ? "Tocca il giorno di chiusura: diventa rosso."
-                : "Tocca un giorno per vedere le prestazioni di quella data.")}
-        </p>
+        <h2>Periodo · {etichettaMese(meseEffettivo)}</h2>
         <CalendarioPeriodo
           mese={meseEffettivo}
-          periodo={intervallo}
+          periodo={periodo}
           oggi={oggi}
           modo={modoCal}
+          avviso={avvisoPeriodo}
           selezionato={giorno}
           conteggi={conteggiGiorno}
+          onModo={(m) => {
+            setModoCal(m);
+            setAvvisoPeriodo(null);
+          }}
           onScegli={scegliGiorno}
+          onRipristina={
+            periodo.inizioScelto || periodo.chiusuraScelta
+              ? () => {
+                  salvaPeriodo(meseEffettivo, { dal: null, al: null });
+                  setModoCal("giorno");
+                  setAvvisoPeriodo("Periodo riportato a quello di partenza.");
+                }
+              : undefined
+          }
         />
         {giornoVoci ? (
           <div className="contab-giorno">
