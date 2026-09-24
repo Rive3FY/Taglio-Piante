@@ -79,14 +79,34 @@ export function ultimoGiornoMese(mese: string) {
   return giorni[giorni.length - 1] ?? "";
 }
 
-export function giorniAllaChiusura(mese: string, oggiIso: string) {
-  if (meseDaIso(oggiIso) !== mese) return null;
-  const ultimo = ultimoGiornoMese(mese);
-  const restano = Math.round(
-    (new Date(`${ultimo}T00:00:00`).getTime() - new Date(`${oggiIso}T00:00:00`).getTime()) /
-      86_400_000,
+export type Intervallo = { dal: string; al: string };
+
+export function meseIntero(mese: string): Intervallo {
+  return { dal: `${mese}-01`, al: ultimoGiornoMese(mese) };
+}
+
+export function giorniTra({ dal, al }: Intervallo) {
+  const giorni: string[] = [];
+  const [y, m, d] = dal.split("-").map(Number);
+  for (let i = 0; i < 400; i++) {
+    const data = new Date(y, m - 1, d + i);
+    const iso = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
+    if (iso > al) break;
+    giorni.push(iso);
+  }
+  return giorni;
+}
+
+/** Giorni da oggi alla chiusura; null se oggi è fuori dal periodo. */
+export function giorniAllaChiusura(periodo: Intervallo, oggiIso: string) {
+  if (oggiIso < periodo.dal || oggiIso > periodo.al) return null;
+  return giorniTra({ dal: oggiIso, al: periodo.al }).length - 1;
+}
+
+export function rapportiniNelPeriodo(rapportini: Rapportino[], { dal, al }: Intervallo) {
+  return rapportini.filter(
+    (r) => rapportinoEChiuso(r.stato) && r.dataLavoro && r.dataLavoro >= dal && r.dataLavoro <= al,
   );
-  return Math.max(0, restano);
 }
 
 export function rapportiniDelMese(rapportini: Rapportino[], mese: string) {
@@ -186,8 +206,9 @@ export function aggregaMese(
   prestazioni: Prestazione[],
   linee: Linea[],
   mese: string,
+  periodo: Intervallo = meseIntero(mese),
 ) {
-  const delMese = rapportiniDelMese(rapportini, mese);
+  const delMese = rapportiniNelPeriodo(rapportini, periodo);
   const lineeById = new Map(linee.map((l) => [l.id, l]));
   const perLineaMap = new Map<string, Rapportino[]>();
   for (const r of delMese) {
@@ -214,7 +235,7 @@ export function aggregaMese(
     .filter((l): l is LineaContabile => l != null)
     .sort((a, b) => a.codiceLinea.localeCompare(b.codiceLinea, "it"));
 
-  const perGiorno: GiornoContabile[] = giorniDelMese(mese).map((data) => {
+  const perGiorno: GiornoContabile[] = giorniTra(periodo).map((data) => {
     const items = delMese.filter((r) => r.dataLavoro === data);
     const voci = vociDaRapportini(items, prestazioni);
     return {
@@ -234,6 +255,7 @@ export function aggregaMese(
       : arrotondaEuro(importoCampate + importoBasi);
   return {
     mese,
+    periodo,
     rapportini: delMese.length,
     voci,
     vociBasi,
@@ -252,6 +274,7 @@ export type LineaMeseContabile = LineaContabile & {
 
 export type PrestazioniMese = {
   mese: string;
+  periodo: Intervallo;
   rapportini: number;
   perLinea: LineaMeseContabile[];
   /** Totali del mese su tutte le linee: la somma delle linee, senza doppioni. */
@@ -269,8 +292,9 @@ export function prestazioniMesePerLinea(
   prestazioni: Prestazione[],
   linee: Linea[],
   mese: string,
+  periodo: Intervallo = meseIntero(mese),
 ): PrestazioniMese {
-  const delMese = rapportiniDelMese(rapportini, mese);
+  const delMese = rapportiniNelPeriodo(rapportini, periodo);
   const lineeById = new Map(linee.map((l) => [l.id, l]));
   const perLineaMap = new Map<string, Rapportino[]>();
   for (const r of delMese) {
@@ -307,6 +331,7 @@ export function prestazioniMesePerLinea(
   const importoBasi = sommaImporti(totali.vociBasi);
   return {
     mese,
+    periodo,
     rapportini: delMese.length,
     perLinea,
     voci: totali.voci,
@@ -340,10 +365,10 @@ export type BasiPerLinea = {
   tagliate: number;
 };
 
-export function conteggioBasiTagliate(campate: CampataLavoro[], mese?: string) {
+export function conteggioBasiTagliate(campate: CampataLavoro[], periodo?: Intervallo) {
   const basi = campate.filter((c) => c.tipo === "base" && c.stato === "tagliata");
-  const nelMese = mese
-    ? basi.filter((c) => c.dataTaglio && c.dataTaglio.slice(0, 7) === mese)
+  const nelMese = periodo
+    ? basi.filter((c) => c.dataTaglio && c.dataTaglio >= periodo.dal && c.dataTaglio <= periodo.al)
     : basi;
   const perLineaMap = new Map<string, BasiPerLinea>();
   for (const c of nelMese) {

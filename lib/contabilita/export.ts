@@ -376,7 +376,7 @@ function sommaCampo(numeri: (number | null)[]) {
  * Le basi restano una sezione a parte, come a schermo, ma dentro la stessa linea.
  */
 export async function scaricaPrestazioniMeseExcel(dati: PrestazioniMese, estrattoIl = todayIso()) {
-  const titolo = `Prestazioni ${etichettaMese(dati.mese)} · estratto il ${formatDate(estrattoIl)}`;
+  const titolo = `Prestazioni ${etichettaMese(dati.mese)} · dal ${formatDate(dati.periodo.dal)} al ${formatDate(dati.periodo.al)} · estratto il ${formatDate(estrattoIl)}`;
 
   const riepilogo: RigaFoglio[] = [
     ...dati.perLinea.map((l) => ({
@@ -434,7 +434,7 @@ export async function scaricaPrestazioniMeseExcel(dati: PrestazioniMese, estratt
   ]);
   scaricaBlob(
     bytes,
-    `prestazioni_${dati.mese}_per-linea.xlsx`,
+    `prestazioni_${dati.mese}_dal-${dati.periodo.dal}_al-${dati.periodo.al}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 }

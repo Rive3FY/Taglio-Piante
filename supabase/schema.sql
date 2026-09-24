@@ -321,3 +321,16 @@ create policy "import_campate_select" on import_campate
 drop policy if exists "import_campate_write" on import_campate;
 create policy "import_campate_write" on import_campate
   for all to authenticated using (is_tecnico()) with check (is_tecnico());
+
+-- Periodo contabile scelto dal tecnico (vedi patch_periodi_contabili.sql).
+create table if not exists periodi_contabili (
+  mese text primary key,
+  dal date,
+  al date,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users (id)
+);
+alter table periodi_contabili enable row level security;
+drop policy if exists "periodi_contabili_tecnico" on periodi_contabili;
+create policy "periodi_contabili_tecnico" on periodi_contabili
+  for all to authenticated using (is_tecnico()) with check (is_tecnico());

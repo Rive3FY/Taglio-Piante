@@ -13,7 +13,6 @@ import {
   formatQuantita,
   giorniAllaChiusura,
   lineeConPrestazioni,
-  mesiDisponibili,
   prestazioniMesePerLinea,
   type VoceContabile,
 } from "@/lib/contabilita/aggrega";
@@ -26,11 +25,17 @@ import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { formatDate, todayIso } from "@/lib/format";
 import { TortaAvanzamento } from "@/components/TortaAvanzamento";
 import { GraficoBasi } from "@/components/GraficoBasi";
-import { CalendarioMese } from "@/components/CalendarioMese";
+import { CalendarioPeriodo, type ModoCalendario } from "@/components/CalendarioPeriodo";
 import { LineaPicker } from "@/components/LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "@/components/MostraAltro";
 import { annoPianoPiuRecente, anniPiani, campateDellAnno } from "@/lib/campate/anno";
 import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
+import {
+  meseContabileDi,
+  periodoEffettivo,
+  salvaPeriodo,
+  usePeriodiContabili,
+} from "@/lib/contabilita/periodo";
 
 function TabellaVoci({
   voci,
@@ -100,9 +105,20 @@ export default function ContabilitaPage() {
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const campate = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
   const oggi = todayIso();
-  const mesi = useMemo(() => mesiDisponibili(rapportini), [rapportini]);
-  const [mese, setMese] = useState(() => mesi[0] ?? oggi.slice(0, 7));
+  const periodi = usePeriodiContabili();
+  const meseInCorso = meseContabileDi(oggi, periodi);
+  // Un foglio del 25 settembre, con settembre chiuso il 24, sta già nel mese di ottobre.
+  const mesi = useMemo(() => {
+    const set = new Set([meseInCorso]);
+    for (const r of rapportini) {
+      if (r.dataLavoro) set.add(meseContabileDi(r.dataLavoro, periodi));
+    }
+    return [...set].sort().reverse();
+  }, [rapportini, periodi, meseInCorso]);
+  const [mese, setMese] = useState<string | null>(null);
   const [giorno, setGiorno] = useState<string | null>(oggi);
+  const [modoCal, setModoCal] = useState<ModoCalendario>("giorno");
+  const [avvisoPeriodo, setAvvisoPeriodo] = useState<string | null>(null);
   const [lineaAperta, setLineaAperta] = useState<string | null>(null);
   const [cercaLinea, setCercaLinea] = useState("");
   const [lineaCercataId, setLineaCercataId] = useState("");
@@ -116,21 +132,48 @@ export default function ContabilitaPage() {
       : (anniCampate[0] ?? annoPianoPiuRecente(campate));
   const campateAnno = useMemo(() => campateDellAnno(campate, annoPianoEff), [campate, annoPianoEff]);
 
-  const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
+  const meseEffettivo = mese && mesi.includes(mese) ? mese : meseInCorso;
+  const periodo = periodoEffettivo(meseEffettivo, periodi);
+  const { dal, al } = periodo;
+  const intervallo = useMemo(() => ({ dal, al }), [dal, al]);
   const aggregato = useMemo(
-    () => aggregaMese(rapportini, prestazioni, linee, meseEffettivo),
-    [rapportini, prestazioni, linee, meseEffettivo],
+    () => aggregaMese(rapportini, prestazioni, linee, meseEffettivo, intervallo),
+    [rapportini, prestazioni, linee, meseEffettivo, intervallo],
   );
   const reportMese = useMemo(
-    () => prestazioniMesePerLinea(rapportini, prestazioni, linee, meseEffettivo),
-    [rapportini, prestazioni, linee, meseEffettivo],
+    () => prestazioniMesePerLinea(rapportini, prestazioni, linee, meseEffettivo, intervallo),
+    [rapportini, prestazioni, linee, meseEffettivo, intervallo],
   );
-  const restano = giorniAllaChiusura(meseEffettivo, oggi);
+  const restano = giorniAllaChiusura(intervallo, oggi);
+  const etichettaPeriodo = `dal ${formatDate(dal)} al ${formatDate(al)}`;
+
+  function scegliGiorno(data: string) {
+    if (modoCal === "giorno") {
+      setGiorno(data === giorno ? null : data);
+      return;
+    }
+    if (modoCal === "inizio") {
+      if (data > al) {
+        setAvvisoPeriodo("L’inizio deve venire prima della chiusura.");
+        return;
+      }
+      salvaPeriodo(meseEffettivo, { dal: data });
+      setAvvisoPeriodo(`Inizio fissato al ${formatDate(data)}.`);
+    } else {
+      if (data < dal) {
+        setAvvisoPeriodo("La chiusura deve venire dopo l’inizio.");
+        return;
+      }
+      salvaPeriodo(meseEffettivo, { al: data });
+      setAvvisoPeriodo(`Chiusura fissata al ${formatDate(data)}.`);
+    }
+    setModoCal("giorno");
+  }
   const urgente = useMemo(() => avanzamentoPriorita(campateAnno, "urgente"), [campateAnno]);
   const differibile = useMemo(() => avanzamentoPriorita(campateAnno, "differibile"), [campateAnno]);
   const basiMese = useMemo(
-    () => conteggioBasiTagliate(campateAnno, meseEffettivo),
-    [campateAnno, meseEffettivo],
+    () => conteggioBasiTagliate(campateAnno, intervallo),
+    [campateAnno, intervallo],
   );
   const conteggiGiorno = useMemo(() => {
     const m = new Map<string, number>();
@@ -194,11 +237,13 @@ export default function ContabilitaPage() {
       {restano != null ? (
         <p className="contab-scadenza">
           {restano === 0
-            ? "Oggi è l’ultimo giorno del mese: il report va chiuso."
-            : `Mese in corso: mancano ${restano} ${restano === 1 ? "giorno" : "giorni"} alla chiusura del ${formatDate(aggregato.perGiorno.at(-1)?.data ?? "")}.`}
+            ? `Oggi è il giorno di chiusura: il report di ${etichettaMese(meseEffettivo).toLowerCase()} va chiuso.`
+            : `Periodo in corso: mancano ${restano} ${restano === 1 ? "giorno" : "giorni"} alla chiusura del ${formatDate(al)}.`}
         </p>
+      ) : oggi > al ? (
+        <p className="muted">Periodo chiuso il {formatDate(al)}.</p>
       ) : (
-        <p className="muted">Stai guardando un mese già chiuso.</p>
+        <p className="muted">Il periodo inizia il {formatDate(dal)}.</p>
       )}
 
       <div className="chip-row">
@@ -209,7 +254,9 @@ export default function ContabilitaPage() {
             className={`chip ${meseEffettivo === m ? "on" : ""}`}
             onClick={() => {
               setMese(m);
-              setGiorno(m === oggi.slice(0, 7) ? oggi : null);
+              setGiorno(m === meseInCorso ? oggi : null);
+              setModoCal("giorno");
+              setAvvisoPeriodo(null);
               setLineaAperta(null);
               setCercaLinea("");
               setLineaCercataId("");
@@ -223,7 +270,7 @@ export default function ContabilitaPage() {
 
       <div className="contab-kpi">
         <div className="panel">
-          <span className="muted">Rapportini del mese</span>
+          <span className="muted">Rapportini del periodo</span>
           <strong>{aggregato.rapportini}</strong>
         </div>
         <div className="panel">
@@ -262,7 +309,7 @@ export default function ContabilitaPage() {
                   await scaricaPrestazioniMeseExcel(reportMese, oggi);
                   mostraEsito({
                     titolo: "Excel scaricato",
-                    testo: `Prestazioni di ${etichettaMese(meseEffettivo).toLowerCase()} divise per linea, con i totali del mese.`,
+                    testo: `Prestazioni di ${etichettaMese(meseEffettivo).toLowerCase()} ${etichettaPeriodo}, divise per linea, con i totali.`,
                     dopo: "resta",
                   });
                 } finally {
@@ -271,22 +318,78 @@ export default function ContabilitaPage() {
               })();
             }}
           >
-            {scaricoMese ? "Preparo…" : `Scarica Excel · ${etichettaMese(meseEffettivo)}`}
+            {scaricoMese ? "Preparo…" : `Scarica Excel · ${etichettaPeriodo}`}
           </button>
         </div>
         {reportMese.perLinea.length === 0 ? (
-          <p className="muted">Nessun rapportino confermato in questo mese: non c’è niente da scaricare.</p>
+          <p className="muted">Nessun rapportino confermato in questo periodo: non c’è niente da scaricare.</p>
         ) : null}
       </section>
 
       <section className="panel">
-        <h2>Giorno per giorno · {etichettaMese(meseEffettivo)}</h2>
-        <CalendarioMese
+        <h2>Periodo e giorni · {etichettaMese(meseEffettivo)}</h2>
+        <p className="periodo-riepilogo">
+          Dal <strong className="verde">{formatDate(dal)}</strong> al{" "}
+          <strong className="rosso">{formatDate(al)}</strong>
+          {!periodo.inizioScelto && !periodo.chiusuraScelta ? (
+            <span className="muted"> · periodo di partenza, scegli tu inizio e chiusura</span>
+          ) : null}
+        </p>
+        <div className="periodo-barra">
+          <button
+            type="button"
+            className={`chip periodo-inizio ${modoCal === "inizio" ? "on" : ""}`}
+            aria-pressed={modoCal === "inizio"}
+            onClick={() => {
+              setModoCal(modoCal === "inizio" ? "giorno" : "inizio");
+              setAvvisoPeriodo(null);
+            }}
+          >
+            <span className="periodo-dot verde" />
+            Scegli inizio
+          </button>
+          <button
+            type="button"
+            className={`chip periodo-chiusura ${modoCal === "chiusura" ? "on" : ""}`}
+            aria-pressed={modoCal === "chiusura"}
+            onClick={() => {
+              setModoCal(modoCal === "chiusura" ? "giorno" : "chiusura");
+              setAvvisoPeriodo(null);
+            }}
+          >
+            <span className="periodo-dot rosso" />
+            Scegli chiusura
+          </button>
+          {periodo.inizioScelto || periodo.chiusuraScelta ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm periodo-azzera"
+              onClick={() => {
+                salvaPeriodo(meseEffettivo, { dal: null, al: null });
+                setModoCal("giorno");
+                setAvvisoPeriodo("Periodo riportato a quello di partenza.");
+              }}
+            >
+              Ripristina
+            </button>
+          ) : null}
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          {avvisoPeriodo ??
+            (modoCal === "inizio"
+              ? "Tocca il giorno di inizio: diventa verde."
+              : modoCal === "chiusura"
+                ? "Tocca il giorno di chiusura: diventa rosso."
+                : "Tocca un giorno per vedere le prestazioni di quella data.")}
+        </p>
+        <CalendarioPeriodo
           mese={meseEffettivo}
+          periodo={intervallo}
           oggi={oggi}
+          modo={modoCal}
           selezionato={giorno}
           conteggi={conteggiGiorno}
-          onSelect={(data) => setGiorno(data || null)}
+          onScegli={scegliGiorno}
         />
         {giornoVoci ? (
           <div className="contab-giorno">
