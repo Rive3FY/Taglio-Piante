@@ -1017,8 +1017,8 @@ export function CampateElenco({
               <tr>
                 <th>Codice</th>
                 <th>Nome linea</th>
-                <th>kV</th>
                 <th>Campata</th>
+                <th>kV</th>
                 <th>
                   <button
                     type="button"
@@ -1276,7 +1276,6 @@ function CampataRiga({
       >
         <td className="linea-codice">{c.codiceLinea}</td>
         <td>{c.nomeLinea}</td>
-        <td>{c.tensioneKv ?? "—"}</td>
         <td>
           <span
             className={`pallino-campata pallino-${pallino.tono}`}
@@ -1292,6 +1291,7 @@ function CampataRiga({
             </span>
           ) : null}
         </td>
+        <td>{c.tensioneKv ?? "—"}</td>
         <td>{c.distInt != null ? formatDistInt(c.distInt) : "—"}</td>
         <td className="campata-maps">
           <LinkMaps estInt={c.estInt} nordInt={c.nordInt} nomeLinea={c.nomeLinea} />

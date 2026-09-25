@@ -1,17 +1,59 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { SEZIONI, rapportiniDellaSezione } from "@/lib/sezioni";
+import { formatEuro } from "@/lib/contabilita/aggrega";
+import { totaleVoci } from "@/lib/contabilita/listino";
+import { todayIso } from "@/lib/format";
+import { SEZIONI, rapportiniDellaSezione, rapportinoVisibile } from "@/lib/sezioni";
 import { useSession } from "@/lib/SessionContext";
 
 export default function OperatoreHome() {
   const { session } = useSession();
   const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
+  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
+
+  const totaleOggi = useMemo(() => {
+    const oggi = todayIso();
+    const mieiOggi = rapportini.filter(
+      (r) => r.dataLavoro === oggi && rapportinoVisibile(r, session, "operatore"),
+    );
+    if (mieiOggi.length === 0 || prestazioni.length === 0) {
+      return { euro: 0, fogli: 0, senzaPrezzo: 0 };
+    }
+    const byId = new Map(prestazioni.map((p) => [p.id, p]));
+    const voci: { quantita: number; codice: string; unitaMisura: string }[] = [];
+    for (const r of mieiOggi) {
+      for (const riga of r.righe ?? []) {
+        if (!(riga.quantita > 0)) continue;
+        const p = byId.get(riga.prestazioneId);
+        if (!p) continue;
+        voci.push({ quantita: riga.quantita, codice: p.codice, unitaMisura: p.unitaMisura });
+      }
+    }
+    const { totale, senzaPrezzo } = totaleVoci(voci);
+    return { euro: totale, fogli: mieiOggi.length, senzaPrezzo };
+  }, [rapportini, prestazioni, session]);
 
   return (
     <>
+      <div className="panel home-oggi" aria-live="polite">
+        <div className="kicker">Oggi</div>
+        <div className="home-oggi-riga">
+          <strong className="home-oggi-euro">{formatEuro(totaleOggi.euro)}</strong>
+          <span className="muted">
+            {totaleOggi.fogli === 0
+              ? "Nessun tuo rapportino con data di oggi"
+              : totaleOggi.fogli === 1
+                ? "1 tuo rapportino di oggi"
+                : `${totaleOggi.fogli} tuoi rapportini di oggi`}
+            {totaleOggi.senzaPrezzo > 0 ? " · alcune voci senza prezzo" : ""}
+          </span>
+        </div>
+      </div>
+
       <div className="home-grid">
         <Link href="/operatore/nuovo" className="home-card">
           <div className="kicker">Nuovo</div>

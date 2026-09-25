@@ -176,6 +176,21 @@ button, input, select, textarea { font: inherit; }
 }
 .role-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .home-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.home-oggi {
+  margin-bottom: 14px;
+  gap: 6px;
+}
+.home-oggi-riga {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+.home-oggi-euro {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-2);
+}
 .folder-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .linee-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
