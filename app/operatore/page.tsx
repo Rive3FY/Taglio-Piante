@@ -12,18 +12,20 @@ import { useSession } from "@/lib/SessionContext";
 
 export default function OperatoreHome() {
   const { session } = useSession();
-  const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) ?? [];
-  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
+  const rapportini = useLiveQuery(() => db.rapportini.toArray(), []);
+  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []);
 
   const totaleOggi = useMemo(() => {
+    const fogli = rapportini ?? [];
+    const listino = prestazioni ?? [];
     const oggi = todayIso();
-    const mieiOggi = rapportini.filter(
+    const mieiOggi = fogli.filter(
       (r) => r.dataLavoro === oggi && rapportinoVisibile(r, session, "operatore"),
     );
-    if (mieiOggi.length === 0 || prestazioni.length === 0) {
+    if (mieiOggi.length === 0 || listino.length === 0) {
       return { euro: 0, fogli: 0, senzaPrezzo: 0 };
     }
-    const byId = new Map(prestazioni.map((p) => [p.id, p]));
+    const byId = new Map(listino.map((p) => [p.id, p]));
     const voci: { quantita: number; codice: string; unitaMisura: string }[] = [];
     for (const r of mieiOggi) {
       for (const riga of r.righe ?? []) {
@@ -74,7 +76,7 @@ export default function OperatoreHome() {
         </Link>
 
         {SEZIONI.map((sezione) => {
-          const items = rapportiniDellaSezione(rapportini, sezione, session, "operatore");
+          const items = rapportiniDellaSezione(rapportini ?? [], sezione, session, "operatore");
           return (
             <Link key={sezione.key} href={`/operatore/elenco/${sezione.key}`} className="home-card">
               <div className="kicker">{sezione.kicker}</div>
