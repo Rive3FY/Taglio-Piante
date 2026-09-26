@@ -114,6 +114,26 @@ export function importoVoce(quantita: number, codice: string, unitaMisura: strin
   return arrotondaEuro(base * prezzo);
 }
 
+/** Righe dei fogli tradotte nelle voci che il listino sa prezzare. */
+export function vociDaRighe(
+  righe: { prestazioneId: string; quantita: number }[],
+  prestazioni: { id: string; codice: string; unitaMisura: string }[],
+) {
+  const byId = new Map(prestazioni.map((p) => [p.id, p]));
+  const voci: { quantita: number; codice: string; unitaMisura: string }[] = [];
+  for (const riga of righe) {
+    if (!(riga.quantita > 0)) continue;
+    const prestazione = byId.get(riga.prestazioneId);
+    if (!prestazione) continue;
+    voci.push({
+      quantita: riga.quantita,
+      codice: prestazione.codice,
+      unitaMisura: prestazione.unitaMisura,
+    });
+  }
+  return voci;
+}
+
 /** Totale di un foglio con i prezzi del listino; le voci senza prezzo si contano a parte. */
 export function totaleVoci(voci: { quantita: number; codice: string; unitaMisura: string }[]) {
   let totale = 0;

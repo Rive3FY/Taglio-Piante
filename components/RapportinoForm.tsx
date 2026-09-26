@@ -38,16 +38,19 @@ import {
 } from "@/lib/campate/terminata";
 import { readSquadra, type PrefsSquadra } from "@/lib/squadra";
 import { formatEuro } from "@/lib/contabilita/aggrega";
-import { totaleVoci } from "@/lib/contabilita/listino";
+import { totaleVoci, vociDaRighe } from "@/lib/contabilita/listino";
+import { rapportinoVisibile } from "@/lib/sezioni";
 import { useArea } from "@/lib/area";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { useDialogBack } from "@/lib/useDialogBack";
 import { PopupCampataTerminata } from "./PopupCampataTerminata";
+import { OcchioCifre, useCifreVisibili } from "./OcchioCifre";
 
 const EMPTY_LINEE: Linea[] = [];
 const EMPTY_DITTE: Ditta[] = [];
 const EMPTY_PREST: Prestazione[] = [];
 const EMPTY_OPERATORI: Operatore[] = [];
+const EMPTY_RAPPORTINI: Rapportino[] = [];
 
 /** «Martedì 22 settembre 2026»: mezzogiorno evita che il fuso sposti il giorno. */
 function dataEstesa(iso: string) {
@@ -75,6 +78,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const { session } = useSession();
   const { syncNow } = useSync();
   const area = useArea();
+  const { visibili: cifreVisibili, alterna: alternaCifre } = useCifreVisibili();
   const [squadraTick, setSquadraTick] = useState(0);
   const [squadra, setSquadra] = useState<PrefsSquadra | null>(null);
   useEffect(() => {
@@ -153,6 +157,32 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   const [error, setError] = useState<string | null>(null);
   const [idLocale, setIdLocale] = useState(existing?.id);
   const [numeroLocale, setNumeroLocale] = useState(existing?.numero);
+  const rapportiniGiorno =
+    useLiveQuery(
+      () =>
+        dataLavoro
+          ? db.rapportini.where("dataLavoro").equals(dataLavoro).toArray()
+          : Promise.resolve([] as Rapportino[]),
+      [dataLavoro],
+    ) ?? EMPTY_RAPPORTINI;
+  const totaleGiorno = useMemo(() => {
+    const idAperto = idLocale ?? existing?.id;
+    const salvati = rapportiniGiorno.filter(
+      (r) => r.id !== idAperto && rapportinoVisibile(r, session, area),
+    );
+    const righeCorrenti = prestazioni
+      .filter((p) => (qty[p.id] ?? 0) > 0)
+      .map((p) => ({ prestazioneId: p.id, quantita: qty[p.id] ?? 0 }));
+    const somme = totaleVoci(
+      vociDaRighe([...salvati.flatMap((r) => r.righe), ...righeCorrenti], prestazioni),
+    );
+    return {
+      fogli: salvati.length + 1,
+      altri: salvati.length,
+      euro: somme.totale,
+      senzaPrezzo: somme.senzaPrezzo,
+    };
+  }, [rapportiniGiorno, idLocale, existing?.id, session, area, prestazioni, qty]);
   const [preview, setPreview] = useState<Rapportino | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [domandaTerminata, setDomandaTerminata] = useState<{
@@ -851,15 +881,37 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
         ? createPortal(
             <div className="form-actions-dock">
               <div className="totale-foglio" aria-live="polite">
-                <span>Totale</span>
-                <strong>{formatEuro(totaleFoglio.totale)}</strong>
-                {totaleFoglio.senzaPrezzo > 0 ? (
-                  <small>
-                    {totaleFoglio.senzaPrezzo === 1
-                      ? "1 voce senza prezzo"
-                      : `${totaleFoglio.senzaPrezzo} voci senza prezzo`}
-                  </small>
-                ) : null}
+                <div className="totale-foglio-testa">
+                  <span>{dataLavoro === todayIso() ? "Oggi" : dataLavoro ? formatDate(dataLavoro) : "Giorno"}</span>
+                  <OcchioCifre visibili={cifreVisibili} onClick={alternaCifre} />
+                </div>
+                {cifreVisibili ? (
+                  <>
+                    <strong>{formatEuro(totaleGiorno.euro)}</strong>
+                    <small>
+                      {totaleGiorno.fogli === 1
+                        ? "1 rapportino"
+                        : `${totaleGiorno.fogli} rapportini`}
+                      {totaleGiorno.altri > 0 ? ` · foglio ${formatEuro(totaleFoglio.totale)}` : ""}
+                    </small>
+                    {totaleGiorno.senzaPrezzo > 0 ? (
+                      <small>
+                        {totaleGiorno.senzaPrezzo === 1
+                          ? "1 voce senza prezzo"
+                          : `${totaleGiorno.senzaPrezzo} voci senza prezzo`}
+                      </small>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <strong className="cifre-nascoste" aria-label="Importo nascosto">
+                      ••••
+                    </strong>
+                    <small className="cifre-nascoste" aria-label="Totale del giorno nascosto">
+                      •••
+                    </small>
+                  </>
+                )}
               </div>
               <button type="submit" form="rapportino-form" className="btn btn-primary" disabled={saving || Boolean(erroreDaNonTagliare || erroreBasi)}>
                 {saving ? "Salvataggio…" : "Salva"}
