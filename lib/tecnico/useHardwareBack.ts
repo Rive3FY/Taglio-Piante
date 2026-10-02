@@ -9,18 +9,18 @@ import { tecnicoBackHref } from "./nav";
  * (la home rimanda subito in area tecnico e fa un salto).
  * Dalle sezioni torna al piano Linee; dalle pagine interne al padre.
  */
-export function useTecnicoHardwareBack(da?: string | null) {
+export function useTecnicoHardwareBack(da?: string | null, vista?: string | null) {
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
     function onPop() {
       if (window.location.pathname.startsWith("/tecnico")) return;
-      const target = tecnicoBackHref(pathname, da) ?? "/tecnico";
+      const target = tecnicoBackHref(pathname, da, vista) ?? "/tecnico";
       window.history.pushState(null, "", target);
       router.replace(target);
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [pathname, router, da]);
+  }, [pathname, router, da, vista]);
 }
