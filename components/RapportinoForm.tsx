@@ -114,6 +114,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       (existing?.esitiCampate?.every((e) => e.tipo === "base") ?? false),
   );
   const [esiti, setEsiti] = useState<RapportinoCampata[]>(existing?.esitiCampate ?? []);
+  // Dopo che si corregge il testo a mano, il precompilato non deve riscriverlo.
+  const [campoLibero, setCampoLibero] = useState(false);
   const [dataLavoro, setDataLavoro] = useState(existing?.dataLavoro ?? todayIso());
   const campateLinea = useMemo(
     () => campateLineaRaw.filter((c) => annoDi(c) === annoDaDataLavoro(existing?.dataLavoro ?? dataLavoro)),
@@ -275,6 +277,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   );
 
   useEffect(() => {
+    if (campoLibero) return;
     if (existing?.esitiCampate?.length) return;
     if (esiti.length > 0) return;
 
@@ -308,6 +311,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
       })),
     );
   }, [
+    campoLibero,
     modoPrecompilato,
     existing?.esitiCampate,
     pianificate,
@@ -620,18 +624,15 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
           <div className="campo-campata">
             <span className="campo-campata-label">{lavoroBasi ? "Basi" : "Campata"}</span>
             <div className="campo-campata-riga">
-              {modoPrecompilato && !lavoroBasi ? (
-                <input readOnly value={esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata} />
-              ) : (
-                <input
-                  value={modoPrecompilato && esiti.length > 0 ? testoCampateDaEsiti(esiti) : campata}
-                  onChange={(e) => {
-                    setCampata(e.target.value);
-                    if (esiti.length > 0) setEsiti([]);
-                  }}
-                  placeholder={lavoroBasi ? "Es. 22 o 14DB" : "Es. 22"}
-                />
-              )}
+              <input
+                value={campoLibero || esiti.length === 0 ? campata : testoCampateDaEsiti(esiti)}
+                onChange={(e) => {
+                  setCampoLibero(true);
+                  setCampata(e.target.value);
+                  if (esiti.length > 0) setEsiti([]);
+                }}
+                placeholder={lavoroBasi ? "Es. 22 o 14DB" : "Es. 22"}
+              />
               <label className={`spunta-base ${lavoroBasi ? "on" : ""}`}>
                 <input
                   type="checkbox"
