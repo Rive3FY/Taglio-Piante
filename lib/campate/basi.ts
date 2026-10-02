@@ -48,8 +48,9 @@ export function haChiamataBase(item: Pick<Rapportino, "righe">, prestazioni: Pre
 }
 
 /**
- * Quanti numeri distinti ci sono nel box: 22 → 1; 22-23 → 2; 22-23-24-25-26 → 5.
+ * Quanti sostegni distinti ci sono nel box: 22 → 1; 22-23 → 2; 14DB → 1; 14DB, 15A → 2.
  * Non si espande l’intervallo: 22-26 sono due numeri, non cinque.
+ * Un pezzo con lettere o altri caratteri (14DB, 14-DB) è un sostegno solo.
  */
 export function numeriDaTestoCampata(testo: string) {
   const visti = new Set<string>();
@@ -65,11 +66,15 @@ export function numeriDaTestoCampata(testo: string) {
 }
 
 function numeriDiPezzo(pezzo: string) {
-  const pulito = pezzo.trim().replace(/–/g, "-").replace(/\s+/g, "");
+  const originale = pezzo.trim().replace(/–/g, "-");
+  const pulito = originale.replace(/\s+/g, "");
   if (!pulito) return [];
   const parti = pulito.split("-").filter(Boolean);
-  if (parti.length === 0 || !parti.every((p) => /^\d+(\/[a-z]{1,2})?$/i.test(p))) return [];
-  return parti.map((p) => (p.includes("/") ? normalizzaCampata(p) : String(Number(p))));
+  if (parti.length > 0 && parti.every((p) => /^\d+(\/[a-z]+)?$/i.test(p))) {
+    return parti.map((p) => (p.includes("/") ? normalizzaCampata(p) : String(Number(p))));
+  }
+  const uno = normalizzaCampata(originale);
+  return uno ? [uno] : [];
 }
 
 /**
@@ -103,9 +108,9 @@ export function messaggioIncoerenzaBasi(
   const somma = voci.reduce((a, b) => a + b, 0);
   const qtyTxt = voci.length === 1 ? String(voci[0]) : `${voci.join(" + ")} = ${somma}`;
   if (n === 0) {
-    return `Hai segnato ${qtyTxt} in 5.1–5.4 ma nel box non ci sono i numeri dei sostegni. Per le basi indica i numeri (es. 22) in quantità uguale alla chiamata.`;
+    return `Hai segnato ${qtyTxt} in 5.1–5.4 ma nel box non ci sono i sostegni. Per le basi indica i sostegni (es. 22 o 14DB) in quantità uguale alla chiamata.`;
   }
-  return `Hai segnato ${qtyTxt} in 5.1–5.4 e ${n} ${n === 1 ? "sostegno" : "sostegni"} nel box. I numeri devono coincidere: correggi la quantità o i sostegni.`;
+  return `Hai segnato ${qtyTxt} in 5.1–5.4 e ${n} ${n === 1 ? "sostegno" : "sostegni"} nel box. I sostegni devono coincidere: correggi la quantità o i sostegni.`;
 }
 
 export function foglioEBasi(

@@ -11,8 +11,12 @@ export function normalizzaCampata(valore: string) {
   const intervallo = pulito.match(/^(\d+)\s*-\s*(\d+)$/);
   if (intervallo) return String(Number(intervallo[2]));
 
-  const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z]{1,2})$/i);
+  const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z]+)$/i);
   if (conLettera) return `${Number(conLettera[1])}/${conLettera[2].toUpperCase()}`;
+
+  // Sostegno con lettere attaccate o staccate: 14DB e 14 db sono la stessa base.
+  const conSuffisso = pulito.match(/^(\d+)\s*([a-z][a-z0-9]*)$/i);
+  if (conSuffisso) return `${Number(conSuffisso[1])}${conSuffisso[2].toUpperCase()}`;
 
   const soloCifre = pulito.replace(/\s/g, "");
   if (/^\d+$/.test(soloCifre)) return String(Number(soloCifre));
@@ -51,8 +55,8 @@ export function idCampataLavoro(
   return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
-/** La barra davanti a una lettera fa parte del numero: 17/A è un sostegno solo. */
-const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z]{1,2})(?![a-z0-9])/gi;
+/** La barra davanti alle lettere fa parte del sostegno: 17/A e 14/DB restano un pezzo solo. */
+const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z]+)(?![a-z0-9])/gi;
 const BARRA_PROTETTA = "\u0001";
 
 /**
@@ -63,7 +67,14 @@ export function spezzaCampateTesto(testo: string) {
   return testo
     .replace(SOSTEGNO_CON_LETTERA, (_, n: string, l: string) => `${n}${BARRA_PROTETTA}${l}`)
     .split(/[,;/|\n]+|\s+e\s+/i)
-    .flatMap((p) => (/^\s*\d+(\s+\d+)+\s*$/.test(p) ? p.trim().split(/\s+/) : [p]))
+    .flatMap((p) => {
+      if (/^\s*\d+(\s+\d+)+\s*$/.test(p)) return p.trim().split(/\s+/);
+      // 78\2 80 resta un pezzo solo. 14DB 15A sono due sostegni.
+      if (p.includes("\\")) return [p];
+      const pezzi = p.trim().split(/\s+/).filter(Boolean);
+      if (pezzi.length > 1 && pezzi.every((x) => /\d/.test(x))) return pezzi;
+      return [p];
+    })
     .map((p) => p.split(BARRA_PROTETTA).join("/").trim())
     .filter(Boolean);
 }
