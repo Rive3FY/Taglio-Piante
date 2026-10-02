@@ -10,13 +10,13 @@ import { useTecnicoHardwareBack } from "@/lib/tecnico/useHardwareBack";
 export default function TecnicoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  useTecnicoHardwareBack(search.get("da"));
+  useTecnicoHardwareBack(search.get("da"), search.get("v"));
   return (
     <RoleGuard ruolo="tecnico">
       <div className="tecnico-shell">
         <AppHeader
           title="Area tecnico"
-          backHref={tecnicoBackHref(pathname, search.get("da"))}
+          backHref={tecnicoBackHref(pathname, search.get("da"), search.get("v"))}
           nav={<TecnicoNav barra />}
         />
         <div className="tecnico-body">

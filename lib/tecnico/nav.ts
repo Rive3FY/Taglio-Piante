@@ -68,11 +68,12 @@ export function tecnicoGruppoAperto(gruppo: TecnicoGruppo, pathname: string, da?
   return gruppo.links.some((l) => tecnicoLinkAttivo(l.href, pathname, da));
 }
 
-export function tecnicoBackHref(pathname: string, da?: string | null) {
+export function tecnicoBackHref(pathname: string, da?: string | null, vista?: string | null) {
   if (pathname === "/tecnico") return undefined;
   if (pathname.startsWith("/tecnico/rapportini/")) {
-    if (da === "bozze") return "/tecnico/fogli?s=bozze";
-    return "/tecnico/fogli?s=archiviati";
+    const sezione = da === "bozze" ? "bozze" : "archiviati";
+    const perLinea = vista === "linea" ? "&v=linea" : "";
+    return `/tecnico/fogli?s=${sezione}${perLinea}`;
   }
   if (pathname === "/tecnico/campate/importa") return "/tecnico/campate";
   if (pathname === "/tecnico/nuovo") return "/tecnico/campate";

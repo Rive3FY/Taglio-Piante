@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { notFound, useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { ArchivioPerLinea } from "@/components/ArchivioPerLinea";
@@ -17,7 +17,9 @@ export default function ElencoSezionePage({
 }) {
   const { sezione } = use(params);
   const router = useRouter();
+  const search = useSearchParams();
   const { session } = useSession();
+  const vista = search.get("v") === "linea" ? "linea" : "giorno";
 
   useEffect(() => {
     if (sezione === "in-attesa") router.replace("/operatore/elenco/archiviati");
@@ -42,6 +44,25 @@ export default function ElencoSezionePage({
       </div>
 
       {config.key === "archiviati" ? (
+        <div className="chip-row">
+          <button
+            type="button"
+            className={`chip ${vista === "giorno" ? "on" : ""}`}
+            onClick={() => router.replace("/operatore/elenco/archiviati")}
+          >
+            Calendario
+          </button>
+          <button
+            type="button"
+            className={`chip ${vista === "linea" ? "on" : ""}`}
+            onClick={() => router.replace("/operatore/elenco/archiviati?v=linea")}
+          >
+            Per linea
+          </button>
+        </div>
+      ) : null}
+
+      {config.key === "archiviati" && vista === "linea" ? (
         <ArchivioPerLinea
           items={items}
           linee={linee}
@@ -51,6 +72,7 @@ export default function ElencoSezionePage({
         />
       ) : (
         <RapportiniCalendario
+          key={config.key}
           items={items}
           linee={linee}
           hrefFor={(item) => `/operatore/${item.id}`}
