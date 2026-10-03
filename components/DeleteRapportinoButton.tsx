@@ -1,17 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { deleteRapportini, deleteRapportino } from "@/lib/db";
+import { mostraEsito } from "@/lib/esitoSalvataggio";
+import type { EsitoSalvataggio } from "./PopupEsitoSalvataggio";
 
 export function messaggioCancellaRapportino(numero: string) {
   return `Cancellare il rapportino ${numero}? Le campate collegate tornano da tagliare. L’operazione non si può annullare.`;
 }
 
-export async function confermaECancellaRapportino(id: string, numero: string) {
+export async function confermaECancellaRapportino(
+  id: string,
+  numero: string,
+  dopo: EsitoSalvataggio["dopo"] = "resta",
+) {
   const ok = window.confirm(messaggioCancellaRapportino(numero));
   if (!ok) return false;
   await deleteRapportino(id);
+  mostraEsito({
+    titolo: "Rapportino cancellato",
+    testo: `${numero} non è più in elenco. Le campate collegate tornano da tagliare.`,
+    dopo,
+  });
   return true;
 }
 
@@ -27,6 +37,14 @@ export async function confermaECancellaRapportini(items: { id: string; numero: s
   const ok = window.confirm(messaggioCancellaRapportini(items.map((i) => i.numero)));
   if (!ok) return false;
   await deleteRapportini(items.map((i) => i.id));
+  const uno = items.length === 1;
+  mostraEsito({
+    titolo: uno ? "Rapportino cancellato" : "Rapportini cancellati",
+    testo: uno
+      ? `${items[0]?.numero ?? ""} non è più in elenco. Le campate collegate tornano da tagliare.`
+      : `Cancellati ${items.length} fogli. Le campate collegate tornano da tagliare.`,
+    dopo: "resta",
+  });
   return true;
 }
 
@@ -41,14 +59,12 @@ export function DeleteRapportinoButton({
   href?: string;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function onDelete() {
     setBusy(true);
     try {
-      const fatto = await confermaECancellaRapportino(id, numero);
-      if (fatto && href) router.push(href);
+      await confermaECancellaRapportino(id, numero, href);
     } finally {
       setBusy(false);
     }
