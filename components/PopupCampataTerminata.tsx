@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CampataDaChiudere } from "@/lib/campate/terminata";
+import { trattieniIndietroDialog } from "@/lib/useDialogBack";
 
 export function PopupCampataTerminata({
   campate,
@@ -17,10 +18,14 @@ export function PopupCampataTerminata({
   const tutteRisposte = campate.every((c) => typeof scelte[c.chiave] === "boolean");
 
   useEffect(() => {
-    window.history.pushState({ dialog: true }, "");
-    const onPop = () => window.history.pushState({ dialog: true }, "");
+    const rilascia = trattieniIndietroDialog();
+    window.history.pushState({ ...(window.history.state ?? {}), dialog: true }, "");
+    const onPop = () => window.history.pushState({ ...(window.history.state ?? {}), dialog: true }, "");
     window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      rilascia();
+    };
   }, []);
 
   async function conferma(valori: Record<string, boolean>) {

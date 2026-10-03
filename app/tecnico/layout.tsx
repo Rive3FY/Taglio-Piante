@@ -5,12 +5,10 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppHeader } from "@/components/AppHeader";
 import { TecnicoNav } from "@/components/TecnicoNav";
 import { tecnicoBackHref } from "@/lib/tecnico/nav";
-import { useTecnicoHardwareBack } from "@/lib/tecnico/useHardwareBack";
 
 export default function TecnicoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  useTecnicoHardwareBack(search.get("da"), search.get("v"));
   return (
     <RoleGuard ruolo="tecnico">
       <div className="tecnico-shell">

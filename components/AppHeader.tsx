@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSync } from "@/lib/SyncContext";
 import { useSession } from "@/lib/SessionContext";
 import { homeArea, useArea, writeArea } from "@/lib/area";
+import { useIndietroComeSchermo } from "@/lib/useIndietroComeSchermo";
 
 function iniziali(nome: string) {
   const parole = nome.trim().split(/\s+/).filter(Boolean);
@@ -27,6 +28,7 @@ export function AppHeader({
   const { session, offline, logout } = useSession();
   const router = useRouter();
   const area = useArea();
+  useIndietroComeSchermo(backHref);
   const altraArea = area === "tecnico" ? "operatore" : "tecnico";
   const [menuUtente, setMenuUtente] = useState(false);
   const rifUtente = useRef<HTMLDivElement>(null);
