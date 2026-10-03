@@ -997,12 +997,26 @@ select.inline-field { width: auto; min-width: 160px; }
   padding: 10px 4px;
 }
 .anagrafica-list li + li { border-top: 1px solid var(--line); }
-.anagrafica-azioni { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.anagrafica-azioni { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.anagrafica-list li.is-edit {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+.anagrafica-edit {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+.anagrafica-list li.is-edit .anagrafica-azioni { justify-content: flex-start; }
+.anagrafica-list li.is-edit .muted { margin: 0; }
 
 @media (max-width: 560px) {
   .anagrafica-list li { grid-template-columns: 92px 1fr; }
   .anagrafica-list li .linea-nome { grid-column: 1 / -1; }
   .anagrafica-azioni { grid-column: 1 / -1; justify-content: flex-start; }
+  .anagrafica-list li.is-edit { grid-template-columns: 1fr; }
+  .anagrafica-edit { grid-template-columns: 1fr; }
 }
 
 .linea-codice { font-weight: 800; font-variant-numeric: tabular-nums; }
