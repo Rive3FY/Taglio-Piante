@@ -423,15 +423,16 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
   }
 
   /**
-   * Una bozza porta sempre alla sezione Bozze. Un foglio archiviato torna da dove
-   * si è partiti: elenco campate oppure schermata principale.
+   * Dopo il salvataggio si torna alla schermata dove si sceglie cosa fare.
+   * Un foglio archiviato partito dall’elenco campate torna lì.
    */
   function percorsoDopoSalva(bozza: boolean) {
-    if (bozza) return area === "tecnico" ? "/tecnico/fogli?s=bozze" : "/operatore/elenco/bozze";
     const daElencoCampate =
       Boolean(precompilatoLineaId || precompilatoCampataId) ||
       new URLSearchParams(window.location.search).get("da") === "campate";
-    if (daElencoCampate) return area === "tecnico" ? "/tecnico/campate" : "/operatore/campate";
+    if (!bozza && daElencoCampate) {
+      return area === "tecnico" ? "/tecnico/campate" : "/operatore/campate";
+    }
     return "home" as const;
   }
 
