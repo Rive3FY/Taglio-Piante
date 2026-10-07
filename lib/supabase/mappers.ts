@@ -11,6 +11,7 @@ import type {
   RapportinoRiga,
 } from "@/lib/types";
 import { statoRapportinoNormalizzato } from "@/lib/types";
+import { normalizzaCampata } from "@/lib/campate/normalize";
 
 type RapportinoRow = {
   id: string;
@@ -203,7 +204,7 @@ export function campataLavoroToRow(c: CampataLavoro) {
     nome_linea: c.nomeLinea,
     tensione_kv: c.tensioneKv ?? null,
     originale: c.originale,
-    normalizzata: c.normalizzata,
+    normalizzata: normalizzaCampata(c.normalizzata) || c.normalizzata,
     tipo: c.tipo ?? "campata",
     priorita: c.priorita ?? null,
     stato: c.stato === "tralasciata" ? "tagliata" : c.stato,
@@ -250,7 +251,7 @@ export function rowToCampataLavoro(
     nomeLinea: row.nome_linea,
     tensioneKv: row.tensione_kv ?? undefined,
     originale: row.originale,
-    normalizzata: row.normalizzata,
+    normalizzata: normalizzaCampata(row.normalizzata) || row.normalizzata,
     tipo: row.tipo ?? "campata",
     priorita: (row.priorita as CampataLavoro["priorita"]) ?? undefined,
     stato: (row.stato === "tralasciata" ? "tagliata" : row.stato) as CampataLavoro["stato"],

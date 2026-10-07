@@ -19,6 +19,7 @@ import {
   versioniRapportiniRemote,
 } from "@/lib/supabase/remote";
 import {
+  allineaNumeriCampata,
   riallineaCampateDaRapportini,
   ripristinaCampateOrfane,
   unisciCampateDoppie,
@@ -232,7 +233,9 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
   const completo = richiestoCompleto || serveControlloCompleto();
 
   if (autenticato && (completo || processed > 0 || !riparazioniFatte)) {
-    if ((await unisciCampateDoppie()) > 0) await pushCampatePending();
+    const numeri = await allineaNumeriCampata();
+    const doppie = await unisciCampateDoppie();
+    if (numeri + doppie > 0) await pushCampatePending();
   }
 
   let pulled = 0;
@@ -265,6 +268,7 @@ async function eseguiSyncQueue(richiestoCompleto: boolean): Promise<SyncResult> 
       sistemateDopo += await ripristinaCampateOrfane();
       sistemateDopo += await riallineaCampateDaRapportini();
     }
+    sistemateDopo += await allineaNumeriCampata();
     sistemateDopo += await unisciCampateDoppie();
     if (sistemateDopo > 0) await pushCampatePending();
     riparazioniFatte = true;

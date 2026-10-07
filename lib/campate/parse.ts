@@ -37,9 +37,10 @@ const HEADER =
 /**
  * Riga operativa LIDAR. Dopo codice-campata c’è la distanza interna, poi la priorità.
  * I trattini dopo la campata possono essere assenti nel PDF (solo spazi).
- * Accanto al numero (22) restano forme speciali come 78\2 80.
+ * Accanto al numero (22) restano forme speciali come 78\2 80 e 261-262/A.
+ * La lettera fa parte della campata: senza /A il parser la perderebbe.
  */
-const PEZZO_CAMPATA = String.raw`(?:[A-Z0-9]+(?:-[A-Z0-9]+)*|[A-Z0-9]+(?:\\[A-Z0-9]+)+(?:\s+[A-Z0-9]+(?![.,]))*)`;
+const PEZZO_CAMPATA = String.raw`(?:[A-Z0-9]+(?:-[A-Z0-9]+)*(?:/[A-Z]+)?|[A-Z0-9]+(?:\\[A-Z0-9]+)+(?:\s+[A-Z0-9]+(?![.,]))*)`;
 const RIGA = new RegExp(
   String.raw`([A-Z0-9]+)-(` +
     PEZZO_CAMPATA +

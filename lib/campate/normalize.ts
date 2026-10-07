@@ -1,12 +1,28 @@
 /**
  * Numero di campata come lo scrive l’operatore e il LIDAR.
- * 22 resta 22 (non diventa 21-22). Un intervallo già espanso 21-22 si riduce
- * a 22, così i dati vecchi restano allineati. Forme speciali (78\2 80) restano
- * com’è, spazi compresi.
+ * 22 resta 22 (non diventa 21-22). Un intervallo già espanso si riduce al
+ * numero ricevuto: 21-22 → 22, 261-262/A → 262/A, 261/A-262/A → 262/A.
+ * La lettera resta, così /A e /C non si mescolano. Forme speciali (78\2 80)
+ * restano com’è, spazi compresi.
  */
 export function normalizzaCampata(valore: string) {
   const pulito = valore.trim().replace(/–/g, "-").replace(/\s+/g, " ");
   if (!pulito) return "";
+
+  const intervalloLettera = pulito.match(/^(\d+)\s*-\s*(\d+)\s*\/\s*([a-z]+)$/i);
+  if (intervalloLettera) {
+    return `${Number(intervalloLettera[2])}/${intervalloLettera[3].toUpperCase()}`;
+  }
+
+  const intervalloDueLettere = pulito.match(
+    /^(\d+)\s*\/\s*([a-z]+)\s*-\s*(\d+)\s*\/\s*([a-z]+)$/i,
+  );
+  if (
+    intervalloDueLettere &&
+    intervalloDueLettere[2].toUpperCase() === intervalloDueLettere[4].toUpperCase()
+  ) {
+    return `${Number(intervalloDueLettere[3])}/${intervalloDueLettere[4].toUpperCase()}`;
+  }
 
   const intervallo = pulito.match(/^(\d+)\s*-\s*(\d+)$/);
   if (intervallo) return String(Number(intervallo[2]));

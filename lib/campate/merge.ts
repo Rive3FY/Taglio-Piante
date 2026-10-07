@@ -1,5 +1,6 @@
 import type { CampataLavoro } from "@/lib/types";
 import { campataDaAttenzionare, campataDaRiprendere, campataETagliata } from "@/lib/types";
+import { normalizzaCampata } from "./normalize";
 
 export type UnisciCampataOpts = {
   /** Fogli in cancellazione: la chiusura remota di quei fogli non deve ririchiedere la campata. */
@@ -112,11 +113,14 @@ export function unisciCampataLocaleRemoto(
     new Date(remoto.updatedAt).getTime(),
   );
 
+  const normalizzata = normalizzaCampata(base.normalizzata) || base.normalizzata;
+
   return {
     ...base,
     ...taglio,
     ...rinvio,
     ...attenzione,
+    normalizzata,
     note: unisciNote(locale.note, remoto.note),
     syncStatus: locale.syncStatus === "error" || locale.syncStatus === "pending" ? "pending" : "synced",
     updatedAt: combinato ? new Date().toISOString() : new Date(latest).toISOString(),

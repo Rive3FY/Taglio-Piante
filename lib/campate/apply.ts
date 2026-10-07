@@ -850,6 +850,29 @@ export async function ripristinaCampateOrfane() {
 }
 
 /**
+ * 261-262/A in archivio diventa 262/A, come in elenco. L’id non cambia:
+ * i fogli restano agganciati. L’originale del file resta com’era.
+ */
+export async function allineaNumeriCampata() {
+  const campate = await db.campateLavoro.toArray();
+  const now = new Date().toISOString();
+  const daScrivere: CampataLavoro[] = [];
+  for (const c of campate) {
+    const numero = normalizzaCampata(c.normalizzata);
+    if (!numero || numero === c.normalizzata) continue;
+    daScrivere.push({
+      ...c,
+      normalizzata: numero,
+      syncStatus: "pending",
+      updatedAt: now,
+    });
+  }
+  if (daScrivere.length === 0) return 0;
+  await db.campateLavoro.bulkPut(daScrivere);
+  return daScrivere.length;
+}
+
+/**
  * Righe doppie sullo stesso span: una dal file e una nata a mano da un rapportino
  * vecchio (prima del blocco «da non tagliare»). Contavano due volte nella torta.
  * Si tiene la riga del file, portandoci sopra il taglio, e si butta la copia.

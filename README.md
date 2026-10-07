@@ -60,7 +60,7 @@ Oggi si lavora **solo sulle differibili**: le urgenze restano nel database (il f
 
 Operatore e tecnico possono aggiungere una campata a mano (**Nuova campata**): resta aggiuntiva, sul piano dell’anno in elenco, e da lì si parte col rapportino. Se c’è già la stessa linea + campata + priorità non si duplica. Finché le urgenze sono nascoste la campata nuova nasce differibile e la scelta della priorità non compare.
 
-In elenco e sul foglio la campata è il **numero** del LIDAR (22 resta 22, non 21-22). Forme speciali come `78\2 80` restano com’è. Se il numero è una pulizia base e non un taglio, sul rapportino si spunta **BASE**: i sostegni non chiudono le campate.
+In elenco e sul foglio la campata è il **numero** del LIDAR (22 resta 22, non 21-22; 261-262/A resta 262/A). Forme speciali come `78\2 80` restano com’è. Se il numero è una pulizia base e non un taglio, sul rapportino si spunta **BASE**: i sostegni non chiudono le campate.
 
 ## Da riprendere e attenzionare
 
