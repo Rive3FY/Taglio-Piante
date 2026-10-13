@@ -1,21 +1,21 @@
 /**
  * Numero di campata come lo scrive l’operatore e il LIDAR.
  * 22 resta 22 (non diventa 21-22). Un intervallo già espanso si riduce al
- * numero ricevuto: 21-22 → 22, 261-262/A → 262/A, 261/A-262/A → 262/A.
- * La lettera resta, così /A e /C non si mescolano. Forme speciali (78\2 80)
- * restano com’è, spazi compresi.
+ * numero ricevuto: 21-22 → 22, 261-262/A → 262/A, 733-734/A4 → 734/A4,
+ * 261/A-262/A → 262/A. Il suffisso resta, così /A, /C e /A4 non si mescolano.
+ * Forme speciali (78\2 80) restano com’è, spazi compresi.
  */
 export function normalizzaCampata(valore: string) {
   const pulito = valore.trim().replace(/–/g, "-").replace(/\s+/g, " ");
   if (!pulito) return "";
 
-  const intervalloLettera = pulito.match(/^(\d+)\s*-\s*(\d+)\s*\/\s*([a-z]+)$/i);
+  const intervalloLettera = pulito.match(/^(\d+)\s*-\s*(\d+)\s*\/\s*([a-z][a-z0-9]*)$/i);
   if (intervalloLettera) {
     return `${Number(intervalloLettera[2])}/${intervalloLettera[3].toUpperCase()}`;
   }
 
   const intervalloDueLettere = pulito.match(
-    /^(\d+)\s*\/\s*([a-z]+)\s*-\s*(\d+)\s*\/\s*([a-z]+)$/i,
+    /^(\d+)\s*\/\s*([a-z][a-z0-9]*)\s*-\s*(\d+)\s*\/\s*([a-z][a-z0-9]*)$/i,
   );
   if (
     intervalloDueLettere &&
@@ -27,7 +27,7 @@ export function normalizzaCampata(valore: string) {
   const intervallo = pulito.match(/^(\d+)\s*-\s*(\d+)$/);
   if (intervallo) return String(Number(intervallo[2]));
 
-  const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z]+)$/i);
+  const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z][a-z0-9]*)$/i);
   if (conLettera) return `${Number(conLettera[1])}/${conLettera[2].toUpperCase()}`;
 
   // Sostegno con lettere attaccate o staccate: 14DB e 14 db sono la stessa base.
@@ -71,8 +71,8 @@ export function idCampataLavoro(
   return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
-/** La barra davanti alle lettere fa parte del sostegno: 17/A e 14/DB restano un pezzo solo. */
-const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z]+)(?![a-z0-9])/gi;
+/** La barra davanti alle lettere fa parte del sostegno: 17/A, 14/DB e 734/A4 restano un pezzo solo. */
+const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z][a-z0-9]*)(?![a-z0-9])/gi;
 const BARRA_PROTETTA = "\u0001";
 
 /**

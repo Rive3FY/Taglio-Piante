@@ -70,7 +70,7 @@ function numeriDiPezzo(pezzo: string) {
   const pulito = originale.replace(/\s+/g, "");
   if (!pulito) return [];
   const parti = pulito.split("-").filter(Boolean);
-  if (parti.length > 0 && parti.every((p) => /^\d+(\/[a-z]+)?$/i.test(p))) {
+  if (parti.length > 0 && parti.every((p) => /^\d+(\/[a-z][a-z0-9]*)?$/i.test(p))) {
     return parti.map((p) => (p.includes("/") ? normalizzaCampata(p) : String(Number(p))));
   }
   const uno = normalizzaCampata(originale);
