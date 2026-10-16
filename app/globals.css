@@ -180,6 +180,12 @@ button, input, select, textarea { font: inherit; }
   margin-bottom: 14px;
   gap: 6px;
 }
+.home-oggi-testa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .home-oggi-riga {
   display: flex;
   flex-wrap: wrap;
@@ -463,12 +469,20 @@ select.inline-field { width: auto; min-width: 160px; }
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-width: 118px;
-  padding: 6px 12px;
+  flex: 1 1 168px;
+  min-width: 0;
+  max-width: 280px;
+  padding: 6px 8px 6px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
   line-height: 1.15;
+}
+.totale-foglio-testa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }
 .totale-foglio span {
   font-size: 11px;
@@ -485,6 +499,35 @@ select.inline-field { width: auto; min-width: 160px; }
 .totale-foglio small {
   font-size: 10px;
   color: var(--muted);
+}
+.totale-foglio strong.cifre-nascoste,
+.totale-foglio small.cifre-nascoste,
+.home-oggi-euro.cifre-nascoste {
+  color: var(--muted);
+  letter-spacing: 0.14em;
+}
+.occhio-cifre {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  margin: -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.occhio-cifre[aria-pressed="false"] {
+  color: var(--ink);
+  background: var(--panel-3);
+}
+.occhio-cifre:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .scheda-overlay {
   position: fixed;
