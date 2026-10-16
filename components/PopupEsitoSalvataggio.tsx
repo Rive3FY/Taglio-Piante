@@ -12,6 +12,8 @@ export type EsitoSalvataggio = {
    * altrimenti un path (es. `/tecnico/campate`).
    */
   dopo: "resta" | "home" | (string & {});
+  /** Tasto principale al posto di «Ok»; dopo l'azione il popup si chiude. */
+  azione?: { etichetta: string; esegui: () => void };
 };
 
 export function PopupEsitoSalvataggio({
@@ -34,9 +36,27 @@ export function PopupEsitoSalvataggio({
         </div>
         <h2 id="esito-titolo">{esito.titolo}</h2>
         <p className="muted">{esito.testo}</p>
-        <button type="button" className="btn btn-primary esito-ok" onClick={onOk}>
-          Ok
-        </button>
+        {esito.azione ? (
+          <>
+            <button
+              type="button"
+              className="btn btn-primary esito-ok"
+              onClick={() => {
+                esito.azione?.esegui();
+                onOk();
+              }}
+            >
+              {esito.azione.etichetta}
+            </button>
+            <button type="button" className="btn btn-secondary esito-ok" onClick={onOk}>
+              Chiudi
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn btn-primary esito-ok" onClick={onOk}>
+            Ok
+          </button>
+        )}
       </div>
     </div>,
     document.body,

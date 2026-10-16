@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatDate, lineaDescrizione } from "@/lib/format";
-import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
+import { downloadOfficialScheda, preparaOfficialSchede, testoPdfPronto } from "@/lib/fillScheda";
+import { scaricaBlob } from "@/lib/download";
 import { foglioEBasi, numeriDaTestoCampata } from "@/lib/campate/basi";
 import { mostraCampata, mostraTestoCampate } from "@/lib/campate/normalize";
 import { useDialogBack } from "@/lib/useDialogBack";
@@ -203,18 +204,20 @@ export function ArchivioPerLinea({
     setBusy("insieme");
     try {
       const codice = linea?.codice ?? "linea";
-      await downloadOfficialSchede(
+      const pdf = await preparaOfficialSchede(
         lista.map((item) => ({ item, linea })),
-        `Schede_${codice}_${lista.length}fogli.pdf`,
         prestazioni,
       );
+      if (!pdf) return;
       mostraEsito({
         titolo: "PDF pronto",
-        testo:
-          lista.length === 1
-            ? "Il foglio ufficiale è stato scaricato."
-            : `Scaricati ${lista.length} fogli in un unico PDF.`,
+        testo: testoPdfPronto(pdf),
         dopo: "resta",
+        azione: {
+          etichetta: "Scarica PDF",
+          esegui: () =>
+            scaricaBlob(pdf.bytes, `Schede_${codice}_${pdf.ok}fogli.pdf`, "application/pdf"),
+        },
       });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");
