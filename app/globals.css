@@ -407,6 +407,24 @@ select.inline-field { width: auto; min-width: 160px; }
   gap: 10px;
   flex-wrap: wrap;
 }
+.calendario-giorno-testa {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.calendario-giorno-totale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.calendario-giorno-euro {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-2);
+  line-height: 1.1;
+}
 .elenco-cerca { flex: 1 1 180px; max-width: 320px; padding: 9px 12px; }
 .elenco-azioni { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .elenco-piu {

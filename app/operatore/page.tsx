@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatEuro } from "@/lib/contabilita/aggrega";
-import { totaleVoci } from "@/lib/contabilita/listino";
+import { totaleVoci, vociDaRighe } from "@/lib/contabilita/listino";
 import { todayIso } from "@/lib/format";
 import { SEZIONI, rapportiniDellaSezione, rapportinoVisibile } from "@/lib/sezioni";
 import { useSession } from "@/lib/SessionContext";
@@ -16,26 +16,16 @@ export default function OperatoreHome() {
   const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []);
 
   const totaleOggi = useMemo(() => {
-    const fogli = rapportini ?? [];
-    const listino = prestazioni ?? [];
     const oggi = todayIso();
-    const mieiOggi = fogli.filter(
+    const mieiOggi = (rapportini ?? []).filter(
       (r) => r.dataLavoro === oggi && rapportinoVisibile(r, session, "operatore"),
     );
-    if (mieiOggi.length === 0 || listino.length === 0) {
-      return { euro: 0, fogli: 0, senzaPrezzo: 0 };
-    }
-    const byId = new Map(listino.map((p) => [p.id, p]));
-    const voci: { quantita: number; codice: string; unitaMisura: string }[] = [];
-    for (const r of mieiOggi) {
-      for (const riga of r.righe ?? []) {
-        if (!(riga.quantita > 0)) continue;
-        const p = byId.get(riga.prestazioneId);
-        if (!p) continue;
-        voci.push({ quantita: riga.quantita, codice: p.codice, unitaMisura: p.unitaMisura });
-      }
-    }
-    const { totale, senzaPrezzo } = totaleVoci(voci);
+    const { totale, senzaPrezzo } = totaleVoci(
+      vociDaRighe(
+        mieiOggi.flatMap((r) => r.righe ?? []),
+        prestazioni ?? [],
+      ),
+    );
     return { euro: totale, fogli: mieiOggi.length, senzaPrezzo };
   }, [rapportini, prestazioni, session]);
 

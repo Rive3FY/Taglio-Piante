@@ -43,27 +43,26 @@ export default function ElencoSezionePage({
         <p className="muted">{config.descrizione}</p>
       </div>
 
-      {config.key === "archiviati" ? (
-        <div className="chip-row">
-          <button
-            type="button"
-            className={`chip ${vista === "giorno" ? "on" : ""}`}
-            onClick={() => router.replace("/operatore/elenco/archiviati")}
-          >
-            Calendario
-          </button>
-          <button
-            type="button"
-            className={`chip ${vista === "linea" ? "on" : ""}`}
-            onClick={() => router.replace("/operatore/elenco/archiviati?v=linea")}
-          >
-            Per linea
-          </button>
-        </div>
-      ) : null}
+      <div className="chip-row">
+        <button
+          type="button"
+          className={`chip ${vista === "giorno" ? "on" : ""}`}
+          onClick={() => router.replace(`/operatore/elenco/${config.key}`)}
+        >
+          Calendario
+        </button>
+        <button
+          type="button"
+          className={`chip ${vista === "linea" ? "on" : ""}`}
+          onClick={() => router.replace(`/operatore/elenco/${config.key}?v=linea`)}
+        >
+          Per linea
+        </button>
+      </div>
 
-      {config.key === "archiviati" && vista === "linea" ? (
+      {vista === "linea" ? (
         <ArchivioPerLinea
+          key={config.key}
           items={items}
           linee={linee}
           hrefFor={(item) => `/operatore/${item.id}`}
