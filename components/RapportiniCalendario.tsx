@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { etichettaMese, formatEuro, mesiDisponibili } from "@/lib/contabilita/aggrega";
 import { totaleVoci, vociDaRighe } from "@/lib/contabilita/listino";
 import { formatDate, todayIso } from "@/lib/format";
-import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
+import { downloadOfficialScheda, preparaOfficialSchede, testoPdfPronto } from "@/lib/fillScheda";
+import { scaricaBlob } from "@/lib/download";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { CalendarioMese } from "./CalendarioMese";
 import { RapportinoCard } from "./RapportinoCard";
@@ -91,15 +92,19 @@ export function RapportiniCalendario({
     setErrore(null);
     setBusy("tutti");
     try {
-      await downloadOfficialSchede(
+      const pdf = await preparaOfficialSchede(
         delGiorno.map((item) => ({ item, linea: lineaDi.get(item.lineaId) })),
-        `Schede_taglio_${giorno}.pdf`,
         prestazioni,
       );
+      if (!pdf) return;
       mostraEsito({
         titolo: "PDF pronto",
-        testo: `Scaricati ${delGiorno.length} fogli del ${formatDate(giorno)}.`,
+        testo: testoPdfPronto(pdf, `del ${formatDate(giorno)}`),
         dopo: "resta",
+        azione: {
+          etichetta: "Scarica PDF",
+          esegui: () => scaricaBlob(pdf.bytes, `Schede_taglio_${giorno}.pdf`, "application/pdf"),
+        },
       });
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");

@@ -337,18 +337,22 @@ export async function downloadOfficialScheda(opts: {
   );
 }
 
-export async function downloadOfficialSchede(
+/**
+ * Prepara un unico PDF con più fogli. Non lo scarica: dopo qualche secondo di
+ * lavoro il telefono non collega più il download al tocco e lo blocca, quindi
+ * il download va avviato da un nuovo tocco (`scaricaBlob`).
+ */
+export async function preparaOfficialSchede(
   fogli: { item: Rapportino; linea?: Linea }[],
-  filename: string,
   prestazioni?: Prestazione[] | null,
-) {
+): Promise<{ bytes: Uint8Array; ok: number; totale: number } | null> {
   const lista = asArray(fogli);
   const prest = asArray(prestazioni);
-  if (lista.length === 0) return;
+  if (lista.length === 0) return null;
 
   if (lista.length === 1) {
-    await downloadOfficialScheda({ ...lista[0]!, prestazioni: prest });
-    return;
+    const bytes = await fillOfficialScheda({ ...lista[0]!, prestazioni: prest });
+    return { bytes, ok: 1, totale: 1 };
   }
 
   await preparaFirme(lista.map((f) => f.item));
@@ -372,8 +376,15 @@ export async function downloadOfficialSchede(
   }
 
   if (ok === 0) throw new Error(ultimoErrore || "Nessun foglio da scaricare.");
-  const bytes = await merged.save();
-  scaricaBlob(bytes, filename, "application/pdf");
+  return { bytes: await merged.save(), ok, totale: lista.length };
+}
+
+export function testoPdfPronto(pdf: { ok: number; totale: number }, quando?: string) {
+  const fogli = pdf.ok === 1 ? "1 foglio" : `${pdf.ok} fogli`;
+  const base = `${fogli}${quando ? ` ${quando}` : ""} in un unico PDF.`;
+  const saltati = pdf.totale - pdf.ok;
+  if (saltati === 0) return base;
+  return `${base} ${saltati === 1 ? "1 foglio non è stato generato" : `${saltati} fogli non sono stati generati`}: riprova con la rete attiva.`;
 }
 
 export async function officialSchedaObjectUrl(opts: {
