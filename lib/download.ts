@@ -5,6 +5,11 @@ export function scaricaBlob(data: Blob | Uint8Array, filename: string, type = "a
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Safari e Android leggono il blob dopo il click: revocarlo subito annulla il download.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
