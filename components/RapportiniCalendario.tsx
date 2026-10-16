@@ -3,13 +3,16 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { etichettaMese, mesiDisponibili } from "@/lib/contabilita/aggrega";
+import { etichettaMese, formatEuro, mesiDisponibili } from "@/lib/contabilita/aggrega";
+import { totaleVoci, vociDaRighe } from "@/lib/contabilita/listino";
 import { formatDate, todayIso } from "@/lib/format";
 import { downloadOfficialScheda, downloadOfficialSchede } from "@/lib/fillScheda";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
 import { CalendarioMese } from "./CalendarioMese";
 import { RapportinoCard } from "./RapportinoCard";
-import type { Linea, Rapportino } from "@/lib/types";
+import type { Linea, Prestazione, Rapportino } from "@/lib/types";
+
+const NESSUNA_PRESTAZIONE: Prestazione[] = [];
 
 export function RapportiniCalendario({
   items,
@@ -24,7 +27,7 @@ export function RapportiniCalendario({
   vuoto: string;
   onDelete?: (item: Rapportino) => void;
 }) {
-  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? [];
+  const prestazioni = useLiveQuery(() => db.prestazioni.toArray(), []) ?? NESSUNA_PRESTAZIONE;
   const oggi = todayIso();
   const mesi = useMemo(() => mesiDisponibili(items), [items]);
   const [mese, setMese] = useState(() => oggi.slice(0, 7));
@@ -54,6 +57,17 @@ export function RapportiniCalendario({
         (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.numero.localeCompare(b.numero, "it"),
       ),
     [delMese, giorno],
+  );
+
+  const totaleGiorno = useMemo(
+    () =>
+      totaleVoci(
+        vociDaRighe(
+          delGiorno.flatMap((r) => r.righe ?? []),
+          prestazioni,
+        ),
+      ),
+    [delGiorno, prestazioni],
   );
 
   async function scaricaUno(item: Rapportino) {
@@ -126,10 +140,31 @@ export function RapportiniCalendario({
       {giorno ? (
         <section className="panel">
           <div className="elenco-head">
-            <h2>
-              {formatDate(giorno)}
-              <span className="muted"> · {delGiorno.length} rapportini</span>
-            </h2>
+            <div className="calendario-giorno-testa">
+              <h2>
+                {formatDate(giorno)}
+                <span className="muted">
+                  {" "}
+                  ·{" "}
+                  {delGiorno.length === 1
+                    ? "1 rapportino"
+                    : `${delGiorno.length} rapportini`}
+                </span>
+              </h2>
+              {delGiorno.length > 0 ? (
+                <div className="calendario-giorno-totale" aria-live="polite">
+                  <strong className="calendario-giorno-euro">{formatEuro(totaleGiorno.totale)}</strong>
+                  <span className="muted">totale giornata</span>
+                  {totaleGiorno.senzaPrezzo > 0 ? (
+                    <small className="muted">
+                      {totaleGiorno.senzaPrezzo === 1
+                        ? "1 voce senza prezzo"
+                        : `${totaleGiorno.senzaPrezzo} voci senza prezzo`}
+                    </small>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             {delGiorno.length > 0 ? (
               <button
                 type="button"
@@ -161,7 +196,9 @@ export function RapportiniCalendario({
           )}
         </section>
       ) : (
-        <p className="muted">Tocca un giorno per vedere i rapportini e scaricare i fogli.</p>
+        <p className="muted">
+          Tocca un giorno per vedere i rapportini, il totale € della giornata e scaricare i fogli.
+        </p>
       )}
     </>
   );

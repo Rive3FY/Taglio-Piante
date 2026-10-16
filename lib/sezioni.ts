@@ -16,7 +16,8 @@ export const SEZIONI: Sezione[] = [
     key: "bozze",
     kicker: "Locale",
     titolo: "Bozze",
-    descrizione: "Rapportini iniziati e non ancora inviati.",
+    descrizione:
+      "Rapportini iniziati e non ancora inviati. Dal calendario tocchi un giorno e vedi i fogli con il totale € della giornata.",
     vuoto: "Nessuna bozza locale.",
     stati: ["bozza", "da_prendere"],
   },
@@ -24,7 +25,8 @@ export const SEZIONI: Sezione[] = [
     key: "archiviati",
     kicker: "Chiusi",
     titolo: "Archiviati",
-    descrizione: "Completati. Dal calendario recuperi i fogli di un giorno, oppure li vedi per linea.",
+    descrizione:
+      "Completati. Dal calendario recuperi i fogli di un giorno col totale €, oppure li vedi per linea.",
     vuoto: "Nessun rapportino archiviato.",
     stati: ["archiviato", "in_attesa"],
   },

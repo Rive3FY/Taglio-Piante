@@ -127,6 +127,26 @@ export function totaleVoci(voci: { quantita: number; codice: string; unitaMisura
   return { totale: arrotondaEuro(totale), senzaPrezzo };
 }
 
+/** Righe dei fogli → voci col codice listino, per sommare un giorno o un foglio. */
+export function vociDaRighe(
+  righe: { prestazioneId: string; quantita: number }[],
+  prestazioni: { id: string; codice: string; unitaMisura: string }[],
+) {
+  const byId = new Map(prestazioni.map((p) => [p.id, p]));
+  const voci: { quantita: number; codice: string; unitaMisura: string }[] = [];
+  for (const riga of righe) {
+    if (!(riga.quantita > 0)) continue;
+    const prestazione = byId.get(riga.prestazioneId);
+    if (!prestazione) continue;
+    voci.push({
+      quantita: riga.quantita,
+      codice: prestazione.codice,
+      unitaMisura: prestazione.unitaMisura,
+    });
+  }
+  return voci;
+}
+
 export function listinoCaricato() {
   return Object.keys(LISTINO).length > 0;
 }
