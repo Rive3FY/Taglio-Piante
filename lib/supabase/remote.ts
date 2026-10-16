@@ -115,6 +115,9 @@ export function messaggioErroreSupabase(message: string) {
   if (/schema cache|does not exist|could not find the/i.test(message)) {
     return "Database non aggiornato rispetto all’app. In Supabase → SQL esegui supabase/schema.sql (servono anche dist_int, est_int, nord_int, da_non_tagliare e rinvio_mese sulle campate).";
   }
+  if (/campate_lavoro_unica_idx/i.test(message)) {
+    return "Campata doppia: sulla stessa linea e nello stesso anno c’è già una campata con questo numero e questa priorità.";
+  }
   if (/foreign key constraint|violates foreign key/i.test(message)) {
     return "Dati non allineati: manca la linea collegata sul database. Sincronizza le anagrafiche o riesegui supabase/schema.sql.";
   }
@@ -389,9 +392,11 @@ async function pushCampateEliminate() {
 
 async function fetchCampateRemoteByIds(ids: string[]) {
   const supabase = getSupabase();
-  if (!supabase || ids.length === 0) return new Map<string, CampataLavoro>();
-
   const out = new Map<string, CampataLavoro>();
+  /** Numero così com'è scritto sul server, prima della normalizzazione. */
+  const numeriSalvati = new Map<string, string>();
+  if (!supabase || ids.length === 0) return { campate: out, numeriSalvati };
+
   for (let i = 0; i < ids.length; i += 200) {
     const slice = ids.slice(i, i + 200);
     const { data, error } = await supabase.from("campate_lavoro").select("*").in("id", slice);
@@ -399,7 +404,57 @@ async function fetchCampateRemoteByIds(ids: string[]) {
     for (const row of data ?? []) {
       const campata = rowToCampataLavoro(row as Parameters<typeof rowToCampataLavoro>[0]);
       out.set(campata.id, campata);
+      numeriSalvati.set(campata.id, String((row as { normalizzata: string }).normalizzata));
     }
+  }
+  return { campate: out, numeriSalvati };
+}
+
+type RigaCampata = ReturnType<typeof campataLavoroToRow>;
+
+function chiaveUnica(r: Pick<RigaCampata, "anno" | "codice_linea" | "normalizzata" | "priorita" | "tipo">) {
+  return [r.anno, r.codice_linea, r.normalizzata, r.priorita ?? "", r.tipo].join("|");
+}
+
+async function chiaveOccupataSulServer(r: RigaCampata) {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  let query = supabase
+    .from("campate_lavoro")
+    .select("id")
+    .eq("anno", r.anno)
+    .eq("codice_linea", r.codice_linea)
+    .eq("normalizzata", r.normalizzata)
+    .eq("tipo", r.tipo)
+    .neq("id", r.id)
+    .limit(1);
+  query = r.priorita ? query.eq("priorita", r.priorita) : query.is("priorita", null);
+  const { data, error } = await query;
+  if (error) return true;
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Un numero vecchio (261-262/A) si riscrive in forma breve (262/A) solo se sul
+ * server non c'è già un'altra riga con quel numero, stessa linea, anno e priorità:
+ * altrimenti l'indice unico rifiuta tutto l'invio, segni compresi.
+ */
+async function righeSenzaNumeriDoppi(rows: RigaCampata[], numeriSalvati: Map<string, string>) {
+  const rinomina = (r: RigaCampata) => {
+    const salvato = numeriSalvati.get(r.id);
+    return salvato != null && salvato !== r.normalizzata;
+  };
+  const occupate = new Set(rows.filter((r) => !rinomina(r)).map(chiaveUnica));
+  const out: RigaCampata[] = [];
+  for (const r of rows) {
+    if (!rinomina(r)) {
+      out.push(r);
+      continue;
+    }
+    const libera = !occupate.has(chiaveUnica(r)) && !(await chiaveOccupataSulServer(r));
+    const riga = libera ? r : { ...r, normalizzata: numeriSalvati.get(r.id)! };
+    occupate.add(chiaveUnica(riga));
+    out.push(riga);
   }
   return out;
 }
@@ -430,7 +485,7 @@ export async function pushCampatePending(rapportinoId?: string) {
     .toArray();
 
   if (rows.length > 0) {
-    const remote = await fetchCampateRemoteByIds(rows.map((c) => c.id));
+    const { campate: remote, numeriSalvati } = await fetchCampateRemoteByIds(rows.map((c) => c.id));
     const fogliEliminati = await fogliInCancellazione();
     if (rapportinoId) fogliEliminati.add(rapportinoId);
     const daInviare = rows.map((locale) => {
@@ -445,7 +500,10 @@ export async function pushCampatePending(rapportinoId?: string) {
     // comparire nella lettura a cursore degli altri dispositivi.
     const inviateIl = new Date().toISOString();
     await upsertCampateLavoro(
-      daInviare.map((c) => ({ ...campataLavoroToRow(c), updated_at: inviateIl })),
+      await righeSenzaNumeriDoppi(
+        daInviare.map((c) => ({ ...campataLavoroToRow(c), updated_at: inviateIl })),
+        numeriSalvati,
+      ),
       { vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"] },
     );
 
