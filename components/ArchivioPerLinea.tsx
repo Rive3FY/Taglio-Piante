@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -15,6 +15,8 @@ import { LineaPicker } from "./LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "./MostraAltro";
 import { haFirmaDitta } from "@/lib/rapportinoFirma";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
+import { scaricaRapportiniScelti, testoSelezione, toggleId } from "@/lib/selezioneRapportini";
+import { BarraSelezione, CheckboxGruppo, useMontato } from "./BarraSelezione";
 import { FirmaDittaOverlay } from "./FirmaDittaOverlay";
 import { RapportinoCard } from "./RapportinoCard";
 import { RapportinoSheet } from "./RapportinoSheet";
@@ -107,7 +109,11 @@ export function ArchivioPerLinea({
   const [scelti, setScelti] = useState<string[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [firmaId, setFirmaId] = useState<string | null>(null);
-  const [dockReady, setDockReady] = useState(false);
+  const dockReady = useMontato();
+  const nScelti = useMemo(
+    () => items.reduce((n, r) => n + (scelti.includes(r.id) ? 1 : 0), 0),
+    [items, scelti],
+  );
 
   const gruppi = useMemo(() => {
     const byId = new Map(linee.map((l) => [l.id, l]));
@@ -156,7 +162,6 @@ export function ArchivioPerLinea({
 
   const visibili = mostraAltreLinee || cercataId ? filtrati : filtrati.slice(0, ANTEPRIMA_ELENCO);
 
-  useEffect(() => setDockReady(true), []);
   useDialogBack(Boolean(previewId), () => setPreviewId(null));
 
   const gruppoAperto = gruppi.find((g) => g.lineaId === aperta);
@@ -174,12 +179,29 @@ export function ArchivioPerLinea({
   function apri(lineaId: string) {
     setAperta((cur) => (cur === lineaId ? null : lineaId));
     setMostraTuttiFogli(false);
-    setScelti([]);
     setErrore(null);
   }
 
   function toggleScelto(id: string) {
-    setScelti((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setScelti((cur) => toggleId(cur, id));
+  }
+
+  async function scaricaSelezionati() {
+    const lista = items.filter((r) => scelti.includes(r.id));
+    if (lista.length === 0) return;
+    setErrore(null);
+    setBusy("scelti");
+    try {
+      await scaricaRapportiniScelti(
+        lista,
+        new Map(linee.map((l) => [l.id, l])),
+        prestazioni,
+      );
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Download non riuscito.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   function chiudiPreview() {
@@ -232,7 +254,8 @@ export function ArchivioPerLinea({
     <>
       <p className="muted">
         {items.length} {items.length === 1 ? "foglio" : "fogli"} su {gruppi.length}{" "}
-        {gruppi.length === 1 ? "linea" : "linee"}. Tocca una linea per vedere cosa hai fatto.
+        {gruppi.length === 1 ? "linea" : "linee"}. Spunta quelli che ti servono: la selezione resta
+        anche se apri un’altra linea.
       </p>
       <div className="cerca-e-linee">
       <label className="contab-cerca-linea">
@@ -250,7 +273,6 @@ export function ArchivioPerLinea({
             setCercataId(id);
             setAperta(id || null);
             setMostraTuttiFogli(false);
-            setScelti([]);
             if (!id) setMostraAltreLinee(false);
           }}
         />
@@ -266,6 +288,7 @@ export function ArchivioPerLinea({
             const { campate, basi } = etichetteDaFogli(g.items, prestazioni);
             const voci = vociDaFogli(g.items, prestazioni);
             const ultima = g.items[0]?.dataLavoro;
+            const selezionatiLinea = g.items.filter((r) => scelti.includes(r.id)).length;
             return (
               <section key={g.lineaId} className="panel">
                 <button
@@ -284,6 +307,7 @@ export function ArchivioPerLinea({
                   <span className="muted">
                     {g.items.length} {g.items.length === 1 ? "foglio" : "fogli"}
                     {ultima ? ` · ultimo ${formatDate(ultima)}` : ""}
+                    {selezionatiLinea > 0 ? ` · ${testoSelezione(selezionatiLinea)}` : ""}
                   </span>
                 </button>
                 {open ? (
@@ -308,39 +332,13 @@ export function ArchivioPerLinea({
                       <p className="muted">Nessun dettaglio sulle quantità di questi fogli.</p>
                     ) : null}
                     <div className="archivio-azioni">
-                      <label className="check-line">
-                        <input
-                          type="checkbox"
-                          checked={g.items.length > 0 && g.items.every((r) => scelti.includes(r.id))}
-                          onChange={() =>
-                            setScelti(
-                              g.items.every((r) => scelti.includes(r.id))
-                                ? []
-                                : g.items.map((r) => r.id),
-                            )
-                          }
-                        />
-                        {g.items.every((r) => scelti.includes(r.id))
-                          ? "Togli selezione"
-                          : "Seleziona tutti"}
-                      </label>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={busy !== null || scelti.length === 0}
-                        onClick={() =>
-                          void scaricaInsieme(
-                            g.items.filter((r) => scelti.includes(r.id)),
-                            g.linea,
-                          )
-                        }
-                      >
-                        {busy === "insieme"
-                          ? "Preparazione PDF…"
-                          : scelti.length === 0
-                            ? "Scarica selezionati"
-                            : `Scarica selezionati (${scelti.length})`}
-                      </button>
+                      <CheckboxGruppo
+                        ids={g.items.map((r) => r.id)}
+                        scelti={scelti}
+                        onChange={setScelti}
+                        acceso="Togli da questa linea"
+                        spento="Seleziona questa linea"
+                      />
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -353,7 +351,10 @@ export function ArchivioPerLinea({
                     <div className="form-stack">
                       {fogli.map((item) => {
                         return (
-                          <div key={item.id} className="archivio-riga">
+                          <div
+                            key={item.id}
+                            className={`archivio-riga${scelti.includes(item.id) ? " is-scelto" : ""}`}
+                          >
                             <input
                               type="checkbox"
                               checked={scelti.includes(item.id)}
@@ -436,6 +437,13 @@ export function ArchivioPerLinea({
           onChiudi={() => setFirmaId(null)}
         />
       ) : null}
+      <BarraSelezione
+        n={nScelti}
+        preparando={busy === "scelti"}
+        bloccata={busy !== null}
+        onScarica={() => void scaricaSelezionati()}
+        onAnnulla={() => setScelti([])}
+      />
     </>
   );
 }

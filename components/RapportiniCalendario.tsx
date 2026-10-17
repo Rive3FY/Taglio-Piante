@@ -9,6 +9,8 @@ import { formatDate, todayIso } from "@/lib/format";
 import { downloadOfficialScheda, preparaOfficialSchede, testoPdfPronto } from "@/lib/fillScheda";
 import { scaricaBlob } from "@/lib/download";
 import { mostraEsito } from "@/lib/esitoSalvataggio";
+import { scaricaRapportiniScelti, testoSelezione, toggleId } from "@/lib/selezioneRapportini";
+import { BarraSelezione, CheckboxGruppo } from "./BarraSelezione";
 import { CalendarioMese } from "./CalendarioMese";
 import { RapportinoCard } from "./RapportinoCard";
 import type { Linea, Prestazione, Rapportino } from "@/lib/types";
@@ -35,6 +37,7 @@ export function RapportiniCalendario({
   const [giorno, setGiorno] = useState<string | null>(oggi);
   const [busy, setBusy] = useState<string | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
+  const [scelti, setScelti] = useState<string[]>([]);
 
   const meseEffettivo = mesi.includes(mese) ? mese : (mesi[0] ?? oggi.slice(0, 7));
   const lineaDi = useMemo(() => new Map(linee.map((l) => [l.id, l])), [linee]);
@@ -60,6 +63,21 @@ export function RapportiniCalendario({
     [delMese, giorno],
   );
 
+  const sceltiSet = useMemo(() => new Set(scelti), [scelti]);
+  const selezionatiPerGiorno = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of items) {
+      if (!sceltiSet.has(r.id)) continue;
+      m.set(r.dataLavoro, (m.get(r.dataLavoro) ?? 0) + 1);
+    }
+    return m;
+  }, [items, sceltiSet]);
+  const sceltiGiorno = giorno ? (selezionatiPerGiorno.get(giorno) ?? 0) : 0;
+  const nScelti = useMemo(
+    () => items.reduce((n, r) => n + (sceltiSet.has(r.id) ? 1 : 0), 0),
+    [items, sceltiSet],
+  );
+
   const totaleGiorno = useMemo(
     () =>
       totaleVoci(
@@ -80,6 +98,20 @@ export function RapportiniCalendario({
         linea: lineaDi.get(item.lineaId),
         prestazioni,
       });
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : "Download non riuscito.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function scaricaSelezionati() {
+    const lista = items.filter((r) => sceltiSet.has(r.id));
+    if (lista.length === 0) return;
+    setErrore(null);
+    setBusy("scelti");
+    try {
+      await scaricaRapportiniScelti(lista, lineaDi, prestazioni);
     } catch (e) {
       setErrore(e instanceof Error ? e.message : "Download non riuscito.");
     } finally {
@@ -138,8 +170,13 @@ export function RapportiniCalendario({
           oggi={oggi}
           selezionato={giorno}
           conteggi={conteggi}
+          selezionati={selezionatiPerGiorno}
           onSelect={(data) => setGiorno(data || null)}
         />
+        <p className="muted">
+          Spunta i fogli che ti servono. Se cambi giorno la selezione resta: la riga sotto il
+          numero segna i giorni già scelti.
+        </p>
       </section>
 
       {giorno ? (
@@ -154,6 +191,7 @@ export function RapportiniCalendario({
                   {delGiorno.length === 1
                     ? "1 rapportino"
                     : `${delGiorno.length} rapportini`}
+                  {sceltiGiorno > 0 ? ` · ${testoSelezione(sceltiGiorno)} qui` : ""}
                 </span>
               </h2>
               {delGiorno.length > 0 ? (
@@ -170,41 +208,69 @@ export function RapportiniCalendario({
                 </div>
               ) : null}
             </div>
-            {delGiorno.length > 0 ? (
+          </div>
+          {delGiorno.length > 0 ? (
+            <div className="archivio-azioni">
+              <CheckboxGruppo
+                ids={delGiorno.map((r) => r.id)}
+                scelti={scelti}
+                onChange={setScelti}
+                acceso="Togli da questo giorno"
+                spento="Seleziona questo giorno"
+              />
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-secondary btn-sm"
                 disabled={busy !== null}
                 onClick={() => void scaricaTutti()}
               >
                 {busy === "tutti" ? "Preparazione PDF…" : `Scarica tutti (${delGiorno.length})`}
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           {errore ? <p className="form-error">{errore}</p> : null}
           {delGiorno.length === 0 ? (
             <p className="muted">{items.length === 0 ? vuoto : "Nessun rapportino in questa data."}</p>
           ) : (
             <div className="form-stack">
               {delGiorno.map((item) => (
-                <RapportinoCard
+                <div
                   key={item.id}
-                  item={item}
-                  linea={lineaDi.get(item.lineaId)}
-                  href={hrefFor(item)}
-                  onDelete={onDelete}
-                  onDownload={() => void scaricaUno(item)}
-                  downloadBusy={busy === item.id}
-                />
+                  className={`archivio-riga${sceltiSet.has(item.id) ? " is-scelto" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={sceltiSet.has(item.id)}
+                    onChange={() => setScelti((cur) => toggleId(cur, item.id))}
+                    aria-label={`Seleziona ${item.numero}`}
+                  />
+                  <RapportinoCard
+                    item={item}
+                    linea={lineaDi.get(item.lineaId)}
+                    href={hrefFor(item)}
+                    onDelete={onDelete}
+                    onDownload={() => void scaricaUno(item)}
+                    downloadBusy={busy === item.id}
+                  />
+                </div>
               ))}
             </div>
           )}
         </section>
       ) : (
         <p className="muted">
-          Tocca un giorno per vedere i rapportini, il totale € della giornata e scaricare i fogli.
+          Tocca un giorno per vedere i rapportini. La selezione resta anche se cambi giorno: il
+          conteggio in basso dice quanti fogli scaricherai.
         </p>
       )}
+      {errore && !giorno ? <p className="form-error">{errore}</p> : null}
+      <BarraSelezione
+        n={nScelti}
+        preparando={busy === "scelti"}
+        bloccata={busy !== null}
+        onScarica={() => void scaricaSelezionati()}
+        onAnnulla={() => setScelti([])}
+      />
     </>
   );
 }
