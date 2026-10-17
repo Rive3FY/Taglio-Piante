@@ -49,12 +49,10 @@ function tacche(massimo: number) {
 export function GraficoRitmo({
   rapportini,
   daTagliare,
-  nonTerminate,
   urgenzeDaTagliare,
 }: {
   rapportini: Rapportino[];
   daTagliare: number;
-  nonTerminate?: number;
   urgenzeDaTagliare?: number;
 }) {
   const uid = useId();
@@ -155,11 +153,6 @@ export function GraficoRitmo({
           <span className="muted">Ancora da tagliare</span>
           <strong className={daTagliare === 0 ? "grafici-stat-ok" : undefined}>{daTagliare}</strong>
           <span className="grafici-stat-voce">{daTagliare === 1 ? "differibile" : "differibili"}</span>
-          {nonTerminate ? (
-            <span className="grafici-stat-voce">
-              + {nonTerminate} {nonTerminate === 1 ? "non terminata" : "non terminate"}
-            </span>
-          ) : null}
           {URGENZE_VISIBILI && urgenzeDaTagliare != null ? (
             <>
               <strong className="grafici-stat-urg">{urgenzeDaTagliare}</strong>

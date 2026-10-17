@@ -1,10 +1,5 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
-import {
-  campataDaNonTagliare,
-  campataETagliata,
-  campataNonTerminata,
-  rapportinoEChiuso,
-} from "@/lib/types";
+import { campataDaNonTagliare, campataETagliata, rapportinoEChiuso } from "@/lib/types";
 import { CODICI_PULIZIA_BASE, eLavoroBasi } from "@/lib/campate/basi";
 import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
@@ -36,21 +31,19 @@ export type GiornoContabile = {
 
 /**
  * Avanzamento del piano: le aggiuntive (nate sul campo) sono sempre già tagliate
- * e gonfierebbero la percentuale, quindi restano fuori e si contano a parte.
- * Le quattro fette (tagliate, daNonTagliare, nonTerminate, daTagliare) sommano a `totale`.
+ * e gonfierebbero la percentuale, quindi restano fuori.
+ * Le «da non tagliare» contano come tagliate: con tutte chiuse la torta va al 100%.
  */
 export type AvanzamentoPriorita = {
   priorita: CampataPriorita;
   /** Campate del piano. */
   totale: number;
-  /** Tagliate davvero, senza le «da non tagliare». */
+  /** Comprese le «da non tagliare». */
   tagliate: number;
-  /** Chiuse senza taglio: contano come fatte. */
+  /** Già dentro `tagliate`: serve solo a dirlo. */
   daNonTagliare: number;
-  nonTerminate: number;
+  /** Comprese le non terminate. */
   daTagliare: number;
-  aggiuntive: number;
-  aggiuntiveChiuse: number;
 };
 
 export function meseDaIso(iso: string) {
@@ -370,20 +363,14 @@ export function avanzamentoPriorita(
       c.tipo !== "base" &&
       (c.priorita === priorita || (priorita === "differibile" && !c.priorita)),
   );
-  const aggiuntive = set.filter((c) => c.origine === "aggiuntiva");
   const piano = set.filter((c) => c.origine !== "aggiuntiva");
-  const daNonTagliare = piano.filter((c) => campataDaNonTagliare(c)).length;
-  const chiuse = piano.filter((c) => campataETagliata(c)).length;
-  const nonTerminate = piano.filter((c) => campataNonTerminata(c)).length;
+  const tagliate = piano.filter((c) => campataETagliata(c)).length;
   return {
     priorita,
     totale: piano.length,
-    tagliate: chiuse - daNonTagliare,
-    daNonTagliare,
-    nonTerminate,
-    daTagliare: piano.length - chiuse - nonTerminate,
-    aggiuntive: aggiuntive.length,
-    aggiuntiveChiuse: aggiuntive.filter((c) => campataETagliata(c)).length,
+    tagliate,
+    daNonTagliare: piano.filter((c) => campataDaNonTagliare(c)).length,
+    daTagliare: piano.length - tagliate,
   };
 }
 

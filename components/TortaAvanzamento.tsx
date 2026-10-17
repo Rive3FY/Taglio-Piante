@@ -5,10 +5,8 @@ import type { AvanzamentoPriorita } from "@/lib/contabilita/aggrega";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 
 const FETTE = [
-  { key: "tagliate" as const, label: "Tagliate", da: "#5ee7f5", a: "#06b6d4", sempre: true },
-  { key: "daNonTagliare" as const, label: "Da non tagliare", da: "#86efac", a: "#16a34a", sempre: false },
-  { key: "nonTerminate" as const, label: "Non terminate", da: "#fdba74", a: "#f97316", sempre: false },
-  { key: "daTagliare" as const, label: "Da tagliare", da: "#b9a6ff", a: "#7c5cf0", sempre: true },
+  { key: "tagliate" as const, label: "Tagliate", da: "#5ee7f5", a: "#06b6d4" },
+  { key: "daTagliare" as const, label: "Da tagliare", da: "#b9a6ff", a: "#7c5cf0" },
 ];
 
 const LARGHEZZA = 340;
@@ -68,18 +66,6 @@ function percentuali(valori: number[], totale: number) {
   return tonde;
 }
 
-function testoAggiuntive(dati: AvanzamentoPriorita) {
-  if (dati.aggiuntive === 0) return null;
-  const quante = dati.aggiuntive === 1 ? "1 aggiuntiva" : `${dati.aggiuntive} aggiuntive`;
-  const chiuse =
-    dati.aggiuntiveChiuse === dati.aggiuntive
-      ? dati.aggiuntive === 1
-        ? "tagliata"
-        : "tagliate"
-      : `${dati.aggiuntiveChiuse} tagliate`;
-  return `+ ${quante} fuori piano (${chiuse}), non contate nella percentuale.`;
-}
-
 export function TortaAvanzamento({
   dati,
   titolo = CAMPATA_PRIORITA_LABEL[dati.priorita],
@@ -93,9 +79,6 @@ export function TortaAvanzamento({
     FETTE.map((f) => dati[f.key]),
     dati.totale,
   );
-  const fatte = dati.tagliate + dati.daNonTagliare;
-  // Somma delle due fette chiuse: così centro e etichette danno lo stesso numero.
-  const quotaFatte = quote[0] + quote[1];
 
   const intero = Math.max(dati.totale, 1);
   const fette = FETTE.map((f, i) => {
@@ -111,18 +94,15 @@ export function TortaAvanzamento({
   });
   const disegnate = fette.filter((f) => f.quantita > 0);
   const stacco = disegnate.length > 1 ? STACCO : 0;
-  const aggiuntive = testoAggiuntive(dati);
 
   return (
     <section className="panel torta-card">
       <h2>{titolo}</h2>
       <p className="muted">
         {vuoto
-          ? "Nessuna campata del piano."
-          : `${fatte} fatte su ${dati.totale} del piano${
-              dati.daNonTagliare > 0
-                ? ` (${dati.tagliate} tagliate + ${dati.daNonTagliare} da non tagliare)`
-                : ""
+          ? "Nessuna campata in elenco."
+          : `${dati.tagliate} tagliate su ${dati.totale}${
+              dati.daNonTagliare > 0 ? ` (comprese ${dati.daNonTagliare} da non tagliare)` : ""
             }`}
       </p>
       <div className="torta-layout">
@@ -132,8 +112,8 @@ export function TortaAvanzamento({
           role="img"
           aria-label={
             vuoto
-              ? `${titolo}: nessuna campata del piano.`
-              : `${titolo}: ${fatte} fatte su ${dati.totale} del piano, il ${quotaFatte}%.`
+              ? `${titolo}: nessuna campata in elenco.`
+              : `${titolo}: ${dati.tagliate} tagliate su ${dati.totale}, il ${quote[0]}%.`
           }
         >
           <defs>
@@ -162,14 +142,17 @@ export function TortaAvanzamento({
                     d={fetta(f.inizio, f.fine, stacco)}
                     fill={`url(#${uid}-${f.key})`}
                   />
-                  <text x={xt} y={yt} textAnchor={ancora}>
-                    <tspan className="torta-callout-nome" x={xt} dy={dy}>
-                      {f.label}
-                    </tspan>
-                    <tspan className="torta-callout-quota" x={xt} dy="1.2em">
-                      {f.quota}%
-                    </tspan>
-                  </text>
+                  {/* Fetta unica: il 100% è già al centro e l'etichetta finirebbe sulla legenda. */}
+                  {disegnate.length > 1 ? (
+                    <text x={xt} y={yt} textAnchor={ancora}>
+                      <tspan className="torta-callout-nome" x={xt} dy={dy}>
+                        {f.label}
+                      </tspan>
+                      <tspan className="torta-callout-quota" x={xt} dy="1.2em">
+                        {f.quota}%
+                      </tspan>
+                    </text>
+                  ) : null}
                 </g>
               );
             })
@@ -177,16 +160,16 @@ export function TortaAvanzamento({
           {vuoto ? null : (
             <text x={CX} y={CY} textAnchor="middle">
               <tspan className="torta-centro" x={CX} dy="0.1em">
-                {quotaFatte}%
+                {quote[0]}%
               </tspan>
               <tspan className="torta-centro-sotto" x={CX} dy="1.5em">
-                fatte
+                tagliate
               </tspan>
             </text>
           )}
         </svg>
         <ul className="torta-leggenda">
-          {FETTE.filter((f) => f.sempre || dati[f.key] > 0).map((f) => (
+          {FETTE.map((f) => (
             <li key={f.key}>
               <span
                 className="torta-dot"
@@ -196,7 +179,6 @@ export function TortaAvanzamento({
               <strong>{dati[f.key]}</strong>
             </li>
           ))}
-          {aggiuntive ? <li className="torta-leggenda-sotto">{aggiuntive}</li> : null}
         </ul>
       </div>
     </section>

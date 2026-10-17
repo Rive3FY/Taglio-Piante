@@ -1840,7 +1840,6 @@ button.rap-card-link {
   font-size: 13px;
 }
 .torta-leggenda li { display: inline-flex; align-items: center; gap: 6px; }
-.torta-leggenda li.torta-leggenda-sotto { flex-basis: 100%; justify-content: center; color: var(--muted); }
 .basi-barre { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 8px; }
 .basi-barre li {
   display: grid;
