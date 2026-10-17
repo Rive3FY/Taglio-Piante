@@ -72,6 +72,7 @@ const STILE = {
   totale: 5,
   totaleEuro: 6,
   totaleNumero: 7,
+  titolo: 8,
 } as const;
 
 function letteraColonna(indice: number) {
@@ -102,7 +103,7 @@ async function creaXlsx(fogli: Foglio[]) {
   const sheets = fogli.map((foglio) => {
     const intestazioni: RigaFoglio[] = [];
     if (foglio.titolo) {
-      intestazioni.push({ valori: [foglio.titolo], stili: [STILE.totale], altezza: 22 });
+      intestazioni.push({ valori: [foglio.titolo], stili: [STILE.titolo], altezza: 26 });
     }
     intestazioni.push({
       valori: foglio.colonne.map((c) => c.titolo),
@@ -134,13 +135,18 @@ async function creaXlsx(fogli: Foglio[]) {
     });
 
     const blocco = intestazioni.length;
+    // Il titolo è più largo della colonna A: senza unione va a capo e si taglia.
+    const unione =
+      foglio.titolo && foglio.colonne.length > 1
+        ? `<mergeCells count="1"><mergeCell ref="A1:${ultimaCol}1"/></mergeCells>`
+        : "";
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <dimension ref="A1:${ultimaCol}${Math.max(1, righe.length)}"/>
   <sheetViews><sheetView workbookViewId="0"><pane ySplit="${blocco}" topLeftCell="A${blocco + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>${cols}</cols>
-  <sheetData>${sheetRows.join("")}</sheetData>
+  <sheetData>${sheetRows.join("")}</sheetData>${unione}
 </worksheet>`;
   });
 
@@ -206,9 +212,10 @@ ${fogli
   <numFmts count="1">
     <numFmt numFmtId="164" formatCode="#,##0.00"/>
   </numFmts>
-  <fonts count="2">
+  <fonts count="3">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="13"/><name val="Calibri"/></font>
   </fonts>
   <fills count="4">
     <fill><patternFill patternType="none"/></fill>
@@ -218,7 +225,7 @@ ${fogli
   </fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="8">
+  <cellXfs count="9">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
@@ -227,6 +234,7 @@ ${fogli
     <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
     <xf numFmtId="164" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
     <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
   </cellXfs>
 </styleSheet>`,
   );
