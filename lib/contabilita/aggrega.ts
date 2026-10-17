@@ -1,5 +1,5 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
-import { rapportinoEChiuso } from "@/lib/types";
+import { campataDaNonTagliare, campataETagliata, rapportinoEChiuso } from "@/lib/types";
 import { CODICI_PULIZIA_BASE, eLavoroBasi } from "@/lib/campate/basi";
 import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
@@ -34,7 +34,8 @@ export type AvanzamentoPriorita = {
   totale: number;
   tagliate: number;
   daTagliare: number;
-  tralasciate: number;
+  /** Già dentro `tagliate`: in torta contano come chiuse, ma si dicono a parte. */
+  daNonTagliare: number;
 };
 
 export function meseDaIso(iso: string) {
@@ -347,14 +348,20 @@ export function avanzamentoPriorita(
   campate: CampataLavoro[],
   priorita: CampataPriorita,
 ): AvanzamentoPriorita {
-  const set = campate.filter((c) => c.tipo !== "base" && c.priorita === priorita);
-  const tagliate = set.filter((c) => c.stato === "tagliata" || c.stato === "tralasciata" || c.daNonTagliare).length;
+  // Le campate aggiunte sul campo spesso non hanno priorità: l'elenco le conta
+  // con le differibili, e la torta deve dare gli stessi numeri.
+  const set = campate.filter(
+    (c) =>
+      c.tipo !== "base" &&
+      (c.priorita === priorita || (priorita === "differibile" && !c.priorita)),
+  );
+  const tagliate = set.filter((c) => campataETagliata(c)).length;
   return {
     priorita,
     totale: set.length,
     tagliate,
     daTagliare: set.length - tagliate,
-    tralasciate: 0,
+    daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
   };
 }
 

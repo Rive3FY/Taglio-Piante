@@ -388,12 +388,12 @@ export default function ContabilitaPage() {
         <div className="contab-torte">
           {URGENZE_VISIBILI ? (
             <TortaAvanzamento
-              key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.tralasciate}`}
+              key={`all-u-${urgente.tagliate}-${urgente.daTagliare}-${urgente.daNonTagliare}`}
               dati={urgente}
             />
           ) : null}
           <TortaAvanzamento
-            key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.tralasciate}`}
+            key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.daNonTagliare}`}
             dati={differibile}
           />
         </div>

@@ -99,7 +99,11 @@ export function TortaAvanzamento({
     <section className="panel torta-card">
       <h2>{titolo}</h2>
       <p className="muted">
-        {vuoto ? "Nessuna campata in elenco." : `${dati.tagliate} tagliate su ${dati.totale}`}
+        {vuoto
+          ? "Nessuna campata in elenco."
+          : `${dati.tagliate} tagliate su ${dati.totale}${
+              dati.daNonTagliare > 0 ? `, di cui ${dati.daNonTagliare} da non tagliare` : ""
+            }`}
       </p>
       <div className="torta-layout">
         <svg
@@ -172,6 +176,12 @@ export function TortaAvanzamento({
               <strong>{dati[f.key]}</strong>
             </li>
           ))}
+          {dati.daNonTagliare > 0 ? (
+            <li className="torta-leggenda-sotto">
+              di cui da non tagliare
+              <strong>{dati.daNonTagliare}</strong>
+            </li>
+          ) : null}
         </ul>
       </div>
     </section>
