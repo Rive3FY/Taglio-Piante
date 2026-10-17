@@ -1,6 +1,7 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
 import { campataDaNonTagliare, campataETagliata, rapportinoEChiuso } from "@/lib/types";
 import { CODICI_PULIZIA_BASE, eLavoroBasi } from "@/lib/campate/basi";
+import { mostraCampata } from "@/lib/campate/normalize";
 import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
 export type VoceContabile = {
@@ -44,6 +45,8 @@ export type AvanzamentoPriorita = {
   daNonTagliare: number;
   /** Comprese le non terminate. */
   daTagliare: number;
+  /** Numeri delle campate ancora da tagliare, in ordine. */
+  restanti: string[];
 };
 
 export function meseDaIso(iso: string) {
@@ -371,6 +374,10 @@ export function avanzamentoPriorita(
     tagliate,
     daNonTagliare: piano.filter((c) => campataDaNonTagliare(c)).length,
     daTagliare: piano.length - tagliate,
+    restanti: piano
+      .filter((c) => !campataETagliata(c))
+      .map((c) => mostraCampata(c.normalizzata))
+      .sort((a, b) => a.localeCompare(b, "it", { numeric: true })),
   };
 }
 

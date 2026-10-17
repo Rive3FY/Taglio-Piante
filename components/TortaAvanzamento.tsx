@@ -18,6 +18,7 @@ const RAGGIO_INT = 52;
 const RAGGIO_ETICHETTA = 94;
 /** Stacco tra le fette, in gradi. */
 const STACCO = 3;
+const MAX_RESTANTI = 15;
 
 function punto(raggio: number, gradi: number) {
   const rad = ((gradi - 90) * Math.PI) / 180;
@@ -69,9 +70,12 @@ function percentuali(valori: number[], totale: number) {
 export function TortaAvanzamento({
   dati,
   titolo = CAMPATA_PRIORITA_LABEL[dati.priorita],
+  elencaRestanti = false,
 }: {
   dati: AvanzamentoPriorita;
   titolo?: string;
+  /** Sulla singola linea i numeri dicono quali mancano; su tutte le linee non direbbero nulla. */
+  elencaRestanti?: boolean;
 }) {
   const uid = useId();
   const vuoto = dati.totale === 0;
@@ -181,6 +185,15 @@ export function TortaAvanzamento({
           ))}
         </ul>
       </div>
+      {elencaRestanti && dati.restanti.length > 0 ? (
+        <p className="muted torta-restanti">
+          {dati.restanti.length === 1 ? "Manca la campata " : "Mancano le campate "}
+          <strong>{dati.restanti.slice(0, MAX_RESTANTI).join(", ")}</strong>
+          {dati.restanti.length > MAX_RESTANTI
+            ? ` e altre ${dati.restanti.length - MAX_RESTANTI}`
+            : ""}
+        </p>
+      ) : null}
     </section>
   );
 }

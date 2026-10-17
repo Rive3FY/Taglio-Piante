@@ -492,6 +492,7 @@ export default function ContabilitaPage() {
                               campateAnno.filter((c) => c.lineaId === l.lineaId),
                               "urgente",
                             )}
+                            elencaRestanti
                           />
                         ) : null}
                         <TortaAvanzamento
@@ -500,6 +501,7 @@ export default function ContabilitaPage() {
                             campateAnno.filter((c) => c.lineaId === l.lineaId),
                             "differibile",
                           )}
+                          elencaRestanti
                         />
                       </div>
                       <div className="contab-estrai">
