@@ -30,6 +30,7 @@ import { LineaPicker } from "@/components/LineaPicker";
 import { ANTEPRIMA_ELENCO, MostraAltro } from "@/components/MostraAltro";
 import { annoPianoPiuRecente, anniPiani, campateDellAnno } from "@/lib/campate/anno";
 import { URGENZE_VISIBILI } from "@/lib/campate/urgenze";
+import { provenienzaCampata } from "@/lib/campate/provenienza";
 import {
   meseContabileDi,
   periodoEffettivo,
@@ -104,6 +105,8 @@ export default function ContabilitaPage() {
   const prestazioni = useLiveQuery(() => db.prestazioni.orderBy("codice").toArray(), []) ?? [];
   const linee = useLiveQuery(() => db.linee.toArray(), []) ?? [];
   const campate = useLiveQuery(() => db.campateLavoro.toArray(), []) ?? [];
+  const imports = useLiveQuery(() => db.importCampate.toArray(), []) ?? [];
+  const storicoCampate = useLiveQuery(() => db.campateStorico.toArray(), []) ?? [];
   const oggi = todayIso();
   const periodi = usePeriodiContabili();
   const meseInCorso = meseContabileDi(oggi, periodi);
@@ -170,6 +173,10 @@ export default function ContabilitaPage() {
     setModoCal("giorno");
   }
   const urgente = useMemo(() => avanzamentoPriorita(campateAnno, "urgente"), [campateAnno]);
+  function spiegaCampata(id: string) {
+    const c = campate.find((x) => x.id === id);
+    return c ? provenienzaCampata(c, imports, storicoCampate, rapportini) : "non trovata";
+  }
   const differibile = useMemo(() => avanzamentoPriorita(campateAnno, "differibile"), [campateAnno]);
   const basiMese = useMemo(
     () => conteggioBasiTagliate(campateAnno, intervallo),
@@ -493,6 +500,7 @@ export default function ContabilitaPage() {
                               "urgente",
                             )}
                             elencaRestanti
+                            spiega={spiegaCampata}
                           />
                         ) : null}
                         <TortaAvanzamento
@@ -502,6 +510,7 @@ export default function ContabilitaPage() {
                             "differibile",
                           )}
                           elencaRestanti
+                          spiega={spiegaCampata}
                         />
                       </div>
                       <div className="contab-estrai">

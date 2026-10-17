@@ -45,8 +45,8 @@ export type AvanzamentoPriorita = {
   daNonTagliare: number;
   /** Comprese le non terminate. */
   daTagliare: number;
-  /** Numeri delle campate ancora da tagliare, in ordine. */
-  restanti: string[];
+  /** Campate ancora da tagliare, in ordine di numero. */
+  restanti: { id: string; numero: string }[];
 };
 
 export function meseDaIso(iso: string) {
@@ -376,8 +376,8 @@ export function avanzamentoPriorita(
     daTagliare: piano.length - tagliate,
     restanti: piano
       .filter((c) => !campataETagliata(c))
-      .map((c) => mostraCampata(c.normalizzata))
-      .sort((a, b) => a.localeCompare(b, "it", { numeric: true })),
+      .map((c) => ({ id: c.id, numero: mostraCampata(c.normalizzata) }))
+      .sort((a, b) => a.numero.localeCompare(b.numero, "it", { numeric: true })),
   };
 }
 

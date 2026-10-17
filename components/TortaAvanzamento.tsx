@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { AvanzamentoPriorita } from "@/lib/contabilita/aggrega";
 import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 
@@ -71,13 +71,18 @@ export function TortaAvanzamento({
   dati,
   titolo = CAMPATA_PRIORITA_LABEL[dati.priorita],
   elencaRestanti = false,
+  spiega,
 }: {
   dati: AvanzamentoPriorita;
   titolo?: string;
   /** Sulla singola linea i numeri dicono quali mancano; su tutte le linee non direbbero nulla. */
   elencaRestanti?: boolean;
+  /** Da dove arriva la campata toccata nell'elenco delle mancanti. */
+  spiega?: (id: string) => string;
 }) {
   const uid = useId();
+  const [aperta, setAperta] = useState<string | null>(null);
+  const scelta = dati.restanti.find((r) => r.id === aperta);
   const vuoto = dati.totale === 0;
   const quote = percentuali(
     FETTE.map((f) => dati[f.key]),
@@ -186,13 +191,37 @@ export function TortaAvanzamento({
         </ul>
       </div>
       {elencaRestanti && dati.restanti.length > 0 ? (
-        <p className="muted torta-restanti">
-          {dati.restanti.length === 1 ? "Manca la campata " : "Mancano le campate "}
-          <strong>{dati.restanti.slice(0, MAX_RESTANTI).join(", ")}</strong>
-          {dati.restanti.length > MAX_RESTANTI
-            ? ` e altre ${dati.restanti.length - MAX_RESTANTI}`
-            : ""}
-        </p>
+        <div className="torta-restanti">
+          <p className="muted">
+            {dati.restanti.length === 1 ? "Manca la campata" : "Mancano le campate"}
+            {spiega ? " (tocca un numero per vedere da dove arriva)" : ""}
+          </p>
+          <div className="torta-restanti-numeri">
+            {dati.restanti.slice(0, MAX_RESTANTI).map((r) =>
+              spiega ? (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={`chip ${aperta === r.id ? "on" : ""}`}
+                  aria-expanded={aperta === r.id}
+                  onClick={() => setAperta(aperta === r.id ? null : r.id)}
+                >
+                  {r.numero}
+                </button>
+              ) : (
+                <strong key={r.id}>{r.numero}</strong>
+              ),
+            )}
+            {dati.restanti.length > MAX_RESTANTI ? (
+              <span className="muted">e altre {dati.restanti.length - MAX_RESTANTI}</span>
+            ) : null}
+          </div>
+          {scelta && spiega ? (
+            <p className="torta-restanti-perche">
+              <strong>Campata {scelta.numero}</strong>: {spiega(scelta.id)}
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
