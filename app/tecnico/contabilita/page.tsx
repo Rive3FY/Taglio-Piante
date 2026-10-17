@@ -396,11 +396,6 @@ export default function ContabilitaPage() {
             key={`all-d-${differibile.tagliate}-${differibile.daTagliare}-${differibile.nonTerminate}-${differibile.daNonTagliare}`}
             dati={differibile}
           />
-          <TortaAvanzamento
-            key={`all-a-${differibile.tagliate}-${differibile.daTagliare}-${differibile.nonTerminate}-${differibile.daNonTagliare}`}
-            dati={differibile}
-            modo="assegnate"
-          />
         </div>
       </section>
 
@@ -505,14 +500,6 @@ export default function ContabilitaPage() {
                             campateAnno.filter((c) => c.lineaId === l.lineaId),
                             "differibile",
                           )}
-                        />
-                        <TortaAvanzamento
-                          key={`${l.lineaId}-a`}
-                          dati={avanzamentoPriorita(
-                            campateAnno.filter((c) => c.lineaId === l.lineaId),
-                            "differibile",
-                          )}
-                          modo="assegnate"
                         />
                       </div>
                       <div className="contab-estrai">
