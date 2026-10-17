@@ -632,7 +632,7 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
                   setCampata(e.target.value);
                   if (esiti.length > 0) setEsiti([]);
                 }}
-                placeholder={lavoroBasi ? "Es. 22 o 14DB" : "Es. 22"}
+                placeholder={lavoroBasi ? "Es. 22, 74/4 o 784/A4" : "Es. 22"}
               />
               <label className={`spunta-base ${lavoroBasi ? "on" : ""}`}>
                 <input
@@ -653,8 +653,8 @@ export function RapportinoForm({ existing, precompilatoLineaId, precompilatoCamp
               <span className="form-error">{erroreBasi}</span>
             ) : lavoroBasi ? (
               <span className="muted">
-                Spunta BASE: i sostegni non chiudono le campate. Puoi scrivere il numero con
-                lettere o altri caratteri (es. 14DB). Serve almeno una chiamata tra{" "}
+                Spunta BASE: i sostegni non chiudono le campate. Puoi usare la barra (74/4,
+                74/1, 784/A4) e le lettere (14DB). Serve almeno una chiamata tra{" "}
                 {ETICHETTA_CHIAMATE_BASE}; se compili 5.1–5.4 la quantità deve coincidere.
               </span>
             ) : vociBasePresenti ? (
