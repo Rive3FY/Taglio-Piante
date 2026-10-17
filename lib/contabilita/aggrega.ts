@@ -1,5 +1,10 @@
 import type { CampataLavoro, CampataPriorita, Linea, Prestazione, Rapportino } from "@/lib/types";
-import { campataDaNonTagliare, campataETagliata, rapportinoEChiuso } from "@/lib/types";
+import {
+  campataDaNonTagliare,
+  campataETagliata,
+  campataNonTerminata,
+  rapportinoEChiuso,
+} from "@/lib/types";
 import { CODICI_PULIZIA_BASE, eLavoroBasi } from "@/lib/campate/basi";
 import { arrotondaEuro, importoVoce, prezzoChiamata } from "./listino";
 
@@ -33,9 +38,13 @@ export type AvanzamentoPriorita = {
   priorita: CampataPriorita;
   totale: number;
   tagliate: number;
+  /** Come il badge «da tagliare» dell'elenco: le non terminate sono a parte. */
   daTagliare: number;
+  nonTerminate: number;
   /** Già dentro `tagliate`: in torta contano come chiuse, ma si dicono a parte. */
   daNonTagliare: number;
+  /** Già dentro `totale`: campate nate sul campo, fuori dal file del piano. */
+  aggiuntive: number;
 };
 
 export function meseDaIso(iso: string) {
@@ -356,12 +365,15 @@ export function avanzamentoPriorita(
       (c.priorita === priorita || (priorita === "differibile" && !c.priorita)),
   );
   const tagliate = set.filter((c) => campataETagliata(c)).length;
+  const nonTerminate = set.filter((c) => campataNonTerminata(c)).length;
   return {
     priorita,
     totale: set.length,
     tagliate,
-    daTagliare: set.length - tagliate,
+    daTagliare: set.length - tagliate - nonTerminate,
+    nonTerminate,
     daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
+    aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
   };
 }
 

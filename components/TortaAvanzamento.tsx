@@ -6,6 +6,7 @@ import { CAMPATA_PRIORITA_LABEL } from "@/lib/types";
 
 const FETTE = [
   { key: "tagliate" as const, label: "Tagliate", da: "#5ee7f5", a: "#06b6d4" },
+  { key: "nonTerminate" as const, label: "Non terminate", da: "#fdba74", a: "#f97316" },
   { key: "daTagliare" as const, label: "Da tagliare", da: "#b9a6ff", a: "#7c5cf0" },
 ];
 
@@ -102,7 +103,9 @@ export function TortaAvanzamento({
         {vuoto
           ? "Nessuna campata in elenco."
           : `${dati.tagliate} tagliate su ${dati.totale}${
-              dati.daNonTagliare > 0 ? `, di cui ${dati.daNonTagliare} da non tagliare` : ""
+              dati.aggiuntive > 0
+                ? ` (${dati.totale - dati.aggiuntive} del piano + ${dati.aggiuntive} aggiuntive)`
+                : ""
             }`}
       </p>
       <div className="torta-layout">
@@ -166,7 +169,7 @@ export function TortaAvanzamento({
           )}
         </svg>
         <ul className="torta-leggenda">
-          {FETTE.map((f) => (
+          {FETTE.filter((f) => f.key !== "nonTerminate" || dati.nonTerminate > 0).map((f) => (
             <li key={f.key}>
               <span
                 className="torta-dot"
@@ -178,7 +181,7 @@ export function TortaAvanzamento({
           ))}
           {dati.daNonTagliare > 0 ? (
             <li className="torta-leggenda-sotto">
-              di cui da non tagliare
+              tra le tagliate, da non tagliare
               <strong>{dati.daNonTagliare}</strong>
             </li>
           ) : null}
