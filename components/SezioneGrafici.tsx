@@ -44,7 +44,9 @@ export function SezioneGrafici() {
       <GraficoRitmo
         rapportini={rapportini}
         daTagliare={differibili.daTagliare}
-        nonTerminate={differibili.nonTerminate}
+        nonTerminate={
+          differibili.nonTerminate + differibili.aggiuntive - differibili.aggiuntiveChiuse
+        }
         urgenzeDaTagliare={urgenze?.daTagliare}
       />
     </section>

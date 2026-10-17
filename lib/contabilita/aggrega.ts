@@ -34,17 +34,23 @@ export type GiornoContabile = {
   importo: number | null;
 };
 
+/**
+ * Avanzamento del piano: le aggiuntive (nate sul campo) sono sempre già tagliate
+ * e gonfierebbero la percentuale, quindi restano fuori e si contano a parte.
+ * Le quattro fette (tagliate, daNonTagliare, nonTerminate, daTagliare) sommano a `totale`.
+ */
 export type AvanzamentoPriorita = {
   priorita: CampataPriorita;
+  /** Campate del piano. */
   totale: number;
+  /** Tagliate davvero, senza le «da non tagliare». */
   tagliate: number;
-  /** Come il badge «da tagliare» dell'elenco: le non terminate sono a parte. */
-  daTagliare: number;
-  nonTerminate: number;
-  /** Già dentro `tagliate`: in torta contano come chiuse, ma si dicono a parte. */
+  /** Chiuse senza taglio: contano come fatte. */
   daNonTagliare: number;
-  /** Già dentro `totale`: campate nate sul campo, fuori dal file del piano. */
+  nonTerminate: number;
+  daTagliare: number;
   aggiuntive: number;
+  aggiuntiveChiuse: number;
 };
 
 export function meseDaIso(iso: string) {
@@ -364,16 +370,20 @@ export function avanzamentoPriorita(
       c.tipo !== "base" &&
       (c.priorita === priorita || (priorita === "differibile" && !c.priorita)),
   );
-  const tagliate = set.filter((c) => campataETagliata(c)).length;
-  const nonTerminate = set.filter((c) => campataNonTerminata(c)).length;
+  const aggiuntive = set.filter((c) => c.origine === "aggiuntiva");
+  const piano = set.filter((c) => c.origine !== "aggiuntiva");
+  const daNonTagliare = piano.filter((c) => campataDaNonTagliare(c)).length;
+  const chiuse = piano.filter((c) => campataETagliata(c)).length;
+  const nonTerminate = piano.filter((c) => campataNonTerminata(c)).length;
   return {
     priorita,
-    totale: set.length,
-    tagliate,
-    daTagliare: set.length - tagliate - nonTerminate,
+    totale: piano.length,
+    tagliate: chiuse - daNonTagliare,
+    daNonTagliare,
     nonTerminate,
-    daNonTagliare: set.filter((c) => campataDaNonTagliare(c)).length,
-    aggiuntive: set.filter((c) => c.origine === "aggiuntiva").length,
+    daTagliare: piano.length - chiuse - nonTerminate,
+    aggiuntive: aggiuntive.length,
+    aggiuntiveChiuse: aggiuntive.filter((c) => campataETagliata(c)).length,
   };
 }
 
