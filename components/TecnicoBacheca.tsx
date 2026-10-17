@@ -264,6 +264,7 @@ export function TecnicoBacheca() {
         </section>
 
         <TortaAvanzamento dati={avanzamento} titolo="Avanzamento" />
+        <TortaAvanzamento dati={avanzamento} modo="assegnate" />
 
         <section className="panel bacheca-card">
           <header className="bacheca-head">
