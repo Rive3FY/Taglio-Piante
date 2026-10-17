@@ -241,7 +241,10 @@ export function CampateElenco({
   const [soloDaNonTagliare, setSoloDaNonTagliare] = useState(vistaSalvata?.soloDaNonTagliare ?? false);
   const [origine, setOrigine] = useState<OrigineFiltro>(vistaSalvata?.origine ?? "tutte");
   const [linea, setLinea] = useState(vistaSalvata?.linea ?? "");
-  const [operatore, setOperatore] = useState(vistaSalvata?.operatore ?? "");
+  // L'operatore non ha il filtro: una scelta rimasta salvata nasconderebbe le campate senza dirlo.
+  const [operatore, setOperatore] = useState(
+    ruolo === "operatore" ? "" : (vistaSalvata?.operatore ?? ""),
+  );
   const [periodo, setPeriodo] = useState(vistaSalvata?.periodo ?? PERIODO_VUOTO);
   const [aperta, setAperta] = useState<string | null>(null);
   const [visibili, setVisibili] = useState(vistaSalvata?.visibili ?? 40);
@@ -937,17 +940,19 @@ export function CampateElenco({
             ) : null}
           </div>
         </label>
-        <label>
-          Operatore
-          <select value={operatore} onChange={(e) => setOperatore(e.target.value)}>
-            <option value="">Tutti</option>
-            {operatori.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </label>
+        {ruolo === "tecnico" ? (
+          <label>
+            Operatore
+            <select value={operatore} onChange={(e) => setOperatore(e.target.value)}>
+              <option value="">Tutti</option>
+              {operatori.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <FiltroPeriodo periodo={periodo} onChange={setPeriodo} />

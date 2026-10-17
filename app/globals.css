@@ -1829,10 +1829,6 @@ button.rap-card-link {
 @media (prefers-reduced-motion: reduce) {
   .torta-svg { animation: none; }
 }
-.torta-restanti { margin-top: 0.25rem; text-align: center; font-size: 0.85rem; }
-.torta-restanti p { margin: 0 0 0.35rem; }
-.torta-restanti-numeri { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
-.torta-restanti-perche { margin: 0.5rem auto 0; max-width: 46ch; color: var(--muted); }
 .torta-leggenda {
   list-style: none;
   margin: 0;
