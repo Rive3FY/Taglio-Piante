@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import {
+  aggregaDaSempre,
   aggregaMese,
   aggregaPrestazioniLinea,
   avanzamentoPriorita,
@@ -139,6 +140,10 @@ export default function ContabilitaPage() {
   const aggregato = useMemo(
     () => aggregaMese(rapportini, prestazioni, linee, meseEffettivo, intervallo),
     [rapportini, prestazioni, linee, meseEffettivo, intervallo],
+  );
+  const daSempre = useMemo(
+    () => aggregaDaSempre(rapportini, prestazioni, oggi),
+    [rapportini, prestazioni, oggi],
   );
   const reportMese = useMemo(
     () => prestazioniMesePerLinea(rapportini, prestazioni, linee, meseEffettivo, intervallo),
@@ -278,8 +283,12 @@ export default function ContabilitaPage() {
           <strong>{aggregato.voci.length + aggregato.vociBasi.length}</strong>
         </div>
         <div className="panel">
-          <span className="muted">Totale</span>
+          <span className="muted">Totale del periodo</span>
           <strong>{formatEuro(aggregato.importo)}</strong>
+        </div>
+        <div className="panel">
+          <span className="muted">Speso da sempre</span>
+          <strong>{formatEuro(daSempre.importo)}</strong>
         </div>
         <div className="panel">
           <span className="muted">Basi tagliate</span>

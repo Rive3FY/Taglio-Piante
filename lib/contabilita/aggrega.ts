@@ -420,6 +420,30 @@ export function rapportiniContabiliFinoA(rapportini: Rapportino[], finoA: string
   );
 }
 
+/**
+ * Totale contabile da sempre: tutti i rapportini confermati fino a `finoA`
+ * (campate + basi), indipendente dal mese selezionato a schermo.
+ */
+export function aggregaDaSempre(
+  rapportini: Rapportino[],
+  prestazioni: Prestazione[],
+  finoA: string,
+) {
+  const usati = rapportiniContabiliFinoA(rapportini, finoA);
+  const { voci, vociBasi } = vociCampateEBasi(usati, prestazioni);
+  const importoCampate = sommaImporti(voci);
+  const importoBasi = sommaImporti(vociBasi);
+  return {
+    rapportini: usati.length,
+    voci,
+    vociBasi,
+    importo:
+      importoCampate == null || importoBasi == null
+        ? null
+        : arrotondaEuro(importoCampate + importoBasi),
+  };
+}
+
 export function lineeConPrestazioni(
   rapportini: Rapportino[],
   linee: Linea[],
