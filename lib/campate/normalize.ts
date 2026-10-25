@@ -2,8 +2,8 @@
  * Numero di campata come lo scrive l’operatore e il LIDAR.
  * 22 resta 22 (non diventa 21-22). Un intervallo già espanso si riduce al
  * numero ricevuto: 21-22 → 22, 261-262/A → 262/A, 733-734/A4 → 734/A4,
- * 261/A-262/A → 262/A. Il suffisso resta, così /A, /C e /A4 non si mescolano.
- * Forme speciali (78\2 80) restano com’è, spazi compresi.
+ * 261/A-262/A → 262/A. Il suffisso resta, così /A, /C, /A4 e anche /4
+ * (basi tipo 74/4) non si spezzano. Forme speciali (78\2 80) restano com’è.
  */
 export function normalizzaCampata(valore: string) {
   const pulito = valore.trim().replace(/–/g, "-").replace(/\s+/g, " ");
@@ -29,6 +29,10 @@ export function normalizzaCampata(valore: string) {
 
   const conLettera = pulito.match(/^(\d+)\s*\/\s*([a-z][a-z0-9]*)$/i);
   if (conLettera) return `${Number(conLettera[1])}/${conLettera[2].toUpperCase()}`;
+
+  // Base col ramo in cifre: 74/4 e 74/1 restano un sostegno solo (non 74 e 4).
+  const conCifra = pulito.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (conCifra) return `${Number(conCifra[1])}/${Number(conCifra[2])}`;
 
   // Sostegno con lettere attaccate o staccate: 14DB e 14 db sono la stessa base.
   const conSuffisso = pulito.match(/^(\d+)\s*([a-z][a-z0-9]*)$/i);
@@ -71,17 +75,24 @@ export function idCampataLavoro(
   return y === 2026 ? `${prefix}_${slug}` : `${prefix}_${y}_${slug}`;
 }
 
-/** La barra davanti alle lettere fa parte del sostegno: 17/A, 14/DB e 734/A4 restano un pezzo solo. */
+/**
+ * La barra fa parte del sostegno: 17/A, 734/A4, 74/4. Senza protezione lo split
+ * su «/» spezzerebbe 74/4 in due numeri e il salvataggio BASE fallirebbe.
+ * Tra lettere gli spazi restano tollerati (17 / A); tra cifre no, così
+ * «22 / 54» resta due campate.
+ */
 const SOSTEGNO_CON_LETTERA = /(\d)\s*\/\s*([a-z][a-z0-9]*)(?![a-z0-9])/gi;
+const SOSTEGNO_CON_CIFRA = /(\d)\/(\d+)(?!\d)/g;
 const BARRA_PROTETTA = "\u0001";
 
 /**
- * Spezza il campo libero del rapportino: 22, 23 / 54, 17/A oppure 78\2 80.
+ * Spezza il campo libero del rapportino: 22, 23 / 54, 17/A, 74/4 oppure 78\2 80.
  * Anche «22 23» e «22 e 23» sono due campate: unite diventerebbero la 2223.
  */
 export function spezzaCampateTesto(testo: string) {
   return testo
     .replace(SOSTEGNO_CON_LETTERA, (_, n: string, l: string) => `${n}${BARRA_PROTETTA}${l}`)
+    .replace(SOSTEGNO_CON_CIFRA, (_, n: string, c: string) => `${n}${BARRA_PROTETTA}${c}`)
     .split(/[,;/|\n]+|\s+e\s+/i)
     .flatMap((p) => {
       if (/^\s*\d+(\s+\d+)+\s*$/.test(p)) return p.trim().split(/\s+/);

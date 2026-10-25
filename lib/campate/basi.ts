@@ -48,9 +48,10 @@ export function haChiamataBase(item: Pick<Rapportino, "righe">, prestazioni: Pre
 }
 
 /**
- * Quanti sostegni distinti ci sono nel box: 22 → 1; 22-23 → 2; 14DB → 1; 14DB, 15A → 2.
- * Non si espande l’intervallo: 22-26 sono due numeri, non cinque.
- * Un pezzo con lettere o altri caratteri (14DB, 14-DB) è un sostegno solo.
+ * Quanti sostegni distinti ci sono nel box: 22 → 1; 22-23 → 2; 14DB → 1;
+ * 74/4 → 1; 784/A4 → 1; 14DB, 15A → 2. Non si espande l’intervallo: 22-26
+ * sono due numeri, non cinque. Un pezzo con lettere, barra o altri caratteri
+ * (14DB, 74/4, 14-DB) è un sostegno solo.
  */
 export function numeriDaTestoCampata(testo: string) {
   const visti = new Set<string>();
@@ -65,12 +66,15 @@ export function numeriDaTestoCampata(testo: string) {
   return out;
 }
 
+/** Numero, oppure numero/lettera (17/A, 784/A4), oppure numero/cifra (74/4). */
+const PEZZO_NUMERO = /^\d+(\/([a-z][a-z0-9]*|\d+))?$/i;
+
 function numeriDiPezzo(pezzo: string) {
   const originale = pezzo.trim().replace(/–/g, "-");
   const pulito = originale.replace(/\s+/g, "");
   if (!pulito) return [];
   const parti = pulito.split("-").filter(Boolean);
-  if (parti.length > 0 && parti.every((p) => /^\d+(\/[a-z][a-z0-9]*)?$/i.test(p))) {
+  if (parti.length > 0 && parti.every((p) => PEZZO_NUMERO.test(p))) {
     return parti.map((p) => (p.includes("/") ? normalizzaCampata(p) : String(Number(p))));
   }
   const uno = normalizzaCampata(originale);
@@ -108,7 +112,7 @@ export function messaggioIncoerenzaBasi(
   const somma = voci.reduce((a, b) => a + b, 0);
   const qtyTxt = voci.length === 1 ? String(voci[0]) : `${voci.join(" + ")} = ${somma}`;
   if (n === 0) {
-    return `Hai segnato ${qtyTxt} in 5.1–5.4 ma nel box non ci sono i sostegni. Per le basi indica i sostegni (es. 22 o 14DB) in quantità uguale alla chiamata.`;
+    return `Hai segnato ${qtyTxt} in 5.1–5.4 ma nel box non ci sono i sostegni. Per le basi indica i sostegni (es. 22, 74/4 o 784/A4) in quantità uguale alla chiamata.`;
   }
   return `Hai segnato ${qtyTxt} in 5.1–5.4 e ${n} ${n === 1 ? "sostegno" : "sostegni"} nel box. I sostegni devono coincidere: correggi la quantità o i sostegni.`;
 }
