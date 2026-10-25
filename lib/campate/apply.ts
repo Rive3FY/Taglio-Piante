@@ -849,17 +849,38 @@ export async function ripristinaCampateOrfane() {
   return daRipristinare.length + daEliminare.length;
 }
 
+function chiaveUnicaLocale(c: Pick<CampataLavoro, "lineaId" | "normalizzata" | "priorita" | "tipo"> & { anno?: number }) {
+  return [
+    annoDi(c as CampataLavoro),
+    c.lineaId,
+    normalizzaCampata(c.normalizzata),
+    c.priorita ?? "",
+    c.tipo ?? "campata",
+  ].join("|");
+}
+
 /**
  * 261-262/A in archivio diventa 262/A, come in elenco. L’id non cambia:
  * i fogli restano agganciati. L’originale del file resta com’era.
+ * Se un’altra riga ha già il numero breve (stessa linea, anno, priorità),
+ * si lascia il vecchio: altrimenti l’invio esplode sull’indice unico.
  */
 export async function allineaNumeriCampata() {
   const campate = await db.campateLavoro.toArray();
   const now = new Date().toISOString();
+  const prese = new Set<string>();
+  for (const c of campate) {
+    const numero = normalizzaCampata(c.normalizzata);
+    if (!numero || numero !== c.normalizzata) continue;
+    prese.add(chiaveUnicaLocale(c));
+  }
   const daScrivere: CampataLavoro[] = [];
   for (const c of campate) {
     const numero = normalizzaCampata(c.normalizzata);
     if (!numero || numero === c.normalizzata) continue;
+    const chiave = chiaveUnicaLocale({ ...c, normalizzata: numero });
+    if (prese.has(chiave)) continue;
+    prese.add(chiave);
     daScrivere.push({
       ...c,
       normalizzata: numero,
@@ -873,9 +894,10 @@ export async function allineaNumeriCampata() {
 }
 
 /**
- * Righe doppie sullo stesso span: una dal file e una nata a mano da un rapportino
- * vecchio (prima del blocco «da non tagliare»). Contavano due volte nella torta.
- * Si tiene la riga del file, portandoci sopra il taglio, e si butta la copia.
+ * Righe doppie sulla stessa chiave unica (linea, numero, priorità, tipo, anno):
+ * una dal file e una nata a mano, oppure due import dopo la normalizzazione
+ * (261-262/A e 262/A). Contavano due volte nella torta e bloccavano l’invio.
+ * Si tiene una riga, portandoci sopra taglio e promemoria, e si butta la copia.
  */
 export async function unisciCampateDoppie() {
   const campate = await db.campateLavoro.toArray();
@@ -891,51 +913,98 @@ export async function unisciCampateDoppie() {
     Boolean(c.importId) ||
     (logPer.get(c.id) ?? []).some((s) => s.evento === "importata" || s.evento === "reimportata");
 
+  const punteggio = (c: CampataLavoro) => {
+    let s = 0;
+    if (dalFile(c)) s += 16;
+    if (c.normalizzata === normalizzaCampata(c.normalizzata)) s += 8;
+    if (c.rapportinoId) s += 4;
+    if (c.stato !== "da_tagliare") s += 2;
+    if (campataDaAttenzionare(c) || campataDaRiprendere(c)) s += 1;
+    return s;
+  };
+
   const gruppi = new Map<string, CampataLavoro[]>();
   for (const c of campate) {
-    if (isBaseLavoro(c) || !c.normalizzata) continue;
-    const chiave = `${annoDi(c)}|${c.lineaId}|${normalizzaCampata(c.normalizzata)}`;
-    const list = gruppi.get(chiave) ?? [];
+    if (!c.normalizzata) continue;
+    const list = gruppi.get(chiaveUnicaLocale(c)) ?? [];
     list.push(c);
-    gruppi.set(chiave, list);
+    gruppi.set(chiaveUnicaLocale(c), list);
   }
 
   const now = new Date().toISOString();
   const daScrivere: CampataLavoro[] = [];
   const daEliminare: string[] = [];
   const logDaSpostare: CampataStorico[] = [];
-  const logDaEliminare: string[] = [];
 
   for (const gruppo of gruppi.values()) {
     if (gruppo.length < 2) continue;
-    const previste = gruppo.filter(dalFile);
-    const doppie = gruppo.filter((c) => !dalFile(c));
-    if (previste.length === 0 || doppie.length === 0) continue;
+    const ordinate = [...gruppo].sort(
+      (a, b) => punteggio(b) - punteggio(a) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
+    );
+    const target = { ...ordinate[0]! };
+    let toccato = false;
 
-    for (const doppia of doppie) {
-      const target = previste.find((p) => p.stato === "da_tagliare" && !campataDaNonTagliare(p));
-      if (target && doppia.stato !== "da_tagliare") {
+    for (const doppia of ordinate.slice(1)) {
+      if (doppia.stato !== "da_tagliare" && target.stato === "da_tagliare" && !campataDaNonTagliare(target)) {
         target.stato = doppia.stato;
         target.dataTaglio = doppia.dataTaglio;
         target.operatore = doppia.operatore;
         target.rapportinoId = doppia.rapportinoId;
-        target.syncStatus = "pending";
-        target.updatedAt = now;
-        daScrivere.push(target);
-        for (const s of logPer.get(doppia.id) ?? []) {
-          logDaSpostare.push({ ...s, campataId: target.id });
+        if (doppia.nonTerminata) target.nonTerminata = true;
+        toccato = true;
+      }
+      if (campataDaNonTagliare(doppia) && !campataDaNonTagliare(target)) {
+        target.daNonTagliare = true;
+        target.daNonTagliareBy = doppia.daNonTagliareBy;
+        if (target.stato === "da_tagliare") {
+          target.stato = "tagliata";
+          target.dataTaglio = target.dataTaglio || doppia.dataTaglio || todayIso();
         }
-      } else {
-        for (const s of logPer.get(doppia.id) ?? []) logDaEliminare.push(s.id);
+        toccato = true;
+      }
+      if (campataDaAttenzionare(doppia) && !campataDaAttenzionare(target)) {
+        target.attenzionare = true;
+        target.attenzionareBy = doppia.attenzionareBy;
+        delete target.attenzionareFattaIl;
+        delete target.attenzionareFattaBy;
+        toccato = true;
+      }
+      if (campataDaRiprendere(doppia) && !campataDaRiprendere(target)) {
+        target.rinvioMese = doppia.rinvioMese;
+        if (doppia.rinvioAnno != null) target.rinvioAnno = doppia.rinvioAnno;
+        if (doppia.rinvioNote) target.rinvioNote = doppia.rinvioNote;
+        target.rinvioBy = doppia.rinvioBy;
+        delete target.rinvioFattaIl;
+        delete target.rinvioFattaBy;
+        toccato = true;
+      }
+      if (doppia.note?.trim()) {
+        const precedente = (target.note ?? "").trim();
+        if (!precedente) {
+          target.note = doppia.note;
+          toccato = true;
+        } else if (!precedente.includes(doppia.note.trim())) {
+          target.note = `${precedente}\n${doppia.note.trim()}`;
+          toccato = true;
+        }
+      }
+
+      for (const s of logPer.get(doppia.id) ?? []) {
+        logDaSpostare.push({ ...s, campataId: target.id });
       }
       daEliminare.push(doppia.id);
+    }
+
+    if (toccato) {
+      target.syncStatus = "pending";
+      target.updatedAt = now;
+      daScrivere.push(target);
     }
   }
 
   if (daScrivere.length === 0 && daEliminare.length === 0) return 0;
   if (daScrivere.length > 0) await db.campateLavoro.bulkPut(daScrivere);
   if (logDaSpostare.length > 0) await db.campateStorico.bulkPut(logDaSpostare);
-  if (logDaEliminare.length > 0) await db.campateStorico.bulkDelete(logDaEliminare);
   if (daEliminare.length > 0) {
     await db.campateLavoro.bulkDelete(daEliminare);
     await db.campateDeleteQueue.bulkPut(daEliminare.map((id) => ({ id })));

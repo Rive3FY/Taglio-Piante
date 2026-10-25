@@ -150,6 +150,10 @@ async function upsertOmettendoColonneMancanti(
   throw new Error("Invio non riuscito: il database non è allineato con l’app.");
 }
 
+function eErroreChiaveUnicaCampata(message: string) {
+  return /campate_lavoro_unica_idx|duplicate key value violates unique constraint/i.test(message);
+}
+
 /** Scrive le campate su Supabase. Se manca una colonna (es. attenzionare), ritenta senza. */
 export async function upsertCampateLavoro(
   rows: ReturnType<typeof campataLavoroToRow>[],
@@ -162,6 +166,27 @@ export async function upsertCampateLavoro(
   for (let i = 0; i < 8; i += 1) {
     const { error } = await supabase.from("campate_lavoro").upsert(payload);
     if (!error) return;
+    if (eErroreChiaveUnicaCampata(error.message)) {
+      if (payload.length > 1) {
+        for (const row of payload) {
+          await upsertCampateLavoro([row as ReturnType<typeof campataLavoroToRow>], opts);
+        }
+        return;
+      }
+      const sola = payload[0] as ReturnType<typeof campataLavoroToRow>;
+      const { data: presente } = await supabase
+        .from("campate_lavoro")
+        .select("normalizzata")
+        .eq("id", sola.id)
+        .maybeSingle();
+      if (presente?.normalizzata != null && presente.normalizzata !== sola.normalizzata) {
+        const { error: retryErr } = await supabase
+          .from("campate_lavoro")
+          .upsert({ ...sola, normalizzata: String(presente.normalizzata) });
+        if (!retryErr) return;
+      }
+      throw new Error(messaggioErroreSupabase(error.message));
+    }
     const col = colonnaDaErrore(error.message);
     if (!col || payload.every((row) => !(col in row))) {
       throw new Error(messaggioErroreSupabase(error.message));
@@ -416,9 +441,10 @@ function chiaveUnica(r: Pick<RigaCampata, "anno" | "codice_linea" | "normalizzat
   return [r.anno, r.codice_linea, r.normalizzata, r.priorita ?? "", r.tipo].join("|");
 }
 
-async function chiaveOccupataSulServer(r: RigaCampata) {
+/** Altro id sul server con la stessa chiave unica, o `"?"` se la lettura fallisce. */
+async function idAltroConStessaChiave(r: RigaCampata) {
   const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!supabase) return null;
   let query = supabase
     .from("campate_lavoro")
     .select("id")
@@ -430,33 +456,100 @@ async function chiaveOccupataSulServer(r: RigaCampata) {
     .limit(1);
   query = r.priorita ? query.eq("priorita", r.priorita) : query.is("priorita", null);
   const { data, error } = await query;
-  if (error) return true;
-  return (data ?? []).length > 0;
+  if (error) return "?";
+  const id = data?.[0]?.id;
+  return id ? String(id) : null;
 }
+
+type PrepInvioCampate = {
+  righe: RigaCampata[];
+  /** Id locali assorbiti in un'altra riga (stessa chiave): da cancellare dopo l'invio. */
+  assorbiti: { da: string; verso: string }[];
+};
 
 /**
  * Un numero vecchio (261-262/A) si riscrive in forma breve (262/A) solo se sul
- * server non c'è già un'altra riga con quel numero, stessa linea, anno e priorità:
- * altrimenti l'indice unico rifiuta tutto l'invio, segni compresi.
+ * server non c'è già un'altra riga con quel numero, stessa linea, anno e priorità.
+ * Una riga mai arrivata sul server che colliderebbe viene riscritta sull'id
+ * che già occupa la chiave, così attenzionare e rinvio non restano in coda.
  */
-async function righeSenzaNumeriDoppi(rows: RigaCampata[], numeriSalvati: Map<string, string>) {
+async function righeSenzaNumeriDoppi(
+  rows: RigaCampata[],
+  numeriSalvati: Map<string, string>,
+): Promise<PrepInvioCampate> {
   const rinomina = (r: RigaCampata) => {
     const salvato = numeriSalvati.get(r.id);
     return salvato != null && salvato !== r.normalizzata;
   };
-  const occupate = new Set(rows.filter((r) => !rinomina(r)).map(chiaveUnica));
-  const out: RigaCampata[] = [];
+  const occupate = new Map<string, string>();
+  const perId = new Map<string, RigaCampata>();
+  const assorbiti: { da: string; verso: string }[] = [];
+
+  const registra = (r: RigaCampata) => {
+    const prev = perId.get(r.id);
+    perId.set(r.id, prev ? { ...prev, ...r, id: r.id } : r);
+    occupate.set(chiaveUnica(r), r.id);
+  };
+
   for (const r of rows) {
-    if (!rinomina(r)) {
-      out.push(r);
+    if (rinomina(r)) continue;
+    const chiave = chiaveUnica(r);
+    const giaInInvio = occupate.get(chiave);
+    if (giaInInvio && giaInInvio !== r.id) {
+      assorbiti.push({ da: r.id, verso: giaInInvio });
+      const vincitore = perId.get(giaInInvio);
+      if (vincitore) {
+        registra({
+          ...vincitore,
+          attenzionare: Boolean(vincitore.attenzionare || r.attenzionare),
+          attenzionare_by: r.attenzionare ? r.attenzionare_by : vincitore.attenzionare_by,
+          rinvio_mese: r.rinvio_mese ?? vincitore.rinvio_mese,
+          rinvio_anno: r.rinvio_anno ?? vincitore.rinvio_anno,
+          rinvio_note: r.rinvio_note ?? vincitore.rinvio_note,
+          rinvio_by: r.rinvio_mese != null ? r.rinvio_by : vincitore.rinvio_by,
+          da_non_tagliare: Boolean(vincitore.da_non_tagliare || r.da_non_tagliare),
+          note: [vincitore.note, r.note].filter(Boolean).join("\n") || null,
+          updated_at: r.updated_at,
+        });
+      }
       continue;
     }
-    const libera = !occupate.has(chiaveUnica(r)) && !(await chiaveOccupataSulServer(r));
-    const riga = libera ? r : { ...r, normalizzata: numeriSalvati.get(r.id)! };
-    occupate.add(chiaveUnica(riga));
-    out.push(riga);
+    const altro = await idAltroConStessaChiave(r);
+    if (altro && altro !== "?") {
+      if (numeriSalvati.has(r.id)) {
+        // Stesso numero su due id già sul server: non si può inserire di nuovo.
+        assorbiti.push({ da: r.id, verso: altro });
+        continue;
+      }
+      assorbiti.push({ da: r.id, verso: altro });
+      registra({ ...r, id: altro });
+      continue;
+    }
+    if (altro === "?") {
+      // Lettura fallita: si prova lo stesso; se collide, l’upsert riga per riga recupera.
+      registra(r);
+      continue;
+    }
+    registra(r);
   }
-  return out;
+
+  for (const r of rows) {
+    if (!rinomina(r)) continue;
+    const salvato = numeriSalvati.get(r.id)!;
+    const chiave = chiaveUnica(r);
+    const altro = await idAltroConStessaChiave(r);
+    const libera = !occupate.has(chiave) && !altro;
+    const riga = libera ? r : { ...r, normalizzata: salvato };
+    const chiaveRiga = chiaveUnica(riga);
+    const gia = occupate.get(chiaveRiga);
+    if (gia && gia !== r.id) {
+      assorbiti.push({ da: r.id, verso: gia });
+      continue;
+    }
+    registra(riga);
+  }
+
+  return { righe: [...perId.values()], assorbiti };
 }
 
 async function fogliInCancellazione() {
@@ -499,15 +592,40 @@ export async function pushCampatePending(rapportinoId?: string) {
     // Data d'invio, non di modifica: un foglio chiuso offline giorni fa deve
     // comparire nella lettura a cursore degli altri dispositivi.
     const inviateIl = new Date().toISOString();
-    await upsertCampateLavoro(
-      await righeSenzaNumeriDoppi(
-        daInviare.map((c) => ({ ...campataLavoroToRow(c), updated_at: inviateIl })),
-        numeriSalvati,
-      ),
-      { vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"] },
+    const { righe: daUpsert, assorbiti } = await righeSenzaNumeriDoppi(
+      daInviare.map((c) => ({ ...campataLavoroToRow(c), updated_at: inviateIl })),
+      numeriSalvati,
     );
+    await upsertCampateLavoro(daUpsert, {
+      vietatoOmettere: ["da_non_tagliare", "anno", "rinvio_mese", "attenzionare", "est_int"],
+    });
 
-    const ids = new Set(daInviare.map((c) => c.id));
+    const localiPerId = new Map(daInviare.map((c) => [c.id, c]));
+    const ids = new Set(daUpsert.map((c) => c.id));
+    for (const { da, verso } of assorbiti) {
+      ids.add(verso);
+      const locale = localiPerId.get(da) ?? (await db.campateLavoro.get(da));
+      const vincente =
+        localiPerId.get(verso) ??
+        (await db.campateLavoro.get(verso)) ??
+        (locale ? { ...locale, id: verso } : null);
+      if (vincente) {
+        localiPerId.set(verso, vincente);
+        await db.campateLavoro.put({
+          ...vincente,
+          syncStatus: "synced",
+          updatedAt: inviateIl,
+        });
+      }
+      const logDa = (await db.campateStorico.where("campataId").equals(da).toArray()).map((s) => ({
+        ...s,
+        campataId: verso,
+      }));
+      if (logDa.length > 0) await db.campateStorico.bulkPut(logDa);
+      await db.campateLavoro.delete(da);
+      await db.campateDeleteQueue.put({ id: da });
+    }
+
     const storico = (await db.campateStorico.toArray()).filter((s) => ids.has(s.campataId));
     if (storico.length > 0) {
       try {
@@ -521,9 +639,18 @@ export async function pushCampatePending(rapportinoId?: string) {
       }
     }
 
-    await db.campateLavoro.bulkPut(
-      daInviare.map((c) => ({ ...c, syncStatus: "synced" as const, updatedAt: inviateIl })),
-    );
+    const synced: CampataLavoro[] = [];
+    for (const r of daUpsert) {
+      const base = localiPerId.get(r.id) ?? (await db.campateLavoro.get(r.id));
+      const dallaRiga = rowToCampataLavoro(r as Parameters<typeof rowToCampataLavoro>[0]);
+      synced.push({
+        ...(base ?? dallaRiga),
+        ...dallaRiga,
+        syncStatus: "synced",
+        updatedAt: inviateIl,
+      });
+    }
+    if (synced.length > 0) await db.campateLavoro.bulkPut(synced);
   }
 
   try {
