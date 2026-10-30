@@ -9,14 +9,22 @@ import { etichettaMese, rapportiniDelMese } from "@/lib/contabilita/aggrega";
 import { bytesVistaCampate } from "@/lib/campate/export";
 import { isBaseLavoro } from "@/lib/campate/basi";
 import type { CampataLavoro, Linea, Prestazione, Rapportino } from "@/lib/types";
+import { chiavePreposto, nomePreposto, type GruppoPreposto } from "./preposti";
 
 export type FoglioBackup = {
   item: Rapportino;
   linea?: Linea;
   mese: string;
+  preposto: string;
 };
 
-export function fogliPerBackup(rapportini: Rapportino[], linee: Linea[], mesi: string[]) {
+export function fogliPerBackup(
+  rapportini: Rapportino[],
+  linee: Linea[],
+  mesi: string[],
+  gruppi: GruppoPreposto[],
+  soloPreposto?: string | null,
+) {
   const lineaById = new Map(linee.map((l) => [l.id, l]));
   const fogli: FoglioBackup[] = [];
   for (const mese of [...mesi].sort()) {
@@ -26,7 +34,14 @@ export function fogliPerBackup(rapportini: Rapportino[], linee: Linea[], mesi: s
         a.numero.localeCompare(b.numero, "it"),
     );
     for (const item of delMese) {
-      fogli.push({ item, linea: lineaById.get(item.lineaId), mese });
+      const chiave = chiavePreposto(item, gruppi);
+      if (soloPreposto && chiave !== soloPreposto) continue;
+      fogli.push({
+        item,
+        linea: lineaById.get(item.lineaId),
+        mese,
+        preposto: nomePreposto(chiave, gruppi),
+      });
     }
   }
   return fogli;
@@ -84,6 +99,8 @@ export async function scaricaBackupZip(
     finoA?: string;
     onProgress?: (fatto: number, totale: number, numero: string) => void;
     campate?: CampataLavoro[];
+    /** Nome del preposto quando lo zip è di uno solo. */
+    soloPreposto?: string;
   },
 ) {
   if (fogli.length === 0) throw new Error("Nessun rapportino chiuso nei mesi scelti.");
@@ -98,8 +115,9 @@ export async function scaricaBackupZip(
     const foglio = fogli[i]!;
     opts?.onProgress?.(i + 1, fogli.length, foglio.item.numero);
     const meseDir = cartellaMese(foglio.mese);
+    const prepostoDir = slugCartella(foglio.preposto);
     const lineaDir = cartellaLinea(foglio.linea, foglio.item.lineaId);
-    const cartella = `${meseDir}/${lineaDir}`;
+    const cartella = `${meseDir}/${prepostoDir}/${lineaDir}`;
     const usati = usatiPerCartella.get(cartella) ?? new Set<string>();
     usatiPerCartella.set(cartella, usati);
     try {
@@ -124,19 +142,28 @@ export async function scaricaBackupZip(
   const basi = (opts?.campate ?? []).filter(
     (c) => isBaseLavoro(c) && c.stato === "tagliata" && c.dataTaglio && mesiSet.has(c.dataTaglio.slice(0, 7)),
   );
-  if (basi.length > 0) {
+  if (basi.length > 0 && !opts?.soloPreposto) {
     zip.file("Basi.xlsx", await bytesVistaCampate(basi));
   }
+  const perPreposto = new Map<string, number>();
+  for (const f of fogli) perPreposto.set(f.preposto, (perPreposto.get(f.preposto) ?? 0) + 1);
   const indice = [
     "Backup rapportini taglio piante",
     `Estratto il ${formatDate(finoA)}`,
     `Mesi: ${mesi.map(etichettaMese).join(", ")}`,
+    opts?.soloPreposto ? `Preposto ditta: ${opts.soloPreposto}` : "Preposti ditta: tutti",
     `Fogli nello zip: ${ok} di ${fogli.length}`,
-    basi.length > 0
-      ? `Basi pulite nei mesi scelti: ${basi.length} in Basi.xlsx`
-      : "Nessuna base pulita nei mesi scelti.",
+    ...[...perPreposto.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], "it"))
+      .map(([nome, n]) => `  ${nome}: ${n} ${n === 1 ? "foglio" : "fogli"}`),
+    opts?.soloPreposto
+      ? "Basi.xlsx non incluso: le basi non dicono chi le ha pulite."
+      : basi.length > 0
+        ? `Basi pulite nei mesi scelti: ${basi.length} in Basi.xlsx`
+        : "Nessuna base pulita nei mesi scelti.",
     "Solo rapportini archiviati. Le bozze restano fuori.",
-    "Cartelle: mese / linea / PDF del foglio ufficiale. Le basi sono anche in Basi.xlsx.",
+    "Cartelle: mese / preposto ditta / linea / PDF del foglio ufficiale.",
+    "Il preposto è il Sig. indicato sul foglio come rappresentante della ditta.",
   ].join("\n");
   zip.file("backup.txt", indice);
 
@@ -147,6 +174,9 @@ export async function scaricaBackupZip(
   });
   const slugMesi =
     mesi.length === 1 ? mesi[0] : `${mesi[0]}_al_${mesi[mesi.length - 1]}`;
-  scaricaBlob(blob, `backup_rapportini_${slugMesi}.zip`, "application/zip");
+  const slugPreposto = opts?.soloPreposto
+    ? `_${slugCartella(opts.soloPreposto).replace(/\s+/g, "_")}`
+    : "";
+  scaricaBlob(blob, `backup_rapportini${slugPreposto}_${slugMesi}.zip`, "application/zip");
   return { ok, totale: fogli.length };
 }
