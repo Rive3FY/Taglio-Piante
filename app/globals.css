@@ -1800,6 +1800,14 @@ button.rap-card-link {
   gap: 6px 12px;
 }
 .backup-mesi .check-line { margin: 0; }
+.backup-mesi .check-line input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  accent-color: #d97706;
+}
+.backup-preposti { display: grid; gap: 8px; }
+.backup-preposti .field-label { margin: 0; }
 .torta-card { align-content: start; }
 .torta-layout {
   display: grid;
