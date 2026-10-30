@@ -1807,7 +1807,7 @@ button.rap-card-link {
   accent-color: #d97706;
 }
 .backup-preposti { display: grid; gap: 8px; }
-.backup-preposti .field-label { margin: 0; }
+.backup-preposti .field-label, .panel > .field-label { margin: 0; }
 .torta-card { align-content: start; }
 .torta-layout {
   display: grid;

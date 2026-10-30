@@ -20,7 +20,10 @@ export const TECNICO_GRUPPI: TecnicoGruppo[] = [
   {
     id: "fogli",
     label: "Rapportini",
-    links: [{ href: "/tecnico/fogli", label: "Archivio" }],
+    links: [
+      { href: "/tecnico/fogli", label: "Archivio" },
+      { href: "/tecnico/preposti", label: "Scarica per preposto" },
+    ],
   },
   {
     id: "report",
@@ -75,6 +78,7 @@ export function tecnicoBackHref(pathname: string, da?: string | null, vista?: st
     const perLinea = vista === "linea" ? "&v=linea" : "";
     return `/tecnico/fogli?s=${sezione}${perLinea}`;
   }
+  if (pathname === "/tecnico/preposti") return "/tecnico/fogli?s=archiviati";
   if (pathname === "/tecnico/campate/importa") return "/tecnico/campate";
   if (pathname === "/tecnico/nuovo") return "/tecnico/campate";
   if (pathname.startsWith("/tecnico/linee/")) return "/tecnico";

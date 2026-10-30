@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -38,7 +39,12 @@ export default function TecnicoFogliPage() {
 
   return (
     <>
-      <h2>Rapportini</h2>
+      <div className="elenco-head">
+        <h2>Rapportini</h2>
+        <Link href="/tecnico/preposti" className="btn btn-primary btn-sm">
+          Scarica per preposto
+        </Link>
+      </div>
       <div className="chip-row">
         <button
           type="button"
